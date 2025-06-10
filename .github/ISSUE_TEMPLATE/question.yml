@@ -1,0 +1,137 @@
+name: Question / Support Request
+description: Ask a question or request help with using cerevox
+title: "[QUESTION] "
+labels: ["question", "support"]
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reaching out! We're happy to help you with using cerevox. Please provide as much detail as possible so we can assist you effectively.
+
+  - type: checkboxes
+    id: terms
+    attributes:
+      label: Prerequisites
+      description: Please confirm the following before asking your question
+      options:
+        - label: I have searched existing issues and discussions to see if my question has been answered
+          required: true
+        - label: I have read the [documentation](../README.md) and relevant guides
+          required: true
+        - label: I have read the [Contributing Guidelines](../CONTRIBUTING.md)
+          required: true
+
+  - type: dropdown
+    id: question_type
+    attributes:
+      label: Question Type
+      description: What type of question or support do you need?
+      options:
+        - How to use a specific feature
+        - Installation/setup help
+        - Performance question
+        - Best practices
+        - Integration with other tools
+        - Troubleshooting
+        - General usage question
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: question
+    attributes:
+      label: Your Question
+      description: Please ask your question as clearly as possible
+      placeholder: What would you like to know or what help do you need?
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Context and Background
+      description: Provide context about what you're trying to accomplish
+      placeholder: |
+        What are you trying to achieve? What's your use case?
+        Any relevant background information that might help us understand your question better.
+    validations:
+      required: false
+
+  - type: textarea
+    id: attempted
+    attributes:
+      label: What Have You Tried?
+      description: What approaches have you already attempted?
+      placeholder: |
+        Please describe:
+        - What you've already tried
+        - What resources you've consulted
+        - Any error messages you've encountered
+    validations:
+      required: false
+
+  - type: textarea
+    id: code
+    attributes:
+      label: Code Example
+      description: If applicable, please provide a code example that demonstrates your question
+      placeholder: |
+        ```python
+        import cerevox
+        
+        # Your code example here
+        # Please include any relevant setup or context
+        ```
+      render: python
+    validations:
+      required: false
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment Information
+      description: Please provide information about your environment (if relevant)
+      placeholder: |
+        - OS: [e.g. Ubuntu 20.04, macOS 12.0, Windows 10]
+        - Python version: [e.g. 3.9.7]
+        - cerevox version: [e.g. 1.0.0]
+        - Installation method: [e.g. pip, conda, from source]
+      value: |
+        - OS: 
+        - Python version: 
+        - cerevox version: 
+        - Installation method: 
+    validations:
+      required: false
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Outcome
+      description: What result are you hoping to achieve?
+      placeholder: What should happen? What's your goal?
+    validations:
+      required: false
+
+  - type: dropdown
+    id: urgency
+    attributes:
+      label: Urgency
+      description: How urgent is this question for you?
+      options:
+        - Low - Just curious
+        - Medium - Would help my project
+        - High - Blocking my progress
+    validations:
+      required: false
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional Information
+      description: Any other information that might be helpful
+      placeholder: Links, screenshots, error logs, etc.
+    validations:
+      required: false 

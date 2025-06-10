@@ -1,0 +1,233 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cerevox"
+version = "0.1.1"
+authors = [
+    {name = "Cerevox", email = "support@cerevox.ai"},
+    {name = "Muaz Siddiqui", email = "muaz@cerevox.ai"}
+]
+description = "Official Python SDK for Cerevox"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.9"
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Text Processing",
+    "Topic :: Scientific/Engineering :: Information Analysis",
+]
+keywords = ["document", "parsing", "api", "pdf", "extraction", "async", "vector-database", "chunking"]
+# Core dependencies - always installed
+dependencies = [
+    "aiohttp>=3.12.4",
+    "aiofiles>=24.1.0", 
+    "requests>=2.32.3",
+    "urllib3>=2.4.0",
+    "pydantic>=2.11.5",
+]
+
+[project.optional-dependencies]
+# Data processing extras
+data = [
+    "pandas>=2.3.0",
+    "beautifulsoup4>=4.13.4",
+]
+
+# Development and testing extras
+dev = [
+    "pytest>=8.3.5",
+    "pytest-asyncio>=1.0.0",
+    "pytest-cov>=4.0.0",
+    "pytest-timeout>=2.1.0",
+    "aioresponses>=0.7.8",
+    "responses>=0.25.7",
+    "black>=24.0.0",
+    "isort>=5.0.0", 
+    "mypy>=1.0.0",
+    "types-beautifulsoup4",
+    "types-requests",
+    "safety>=3.0.0",
+    "bandit[toml]>=1.7.0",
+]
+
+# All optional dependencies
+all = [
+    "pandas>=2.3.0",
+    "beautifulsoup4>=4.13.4",
+    "pytest>=8.3.5",
+    "pytest-asyncio>=1.0.0",
+    "pytest-cov>=4.0.0",
+    "pytest-timeout>=2.1.0",
+    "aioresponses>=0.7.8",
+    "responses>=0.25.7",
+    "black>=24.0.0",
+    "isort>=5.0.0", 
+    "mypy>=1.0.0",
+    "types-beautifulsoup4",
+    "types-requests",
+    "safety>=3.0.0",
+    "bandit[toml]>=1.7.0",
+]
+
+[project.urls]
+Homepage = "https://cerevox.ai"
+Documentation = "https://docs.cerevox.ai"
+Repository = "https://github.com/CerevoxAI/cerevox-python"
+"Bug Tracker" = "https://github.com/CerevoxAI/cerevox-python/issues"
+"API Reference" = "https://data.cerevox.ai/docs"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["cerevox*"]
+exclude = ["tests*", "examples*"]
+
+[tool.setuptools.package-data]
+cerevox = ["py.typed"]
+
+[tool.black]
+line-length = 88
+target-version = ['py39', 'py310', 'py311', 'py312', 'py313']
+include = '\.pyi?$'
+extend-exclude = '''
+/(
+  # directories
+  \.eggs
+  | \.git
+  | \.hg
+  | \.mypy_cache
+  | \.tox
+  | \.venv
+  | build
+  | dist
+)/
+'''
+
+[tool.isort]
+profile = "black"
+line_length = 88
+multi_line_output = 3
+include_trailing_comma = true
+force_grid_wrap = 0
+use_parentheses = true
+ensure_newline_before_comments = true
+
+[tool.mypy]
+python_version = "3.9"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+disallow_untyped_decorators = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+warn_unreachable = false
+strict_equality = true
+
+[[tool.mypy.overrides]]
+module = ["pandas.*", "aiofiles.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+minversion = "7.0"
+addopts = [
+    "--strict-markers",
+    "--strict-config",
+    "--cov=cerevox",
+    "--cov-report=html",
+    "--cov-report=term-missing",
+    "--cov-fail-under=90",
+    "--verbose",
+    "--tb=short",
+    "--cov-report=html:htmlcov",
+    "--cov-report=xml:coverage.xml",
+    "--asyncio-mode=auto",
+    "--durations=10",
+    "--junitxml=test-results.xml",
+    "--timeout=30",
+    "--timeout-method=thread",
+]
+testpaths = ["tests"]
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "integration: marks tests as integration tests",
+    "unit: marks tests as unit tests",
+]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+filterwarnings = [
+    "ignore::UserWarning",
+    "ignore::DeprecationWarning",
+    "ignore::RuntimeWarning",
+    "ignore::pytest.PytestDeprecationWarning",
+]
+log_cli = true
+log_cli_level = "INFO"
+log_cli_format = "%(asctime)s [%(levelname)8s] %(name)s: %(message)s"
+log_cli_date_format = "%Y-%m-%d %H:%M:%S"
+timeout = 30
+timeout_method = "thread"
+
+# Coverage configuration
+[tool.coverage.run]
+source = ["cerevox"]
+omit = [
+    "*/tests/*",
+]
+branch = true
+parallel = true
+
+[tool.coverage.report]
+# Regexes for lines to exclude from consideration
+exclude_lines = [
+    # Have to re-enable the standard pragma
+    "pragma: no cover",
+    
+    # Don't complain about missing debug-only code:
+    "def __repr__",
+    "if self\\.debug",
+    
+    # Don't complain if tests don't hit defensive assertion code:
+    "raise AssertionError",
+    "raise NotImplementedError",
+    
+    # Don't complain if non-runnable code isn't run:
+    "if 0:",
+    "if __name__ == .__main__.:",
+    
+    # Don't complain about abstract methods, they aren't run:
+    "@(abc\\.)?abstractmethod",
+    
+    # Don't complain about type checking imports
+    "if TYPE_CHECKING:",
+    
+    # Don't complain about platform specific code
+    "if sys.platform",
+    
+    # Don't complain about __all__ definitions
+    "__all__ = ",
+]
+ignore_errors = true
+show_missing = true
+precision = 2
+
+[tool.coverage.html]
+directory = "htmlcov"
+title = "Cerevox SDK Coverage Report"

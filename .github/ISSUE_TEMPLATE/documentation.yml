@@ -1,0 +1,150 @@
+name: Documentation Improvement
+description: Report an issue with documentation or suggest improvements
+title: "[DOCS] "
+labels: ["documentation", "triage"]
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping improve our documentation! Clear and accurate documentation is essential for a great developer experience.
+
+  - type: checkboxes
+    id: terms
+    attributes:
+      label: Prerequisites
+      description: Please confirm the following before submitting your documentation issue
+      options:
+        - label: I have searched existing issues to ensure this documentation issue has not already been reported
+          required: true
+        - label: I have read the [Contributing Guidelines](../CONTRIBUTING.md)
+          required: true
+
+  - type: dropdown
+    id: doc_type
+    attributes:
+      label: Documentation Type
+      description: What type of documentation needs attention?
+      options:
+        - API Reference
+        - Getting Started Guide
+        - Tutorial
+        - Examples
+        - README
+        - Code Comments
+        - Error Messages
+        - Other (please specify)
+    validations:
+      required: true
+
+  - type: dropdown
+    id: issue_type
+    attributes:
+      label: Issue Type
+      description: What kind of documentation issue is this?
+      options:
+        - Missing documentation
+        - Incorrect/outdated information
+        - Unclear explanation
+        - Broken link
+        - Typo/grammar error
+        - Missing example
+        - Code example doesn't work
+        - Formatting issue
+        - Other (please specify)
+    validations:
+      required: true
+
+  - type: textarea
+    id: location
+    attributes:
+      label: Documentation Location
+      description: Where is the documentation issue located?
+      placeholder: |
+        Please provide:
+        - File path (e.g., docs/api/functions.md)
+        - URL (e.g., https://docs.cerevox.ai/)
+        - Section/heading name
+        - Line numbers (if applicable)
+    validations:
+      required: true
+
+  - type: textarea
+    id: current
+    attributes:
+      label: Current Documentation
+      description: What does the current documentation say? (copy/paste the relevant section)
+      placeholder: Copy and paste the problematic documentation here
+      render: markdown
+    validations:
+      required: false
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem Description
+      description: What's wrong with the current documentation?
+      placeholder: |
+        Clearly describe what's confusing, missing, or incorrect.
+        What information were you looking for that you couldn't find?
+    validations:
+      required: true
+
+  - type: textarea
+    id: suggested
+    attributes:
+      label: Suggested Improvement
+      description: How should the documentation be improved?
+      placeholder: |
+        Provide your suggested changes, improvements, or additions.
+        If reporting a typo, please provide the corrected text.
+    validations:
+      required: false
+
+  - type: textarea
+    id: example
+    attributes:
+      label: Example or Use Case
+      description: If applicable, provide an example that would help clarify the documentation
+      placeholder: |
+        ```python
+        # Example code that would help illustrate the concept
+        import cerevox
+        
+        # Your example here
+        ```
+      render: python
+    validations:
+      required: false
+
+  - type: dropdown
+    id: user_type
+    attributes:
+      label: User Type
+      description: What type of user would benefit from this documentation improvement?
+      options:
+        - New user/beginner
+        - Intermediate user
+        - Advanced user
+        - All users
+        - Developer/contributor
+    validations:
+      required: false
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional Context
+      description: Any other information that would help us improve the documentation
+      placeholder: Screenshots, links to related documentation, etc.
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: contribution
+    attributes:
+      label: Contribution
+      description: Would you be willing to help improve this documentation?
+      options:
+        - label: I would be willing to submit a PR to fix this documentation issue
+          required: false 

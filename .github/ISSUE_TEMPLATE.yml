@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 🚨 Security Vulnerability
+    url: https://github.com/CerevoxAI/cerevox-python/security/advisories/new
+    about: Please report security vulnerabilities privately through GitHub's security advisory system
+  - name: 💬 Discussions  
+    url: https://github.com/CerevoxAI/cerevox-python/discussions
+    about: Ask questions and discuss ideas with the community
+  - name: 📚 Documentation
+    url: https://docs.cerevox.ai/
+    about: Browse our comprehensive documentation for guides and API reference 

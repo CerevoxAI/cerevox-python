@@ -1,0 +1,207 @@
+name: Performance Issue
+description: Report a performance problem or suggest performance improvements
+title: "[PERFORMANCE] "
+labels: ["performance", "triage"]
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping us improve the performance of cerevox! Performance issues are important for maintaining a great user experience.
+
+  - type: checkboxes
+    id: terms
+    attributes:
+      label: Prerequisites
+      description: Please confirm the following before submitting your performance issue
+      options:
+        - label: I have searched existing issues to ensure this performance issue has not already been reported
+          required: true
+        - label: I have read the [Contributing Guidelines](../CONTRIBUTING.md)
+          required: true
+        - label: I have tested with the latest version of cerevox
+          required: true
+
+  - type: dropdown
+    id: performance_type
+    attributes:
+      label: Performance Issue Type
+      description: What type of performance issue are you experiencing?
+      options:
+        - Slow execution time
+        - High memory usage
+        - CPU usage spike
+        - Memory leak
+        - Slow startup time
+        - Inefficient algorithm
+        - Network performance
+        - Other (please specify)
+    validations:
+      required: true
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: Performance Issue Summary
+      description: A clear and concise description of the performance problem
+      placeholder: Briefly describe the performance issue you're experiencing
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to Reproduce
+      description: Please provide detailed steps to reproduce the performance issue
+      placeholder: |
+        1. Import cerevox with '...'
+        2. Execute function '...' with parameters '...'
+        3. Observe slow performance
+      value: |
+        1. 
+        2. 
+        3. 
+    validations:
+      required: true
+
+  - type: textarea
+    id: code
+    attributes:
+      label: Code to Reproduce Issue
+      description: Please provide a minimal code example that demonstrates the performance issue
+      placeholder: |
+        ```python
+        import cerevox
+        import time
+        
+        # Your code that demonstrates the performance issue
+        start_time = time.time()
+        # ... your code here ...
+        end_time = time.time()
+        print(f"Execution time: {end_time - start_time} seconds")
+        ```
+      render: python
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected_performance
+    attributes:
+      label: Expected Performance
+      description: What performance did you expect?
+      placeholder: |
+        What should the performance be like?
+        - Expected execution time
+        - Expected memory usage
+        - Any performance benchmarks or comparisons
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual_performance
+    attributes:
+      label: Actual Performance
+      description: What performance are you actually experiencing?
+      placeholder: |
+        What is the actual performance?
+        - Actual execution time
+        - Actual memory usage
+        - Include specific numbers/measurements if possible
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment Information
+      description: Please provide detailed information about your environment
+      placeholder: |
+        - OS: [e.g. Ubuntu 20.04, macOS 12.0, Windows 10]
+        - Python version: [e.g. 3.9.7]
+        - cerevox version: [e.g. 1.0.0]
+        - CPU: [e.g. Intel i7-9750H, Apple M1]
+        - RAM: [e.g. 16GB]
+        - Installation method: [e.g. pip, conda, from source]
+        - Any relevant system specifications
+      value: |
+        - OS: 
+        - Python version: 
+        - cerevox version: 
+        - CPU: 
+        - RAM: 
+        - Installation method: 
+    validations:
+      required: true
+
+  - type: textarea
+    id: profiling
+    attributes:
+      label: Profiling Information
+      description: If you've done any profiling, please share the results
+      placeholder: |
+        Output from profiling tools like:
+        - cProfile
+        - memory_profiler
+        - line_profiler
+        - htop/Activity Monitor screenshots
+        - Any other performance monitoring tools
+      render: shell
+    validations:
+      required: false
+
+  - type: textarea
+    id: data_characteristics
+    attributes:
+      label: Data Characteristics
+      description: Describe the data you're working with that's causing the performance issue
+      placeholder: |
+        - Data size (number of records, file size, etc.)
+        - Data complexity
+        - Input format
+        - Any patterns in the data that might affect performance
+    validations:
+      required: false
+
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Performance Impact
+      description: How severe is this performance issue?
+      options:
+        - Low - Slightly slower than expected
+        - Medium - Noticeably slow but usable
+        - High - Significantly impacts usability
+        - Critical - Makes the software unusable
+    validations:
+      required: true
+
+  - type: textarea
+    id: workaround
+    attributes:
+      label: Workaround
+      description: Have you found any workarounds for this performance issue?
+      placeholder: Describe any temporary solutions or workarounds you've discovered
+    validations:
+      required: false
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional Context
+      description: Any other context about the performance issue
+      placeholder: Links to similar issues, comparison with other tools, etc.
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: contribution
+    attributes:
+      label: Contribution
+      description: Would you be willing to help address this performance issue?
+      options:
+        - label: I would be willing to help investigate this performance issue
+          required: false
+        - label: I would be willing to submit a PR to fix this performance issue
+          required: false
+        - label: I would be willing to help with performance testing
+          required: false 
