@@ -203,6 +203,25 @@ class DocumentImage:
     height: Optional[int] = None
 
 
+# Helper function for robust document type checking across different import contexts
+def is_document_instance(obj) -> bool:
+    """
+    Check if an object is a Document instance.
+    This is more robust than isinstance() when dealing with different import contexts.
+    
+    Args:
+        obj: Object to check
+        
+    Returns:
+        bool: True if obj is a Document instance
+    """
+    return (
+        hasattr(obj, '__class__') and
+        obj.__class__.__name__ == 'Document' and
+        obj.__class__.__module__ == 'cerevox.document_loader'
+    )
+
+
 class Document:
     """
     Parsed document with enhanced features
@@ -431,6 +450,7 @@ class Document:
                 "mime_type": self.metadata.mime_type,
                 "original_mime_type": self.metadata.original_mime_type,
                 "extra": self.metadata.extra,
+                "processing_errors": self.get_processing_errors(),
             },
             "tables": [
                 {
@@ -697,10 +717,46 @@ class Document:
             return cls(content="", metadata=metadata)
 
     @classmethod
+    def from_completed_file_data(
+        cls,
+        file_data: Dict[str, Any],
+        filename: str = "document",
+    ) -> "Document":
+        """
+        Create Document from CompletedFileData structure (new API response format).
+        
+        Args:
+            file_data: Dict containing 'data', 'errors', and 'error_count' fields
+            filename: Name of the file
+            
+        Returns:
+            Document object with error information properly stored
+        """
+        # Extract elements data
+        elements_data = file_data.get("data", [])
+        
+        # Create document from elements
+        if elements_data:
+            doc = cls._from_elements_list(elements_data, filename)
+        else:
+            # Create empty document if no data
+            metadata = DocumentMetadata(filename=filename, file_type="unknown", total_elements=0)
+            doc = cls(content="", metadata=metadata)
+        
+        # Store error information in document metadata
+        if 'errors' in file_data or 'error_count' in file_data:
+            doc.metadata.extra['processing_errors'] = {
+                'errors': file_data.get('errors', {}),
+                'error_count': file_data.get('error_count', 0)
+            }
+        
+        return doc
+
+    @classmethod
     def _from_elements_list(
         cls, elements_data: List[Dict[str, Any]], filename: str = "document"
     ) -> "Document":
-        """Parse the actual API response format from example_response.txt with improved error handling"""
+        """Parse the actual API response"""
         if not elements_data:
             metadata = DocumentMetadata(filename=filename, file_type="unknown")
             return cls(content="", metadata=metadata)
@@ -716,9 +772,11 @@ class Document:
             source_info = first_element.get("source", {})
             file_info = source_info.get("file", {})
 
+            # Handle both 'extension' and 'extenstion' (typo in API response)
+            file_extension = file_info.get("extension")
             metadata = DocumentMetadata(
                 filename=file_info.get("name", filename),
-                file_type=file_info.get("extension", "").lstrip(".") or "unknown",
+                file_type=file_extension.lstrip(".") if file_extension else "unknown",
                 file_id=str(file_info.get("id", "")),
                 mime_type=file_info.get("mime_type"),
                 original_mime_type=file_info.get("original_mime_type"),
@@ -737,10 +795,10 @@ class Document:
 
         for i, element_data in enumerate(elements_data):
             try:
-                # Parse content with validation
+                # Parse content with validation - handle new ContentElement structure
                 content_dict = element_data.get("content", {})
                 if not content_dict:
-                    warnings.warn("Element has no content. Skipping.", UserWarning)
+                    warnings.warn(f"Element has no content. Skipping.", UserWarning)
                     continue
 
                 element_content = ElementContent(
@@ -755,8 +813,11 @@ class Document:
                 page_source = source.get("page", {})
                 element_stats_raw = source.get("element", {})
 
+                # Handle both 'extension' and 'extenstion' (typo in API response)
+                file_extension = file_source.get("extension") or file_source.get("extenstion", "")
+
                 file_info_obj = FileInfo(
-                    extension=file_source.get("extension", ""),
+                    extension=file_extension,
                     id=str(file_source.get("id", "")),
                     index=file_source.get("index", 0),
                     mime_type=file_source.get("mime_type", ""),
@@ -765,8 +826,6 @@ class Document:
                 )
 
                 page_number = page_source.get("page_number", 1)
-                if not isinstance(page_number, int):
-                    page_number = 1
 
                 page_info_obj = PageInfo(
                     page_number=page_number, index=page_source.get("index", 0)
@@ -845,7 +904,7 @@ class Document:
         # Combine all text content
         full_content = "\n\n".join(content_parts)
 
-        return cls(
+        doc = cls(
             content=full_content,
             metadata=metadata,
             tables=tables,
@@ -853,6 +912,7 @@ class Document:
             elements=parsed_elements,
             raw_response={"data": elements_data} if elements_data else None,
         )
+        return doc
 
     @classmethod
     def _from_documents_response(
@@ -980,11 +1040,6 @@ class Document:
         )
 
     @staticmethod
-    def _is_row_tag(row: Any) -> bool:
-        """Check if row is a Tag"""
-        return isinstance(row, Tag)
-
-    @staticmethod
     def _parse_table_from_html(
         html: str,
         table_index: int,
@@ -1030,13 +1085,12 @@ class Document:
         start_index = 1 if headers else 0
 
         for row in all_rows[start_index:]:
-            if Document._is_row_tag(row) and isinstance(row, Tag):
-                cells = row.find_all(["td", "th"])
-                row_data = [
-                    cell.get_text(strip=True) for cell in cells if isinstance(cell, Tag)
-                ]
-                if row_data:  # Only add non-empty rows
-                    rows.append(row_data)
+            cells = row.find_all(["td", "th"])
+            row_data = [
+                cell.get_text(strip=True) for cell in cells if isinstance(cell, Tag)
+            ]
+            if row_data:  # Only add non-empty rows
+                rows.append(row_data)
 
         # Return None if both headers and rows are empty (empty table)
         if not headers and not rows:
@@ -1331,6 +1385,49 @@ class Document:
             ),
             "total_characters": total_chars,
         }
+
+    def get_processing_errors(self) -> Dict[str, Any]:
+        """
+        Get processing error information for this document.
+        
+        Returns:
+            Dict containing error information from the processing job
+        """
+        return self.metadata.extra.get('processing_errors', {
+            'errors': {},
+            'error_count': 0
+        })
+    
+    def has_processing_errors(self) -> bool:
+        """
+        Check if this document had any processing errors.
+        
+        Returns:
+            True if there were processing errors, False otherwise
+        """
+        error_info = self.get_processing_errors()
+        return error_info.get('error_count', 0) > 0
+    
+    def get_error_summary(self) -> str:
+        """
+        Get a human-readable summary of processing errors for this document.
+        
+        Returns:
+            String summary of processing errors
+        """
+        error_info = self.get_processing_errors()
+        error_count = error_info.get('error_count', 0)
+        
+        if error_count == 0:
+            return "No processing errors"
+        
+        errors = error_info.get('errors', {})
+        
+        error_messages = []
+        for location, message in errors.items():
+            error_messages.append(f"{location}: {message}")
+        
+        return f"{error_count} processing error(s): " + "; ".join(error_messages)
 
 
 class DocumentBatch:
@@ -1665,6 +1762,7 @@ th { background-color: #f2f2f2; }
             "element_distribution": {},
             "content_length_distribution": {},
             "average_metrics": {},
+            "error_statistics": self.get_error_statistics(),
         }
 
         # Page distribution
@@ -1743,8 +1841,9 @@ th { background-color: #f2f2f2; }
         # Validate each document
         valid_documents = []
         for i, doc in enumerate(self.documents):
-            if not isinstance(doc, Document):
-                errors.append(f"Document {i} is not a Document instance")
+            # Use helper function for robust type checking across different import contexts
+            if not is_document_instance(doc):
+                errors.append(f"Document {i} is not a Document instance (got {type(doc).__name__})")
                 continue
 
             valid_documents.append(doc)
@@ -1888,21 +1987,92 @@ th { background-color: #f2f2f2; }
         return similarity_matrix
 
     @classmethod
+    def from_processing_job_response(
+        cls, response_data: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """
+        Extract processing information from a job response (for progress tracking).
+        
+        Args:
+            response_data: Job response data with processing status
+            
+        Returns:
+            Dict containing processing progress information
+        """
+        progress_info = {
+            'status': response_data.get('status', 'unknown'),
+            'progress': response_data.get('progress', 0),
+            'total_files': response_data.get('total_files', 0),
+            'completed_files': response_data.get('completed_files', 0),
+            'failed_files': response_data.get('failed_files', 0),
+            'processing_files': response_data.get('processing_files', 0),
+            'total_chunks': response_data.get('total_chunks', 0),
+            'completed_chunks': response_data.get('completed_chunks', 0),
+            'failed_chunks': response_data.get('failed_chunks', 0),
+            'processing_chunks': response_data.get('processing_chunks', 0),
+            'files': {}
+        }
+        
+        # Extract file-level progress if available
+        if 'files' in response_data and isinstance(response_data['files'], dict):
+            for filename, file_info in response_data['files'].items():
+                if isinstance(file_info, dict) and 'status' in file_info:
+                    progress_info['files'][filename] = {
+                        'name': file_info.get('name', filename),
+                        'status': file_info.get('status', 'unknown'),
+                        'total_chunks': file_info.get('total_chunks', 0),
+                        'completed_chunks': file_info.get('completed_chunks', 0),
+                        'failed_chunks': file_info.get('failed_chunks', 0),
+                        'processing_chunks': file_info.get('processing_chunks', 0),
+                        'last_updated': file_info.get('last_updated')
+                    }
+        
+        return progress_info
+
+    @classmethod
     def from_api_response(
         cls, response_data: Dict[str, Any], filenames: Optional[List[str]] = None
     ) -> "DocumentBatch":
-        """Create DocumentBatch from API response data"""
+        """Create DocumentBatch from API response data with support for new response structure"""
         documents: List[Document] = []
 
-        if filenames:
-            # Multiple files response
+        # Handle the new completed job response structure with files field
+        if "files" in response_data and isinstance(response_data["files"], dict):
+            # New format: files field contains CompletedFileData objects by filename
+            for filename, file_data in response_data["files"].items():
+                try:
+                    # Check if this is CompletedFileData (has 'data' field)
+                    if isinstance(file_data, dict) and 'data' in file_data:
+                        # Use new helper method for better handling
+                        doc = Document.from_completed_file_data(file_data, filename)
+                        documents.append(doc)
+                    # Handle FileProcessingInfo objects (for processing jobs)
+                    elif isinstance(file_data, dict) and 'status' in file_data:
+                        # This is processing info, not completed data - skip for now
+                        # Could be used for progress tracking in the future
+                        continue
+                    else:
+                        # Fallback: treat as direct elements data
+                        if file_data:
+                            doc = Document.from_api_response(file_data, filename)
+                            documents.append(doc)
+                except Exception as e:
+                    warnings.warn(
+                        f"Error processing file data for {filename}: {str(e)}. Skipping.",
+                        UserWarning,
+                    )
+                    continue
+        
+        # Handle legacy formats for backward compatibility
+        elif filenames:
+            # Multiple files response - legacy format
             for i, filename in enumerate(filenames):
                 if i < len(response_data.get("documents", [])):
                     doc_data = response_data["documents"][i]
                     doc = Document.from_api_response(doc_data, filename)
                     documents.append(doc)
         else:
-            # Check for various response formats
+            # Check for various legacy response formats
             if "documents" in response_data:
                 for doc_data in response_data["documents"]:
                     doc = Document.from_api_response(doc_data)
@@ -2005,6 +2175,86 @@ th { background-color: #f2f2f2; }
 
         return cls(documents)
 
+    def get_error_statistics(self) -> Dict[str, Any]:
+        """
+        Get comprehensive error statistics across all documents in the batch.
+        
+        Returns:
+            Dict containing error statistics for the entire batch
+        """
+        total_documents = len(self.documents)
+        documents_with_errors = 0
+        total_errors = 0
+        error_details = {}
+        
+        for doc in self.documents:
+            error_info = doc.get_processing_errors()
+            error_count = error_info.get('error_count', 0)
+            
+            if error_count > 0:
+                documents_with_errors += 1
+                total_errors += error_count
+                
+                # Collect error details
+                errors = error_info.get('errors', {})
+                if errors:
+                    error_details[doc.filename] = errors
+        
+        return {
+            'total_documents': total_documents,
+            'documents_with_errors': documents_with_errors,
+            'documents_without_errors': total_documents - documents_with_errors,
+            'total_errors': total_errors,
+            'average_errors_per_document': total_errors / total_documents if total_documents > 0 else 0,
+            'error_rate': documents_with_errors / total_documents if total_documents > 0 else 0,
+            'error_details': error_details
+        }
+    
+    def get_documents_with_errors(self) -> List[Document]:
+        """
+        Get all documents that had processing errors.
+        
+        Returns:
+            List of Document objects that had processing errors
+        """
+        return [doc for doc in self.documents if doc.has_processing_errors()]
+    
+    def get_documents_without_errors(self) -> List[Document]:
+        """
+        Get all documents that had no processing errors.
+        
+        Returns:
+            List of Document objects that had no processing errors
+        """
+        return [doc for doc in self.documents if not doc.has_processing_errors()]
+    
+    def get_error_summary(self) -> str:
+        """
+        Get a human-readable summary of processing errors for the entire batch.
+        
+        Returns:
+            String summary of processing errors across all documents
+        """
+        stats = self.get_error_statistics()
+        
+        if stats['total_errors'] == 0:
+            return f"No processing errors in batch of {stats['total_documents']} document(s)"
+        
+        summary_parts = [
+            f"Processing errors in batch of {stats['total_documents']} document(s):",
+            f"- {stats['documents_with_errors']} document(s) with errors",
+            f"- {stats['total_errors']} total error(s)",
+            f"- {stats['error_rate']:.1%} error rate"
+        ]
+        
+        if stats['error_details']:
+            summary_parts.append("\nError details:")
+            for filename, errors in stats['error_details'].items():
+                for location, message in errors.items():
+                    summary_parts.append(f"- {filename}[{location}]: {message}")
+        
+        return "\n".join(summary_parts)
+
 
 def chunk_markdown(
     markdown_text: str, target_size: int = 500, tolerance: float = 0.1
@@ -2077,12 +2327,15 @@ def chunk_text(text: str, target_size: int = 500, tolerance: float = 0.1) -> Lis
 
     return [chunk for chunk in chunks if chunk.strip()]
 
+def _split_text(text: str, pattern: str) -> List[str]:
+    """Split text by a given pattern."""
+    return text.split(pattern)
 
 def _split_by_markdown_sections(text: str) -> List[str]:
     """Split text by markdown headers, preserving header hierarchy."""
     # Find all markdown headers
     header_pattern = r"^(#{1,6})\s+(.+)$"
-    lines = text.split("\n")
+    lines = _split_text(text, "\n")
 
     sections = []
     current_section: List[str] = []
@@ -2262,8 +2515,7 @@ def _split_by_character_limit(text: str, max_size: int) -> List[str]:
         if end >= len(text):
             # Last chunk
             remaining = text[start:].strip()
-            if remaining:
-                chunks.append(remaining)
+            chunks.append(remaining) if remaining else None
             break
 
         # Try to find a good boundary before max_size
@@ -2291,14 +2543,12 @@ def _split_by_character_limit(text: str, max_size: int) -> List[str]:
             # Good boundary found
             end = start + boundary + 1
             chunk = text[start:end].strip()
-            if chunk:
-                chunks.append(chunk)
+            chunks.append(chunk) if chunk else None
             start = end
         else:
             # No good boundary found, hard break
             chunk = text[start:end].strip()
-            if chunk:
-                chunks.append(chunk)
+            chunks.append(chunk) if chunk else None
             start = end
 
     return [chunk for chunk in chunks if chunk.strip()]
@@ -2367,12 +2617,9 @@ def _split_at_sentences(text: str) -> List[str]:
                 word_before = text[i] + word_before
                 i -= 1
 
-            if word_before in abbreviations:
+            if word_before in abbreviations or (i >= 0 and text[i] in ["/", "@"]):
                 is_abbreviation = True
 
-            # Check for URLs or email addresses
-            if i >= 0 and text[i] in ["/", "@"]:
-                is_abbreviation = True
 
         # Check what follows
         after_match = text[end_pos:].lstrip()
@@ -2392,8 +2639,7 @@ def _split_at_sentences(text: str) -> List[str]:
 
     for end_pos in sentence_ends:
         sentence = _strip_text(text[start:end_pos])
-        if sentence:
-            sentences.append(sentence)
+        sentences.append(sentence) if sentence else None
         start = end_pos
 
     # Add remaining text

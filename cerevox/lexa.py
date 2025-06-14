@@ -6,6 +6,7 @@ import json
 import os
 import re
 import time
+import warnings
 from io import BytesIO
 from pathlib import Path
 from typing import (
@@ -25,6 +26,13 @@ from urllib.parse import unquote, urlparse
 import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
+
+# Optional tqdm import for progress bars
+try:
+    from tqdm import tqdm
+    TQDM_AVAILABLE = True
+except ImportError:
+    TQDM_AVAILABLE = False
 
 # Internal
 from .document_loader import DocumentBatch
@@ -272,12 +280,74 @@ class Lexa:
 
     # Private methods
 
+    def _create_progress_callback(self, show_progress: bool = False) -> Optional[Callable[[JobResponse], None]]:
+        """
+        Create a progress callback function using tqdm if requested and available.
+        
+        Args:
+            show_progress: Whether to show progress bar
+            
+        Returns:
+            Progress callback function or None
+        """
+        if not show_progress:
+            return None
+            
+        if not TQDM_AVAILABLE:
+            warnings.warn(
+                "tqdm is not available. Progress bar disabled. Install with: pip install tqdm",
+                ImportWarning,
+            )
+            return None
+            
+        pbar = None
+        
+        def progress_callback(status: JobResponse) -> None:
+            nonlocal pbar
+            
+            # Initialize progress bar on first call
+            if pbar is None:
+                total = 100  # Progress is in percentage
+                pbar = tqdm(
+                    total=total,
+                    desc="Processing",
+                    unit="%",
+                    bar_format="{l_bar}{bar}| {n:.0f}/{total:.0f}% [{elapsed}<{remaining}, {rate_fmt}]"
+                )
+                
+            # Update progress bar
+            if status.progress is not None:
+                # Update to current progress
+                pbar.n = status.progress
+                
+                # Update description with file/chunk info
+                desc_parts = ["Processing"]
+                
+                if status.total_files is not None and status.completed_files is not None:
+                    desc_parts.append(f"Files: {status.completed_files}/{status.total_files}")
+                    
+                if status.total_chunks is not None and status.completed_chunks is not None:
+                    desc_parts.append(f"Chunks: {status.completed_chunks}/{status.total_chunks}")
+                    
+                if status.failed_chunks and status.failed_chunks > 0:
+                    desc_parts.append(f"Errors: {status.failed_chunks}")
+                    
+                pbar.set_description(" | ".join(desc_parts))
+                pbar.refresh()
+                
+                # Close progress bar when complete
+                if status.status in [JobStatus.COMPLETE, JobStatus.PARTIAL_SUCCESS, JobStatus.FAILED]:
+                    pbar.close()
+            
+        return progress_callback
+
     def _get_documents(
         self,
         request_id: str,
         timeout: Optional[float] = None,
         poll_interval: float = 2.0,
         progress_callback: Optional[Callable[[JobResponse], None]] = None,
+        show_progress: bool = False,
     ) -> DocumentBatch:
         """
         Get parsed documents from a completed job
@@ -287,19 +357,44 @@ class Lexa:
             timeout: Maximum time to wait in seconds (None for no timeout)
             poll_interval: Time between polling attempts in seconds
             progress_callback: Optional function to call with status updates
+            show_progress: Whether to show a progress bar using tqdm
 
         Returns:
             DocumentBatch containing the parsed documents
         """
+        # Create progress callback if show_progress is True and no callback provided
+        if show_progress and progress_callback is None:
+            progress_callback = self._create_progress_callback(show_progress)
+            
         status = self._wait_for_completion(
             request_id, timeout, poll_interval, progress_callback
         )
 
-        if not status.result:
-            # Return empty document batch
-            return DocumentBatch([])
+        # Handle the new response structure where results are in files field
+        if status.files:
+            # New format: files field contains CompletedFileData objects
+            all_elements = []
+            for filename, file_data in status.files.items():
+                # Check if this is CompletedFileData (has 'data' field)
+                if hasattr(file_data, 'data') and file_data.data:
+                    # Add all elements from this file
+                    all_elements.extend(file_data.data)
+                elif isinstance(file_data, dict) and 'data' in file_data:
+                    # Handle dict representation of CompletedFileData
+                    all_elements.extend(file_data['data'])
+                    
+            # If we have elements, create DocumentBatch from them
+            if all_elements:
+                # Convert to the format expected by DocumentBatch.from_api_response
+                # The DocumentBatch expects either a list of elements or a dict with 'data' field
+                return DocumentBatch.from_api_response(all_elements)
+        
+        # Fallback to old format for backward compatibility
+        if status.result:
+            return DocumentBatch.from_api_response(status.result)
 
-        return DocumentBatch.from_api_response(status.result)
+        # Return empty document batch if no data
+        return DocumentBatch([])
 
     def _get_file_info_from_url(self, url: str) -> FileInfo:
         """
@@ -406,17 +501,26 @@ class Lexa:
             LexaJobFailedError: If job fails
         """
         start_time = time.time()
+        poll_count = 0
 
         if timeout is None:
             timeout = self.max_poll_time
 
+
         while True:
+            poll_count += 1
+            current_time = time.time()
+            elapsed_time = current_time - start_time
+            
+
+            
             status = self._get_job_status(request_id)
 
             if progress_callback:
                 progress_callback(status)
 
             if status.status in [JobStatus.COMPLETE, JobStatus.PARTIAL_SUCCESS]:
+
                 return status
             elif status.status in [
                 JobStatus.FAILED,
@@ -424,9 +528,11 @@ class Lexa:
                 JobStatus.NOT_FOUND,
             ]:
                 error_msg = status.error or "Job failed"
+
                 raise LexaJobFailedError(error_msg, response={"status": status.status})
 
             if time.time() - start_time >= timeout:
+
                 raise LexaTimeoutError(
                     f"Job {request_id} exceeded maximum"
                     + f" wait time of {timeout} seconds"
@@ -763,6 +869,7 @@ class Lexa:
         timeout: Optional[float] = None,
         poll_interval: float = 2.0,
         progress_callback: Optional[Callable[[JobResponse], None]] = None,
+        show_progress: bool = False,
     ) -> DocumentBatch:
         """
         Parse files and receive documents.
@@ -773,6 +880,7 @@ class Lexa:
             timeout: Maximum time to wait for completion
             poll_interval: Time between status checks
             progress_callback: Optional callback for progress updates
+            show_progress: Whether to show a progress bar using tqdm
 
         Returns:
             DocumentBatch containing parsed documents
@@ -782,7 +890,7 @@ class Lexa:
         if not result.request_id:
             raise LexaError(FAILED_ID)
         return self._get_documents(
-            result.request_id, timeout, poll_interval, progress_callback
+            result.request_id, timeout, poll_interval, progress_callback, show_progress
         )
 
     def parse_urls(
@@ -792,6 +900,7 @@ class Lexa:
         timeout: Optional[float] = None,
         poll_interval: float = 2.0,
         progress_callback: Optional[Callable[[JobResponse], None]] = None,
+        show_progress: bool = False,
     ) -> DocumentBatch:
         """
         Parse URLs
@@ -802,6 +911,7 @@ class Lexa:
             timeout: Maximum time to wait for completion
             poll_interval: Time between status checks
             progress_callback: Optional callback for progress updates
+            show_progress: Whether to show a progress bar using tqdm
 
         Returns:
             DocumentBatch containing parsed documents
@@ -810,7 +920,7 @@ class Lexa:
         if not result.request_id:
             raise LexaError(FAILED_ID)
         return self._get_documents(
-            result.request_id, timeout, poll_interval, progress_callback
+            result.request_id, timeout, poll_interval, progress_callback, show_progress
         )
 
     # Amazon S3 Integration (public)
@@ -848,6 +958,7 @@ class Lexa:
         timeout: Optional[float] = None,
         poll_interval: float = 2.0,
         progress_callback: Optional[Callable[[JobResponse], None]] = None,
+        show_progress: bool = False,
     ) -> DocumentBatch:
         """
         Parse files from an S3 folder
@@ -859,6 +970,7 @@ class Lexa:
             timeout: Maximum time to wait for completion
             poll_interval: Time between status checks
             progress_callback: Optional callback for progress updates
+            show_progress: Whether to show a progress bar using tqdm
 
         Returns:
             DocumentBatch containing parsed documents
@@ -867,7 +979,7 @@ class Lexa:
         if not result.request_id:
             raise LexaError(FAILED_ID)
         return self._get_documents(
-            result.request_id, timeout, poll_interval, progress_callback
+            result.request_id, timeout, poll_interval, progress_callback, show_progress
         )
 
     # Box Integration (public)
@@ -889,6 +1001,7 @@ class Lexa:
         timeout: Optional[float] = None,
         poll_interval: float = 2.0,
         progress_callback: Optional[Callable[[JobResponse], None]] = None,
+        show_progress: bool = False,
     ) -> DocumentBatch:
         """
         Parse files from a Box folder
@@ -899,6 +1012,7 @@ class Lexa:
             timeout: Maximum time to wait for completion
             poll_interval: Time between status checks
             progress_callback: Optional callback for progress updates
+            show_progress: Whether to show a progress bar using tqdm
 
         Returns:
             DocumentBatch containing parsed documents
@@ -907,7 +1021,7 @@ class Lexa:
         if not result.request_id:
             raise LexaError(FAILED_ID)
         return self._get_documents(
-            result.request_id, timeout, poll_interval, progress_callback
+            result.request_id, timeout, poll_interval, progress_callback, show_progress
         )
 
     # Dropbox Integration (public)
@@ -929,6 +1043,7 @@ class Lexa:
         timeout: Optional[float] = None,
         poll_interval: float = 2.0,
         progress_callback: Optional[Callable[[JobResponse], None]] = None,
+        show_progress: bool = False,
     ) -> DocumentBatch:
         """
         Parse files from a Dropbox folder
@@ -939,6 +1054,7 @@ class Lexa:
             timeout: Maximum time to wait for completion
             poll_interval: Time between status checks
             progress_callback: Optional callback for progress updates
+            show_progress: Whether to show a progress bar using tqdm
 
         Returns:
             DocumentBatch containing parsed documents
@@ -947,7 +1063,7 @@ class Lexa:
         if not result.request_id:
             raise LexaError(FAILED_ID)
         return self._get_documents(
-            result.request_id, timeout, poll_interval, progress_callback
+            result.request_id, timeout, poll_interval, progress_callback, show_progress
         )
 
     # Microsoft SharePoint Integration (public)
@@ -1000,6 +1116,7 @@ class Lexa:
         timeout: Optional[float] = None,
         poll_interval: float = 2.0,
         progress_callback: Optional[Callable[[JobResponse], None]] = None,
+        show_progress: bool = False,
     ) -> DocumentBatch:
         """
         Parse files from a SharePoint folder
@@ -1011,6 +1128,7 @@ class Lexa:
             timeout: Maximum time to wait for completion
             poll_interval: Time between status checks
             progress_callback: Optional callback for progress updates
+            show_progress: Whether to show a progress bar using tqdm
 
         Returns:
             DocumentBatch containing parsed documents
@@ -1019,7 +1137,7 @@ class Lexa:
         if not result.request_id:
             raise LexaError(FAILED_ID)
         return self._get_documents(
-            result.request_id, timeout, poll_interval, progress_callback
+            result.request_id, timeout, poll_interval, progress_callback, show_progress
         )
 
     # Salesforce Integration (public)
@@ -1041,6 +1159,7 @@ class Lexa:
         timeout: Optional[float] = None,
         poll_interval: float = 2.0,
         progress_callback: Optional[Callable[[JobResponse], None]] = None,
+        show_progress: bool = False,
     ) -> DocumentBatch:
         """
         Parse files from a Salesforce folder
@@ -1051,6 +1170,7 @@ class Lexa:
             timeout: Maximum time to wait for completion
             poll_interval: Time between status checks
             progress_callback: Optional callback for progress updates
+            show_progress: Whether to show a progress bar using tqdm
 
         Returns:
             DocumentBatch containing parsed documents
@@ -1059,7 +1179,7 @@ class Lexa:
         if not result.request_id:
             raise LexaError(FAILED_ID)
         return self._get_documents(
-            result.request_id, timeout, poll_interval, progress_callback
+            result.request_id, timeout, poll_interval, progress_callback, show_progress
         )
 
     # Sendme Integration (public)
@@ -1071,6 +1191,7 @@ class Lexa:
         timeout: Optional[float] = None,
         poll_interval: float = 2.0,
         progress_callback: Optional[Callable[[JobResponse], None]] = None,
+        show_progress: bool = False,
     ) -> DocumentBatch:
         """
         Parse files from Sendme
@@ -1081,6 +1202,7 @@ class Lexa:
             timeout: Maximum time to wait for completion
             poll_interval: Time between status checks
             progress_callback: Optional callback for progress updates
+            show_progress: Whether to show a progress bar using tqdm
 
         Returns:
             DocumentBatch containing parsed documents
@@ -1089,5 +1211,5 @@ class Lexa:
         if not result.request_id:
             raise LexaError(FAILED_ID)
         return self._get_documents(
-            result.request_id, timeout, poll_interval, progress_callback
+            result.request_id, timeout, poll_interval, progress_callback, show_progress
         )

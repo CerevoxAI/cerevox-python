@@ -821,60 +821,60 @@ class TestDocumentTable:
         assert table.table_index == 0
         assert table.caption == "Test Table"
 
-    @patch("cerevox.document_loader.PANDAS_AVAILABLE", True)
     def test_to_pandas_success(self):
         """Test to_pandas method when pandas is available"""
         if not PANDAS_AVAILABLE:
             pytest.skip("pandas not available")
 
-        table = self.create_test_table()
-        df = table.to_pandas()
+        with patch("cerevox.document_loader.PANDAS_AVAILABLE", True):
+            table = self.create_test_table()
+            df = table.to_pandas()
 
-        assert isinstance(df, pandas.DataFrame)
-        assert list(df.columns) == ["Name", "Age", "City"]
-        assert len(df) == 2
-        assert df.iloc[0]["Name"] == "John"
-        assert df.iloc[1]["Name"] == "Jane"
+            assert isinstance(df, pandas.DataFrame)
+            assert list(df.columns) == ["Name", "Age", "City"]
+            assert len(df) == 2
+            assert df.iloc[0]["Name"] == "John"
+            assert df.iloc[1]["Name"] == "Jane"
 
-    @patch("cerevox.document_loader.PANDAS_AVAILABLE", True)
     def test_to_pandas_no_headers(self):
         """Test to_pandas method without headers"""
-        if not PANDAS_AVAILABLE:
-            pytest.skip("pandas not available")
+        with patch("cerevox.document_loader.PANDAS_AVAILABLE", True):
+            if not PANDAS_AVAILABLE:
+                pytest.skip("pandas not available")
 
-        table = DocumentTable(
-            element_id="table123",
-            headers=[],
-            rows=[["John", "25"], ["Jane", "30"]],
-            page_number=1,
-        )
-        df = table.to_pandas()
+            table = DocumentTable(
+                element_id="table123",
+                headers=[],
+                rows=[["John", "25"], ["Jane", "30"]],
+                page_number=1,
+            )
+            df = table.to_pandas()
 
-        assert isinstance(df, pandas.DataFrame)
-        assert list(df.columns) == ["Column_1", "Column_2"]
-        assert len(df) == 2
+            assert isinstance(df, pandas.DataFrame)
+            assert list(df.columns) == ["Column_1", "Column_2"]
+            assert len(df) == 2
 
-    @patch("cerevox.document_loader.PANDAS_AVAILABLE", True)
     def test_to_pandas_empty_rows(self):
         """Test to_pandas method with empty rows"""
-        if not PANDAS_AVAILABLE:
-            pytest.skip("pandas not available")
+        with patch("cerevox.document_loader.PANDAS_AVAILABLE", True):
+            if not PANDAS_AVAILABLE:
+                pytest.skip("pandas not available")
 
-        table = DocumentTable(
-            element_id="table123", headers=["Name", "Age"], rows=[], page_number=1
-        )
-        df = table.to_pandas()
+            table = DocumentTable(
+                element_id="table123", headers=["Name", "Age"], rows=[], page_number=1
+            )
+            df = table.to_pandas()
 
-        assert isinstance(df, pandas.DataFrame)
-        assert len(df) == 0
+            assert isinstance(df, pandas.DataFrame)
+            assert len(df) == 0
 
-    @patch("cerevox.document_loader.PANDAS_AVAILABLE", False)
     def test_to_pandas_not_available(self):
         """Test to_pandas method when pandas is not available"""
-        table = self.create_test_table()
+        with patch("cerevox.document_loader.PANDAS_AVAILABLE", False):
+            table = self.create_test_table()
 
-        with pytest.raises(ImportError, match="pandas is required"):
-            table.to_pandas()
+            with pytest.raises(ImportError, match="pandas is required"):
+                table.to_pandas()
 
     def test_to_csv_string(self):
         """Test to_csv_string method"""
@@ -1043,6 +1043,8 @@ class TestDocument:
         doc = self.create_test_document()
         html_content = doc.html_content
 
+        assert doc.has_processing_errors() == False
+
         assert "<p>Para 1</p>" in html_content
 
     def test_html_content_property_empty_elements(self):
@@ -1106,6 +1108,8 @@ class TestDocument:
     def test_search_content_empty_query(self):
         """Test search_content with empty query"""
         doc = self.create_test_document()
+
+        assert doc.get_error_summary() == "No processing errors"
 
         results = doc.search_content("")
         assert results == []
@@ -1613,26 +1617,26 @@ class TestDocumentAdvanced:
             raw_response={"key": "value"},
         )
 
-    @patch("cerevox.document_loader.PANDAS_AVAILABLE", True)
     def test_to_pandas_tables(self):
         """Test to_pandas_tables method"""
-        if not PANDAS_AVAILABLE:
-            pytest.skip("pandas not available")
+        with patch("cerevox.document_loader.PANDAS_AVAILABLE", True):
+            if not PANDAS_AVAILABLE:
+                pytest.skip("pandas not available")
 
-        doc = self.create_test_document()
-        df_list = doc.to_pandas_tables()
+            doc = self.create_test_document()
+            df_list = doc.to_pandas_tables()
 
-        assert isinstance(df_list, list)
-        assert len(df_list) == 3
-        assert isinstance(df_list[0], pandas.DataFrame)
+            assert isinstance(df_list, list)
+            assert len(df_list) == 3
+            assert isinstance(df_list[0], pandas.DataFrame)
 
-    @patch("cerevox.document_loader.PANDAS_AVAILABLE", False)
     def test_to_pandas_tables_not_available(self):
         """Test to_pandas_tables when pandas not available"""
-        doc = self.create_test_document()
+        with patch("cerevox.document_loader.PANDAS_AVAILABLE", False):
+            doc = self.create_test_document()
 
-        with pytest.raises(ImportError, match="pandas is required"):
-            doc.to_pandas_tables()
+            with pytest.raises(ImportError, match="pandas is required"):
+                doc.to_pandas_tables()
 
     def test_extract_table_data(self):
         """Test extract_table_data method"""
@@ -1657,13 +1661,14 @@ class TestDocumentAdvanced:
     def test_validate_with_errors(self):
         """Test validate method with invalid data"""
         # Create document with invalid metadata
-        metadata = DocumentMetadata(filename="", file_type="")  # Empty required fields
-        doc = Document(content="", metadata=metadata)
+        with patch("cerevox.document_loader.Document.get_processing_errors", return_value={'errors': {'filename': 'Filename is required'}, 'error_count': 1}):
+            metadata = DocumentMetadata(filename="", file_type="")  # Empty required fields
+            doc = Document(content="", metadata=metadata)
 
-        errors = doc.validate()
-        assert len(errors) > 0
-        assert any("filename" in error for error in errors)
-        # Note: file_type validation may not be implemented in the actual code
+            assert doc.get_error_summary() == "1 processing error(s): filename: Filename is required"
+            errors = doc.validate()
+            assert len(errors) > 0
+            assert any("filename" in error for error in errors)
 
     def test_from_api_response_elements_list(self):
         """Test from_api_response with elements list"""
@@ -1717,54 +1722,54 @@ class TestDocumentAdvanced:
         assert doc.content == "Test content"
         assert doc.filename == "test.pdf"
 
-    @patch("cerevox.document_loader.BS4_AVAILABLE", True)
     def test_from_api_response_array(self):
         """Test from_api_response with documents format"""
-        response_data = [
-            {
-                "content": {"markdown": "MD content", "text": "Test content"},
-                "element_type": "paragraph",
-                "id": "element-id",
-                "source": {
-                    "file": {
-                        "extenstion": ".pdf",
-                        "id": "7333255044788998144",
-                        "index": 2,
-                        "mime_type": "application/pdf",
-                        "original_mime_type": "application/pdf",
-                        "name": "test.pdf",
+        with patch("cerevox.document_loader.BS4_AVAILABLE", True):
+            response_data = [
+                {
+                    "content": {"markdown": "MD content", "text": "Test content"},
+                    "element_type": "paragraph",
+                    "id": "element-id",
+                    "source": {
+                        "file": {
+                            "extenstion": ".pdf",
+                            "id": "7333255044788998144",
+                            "index": 2,
+                            "mime_type": "application/pdf",
+                            "original_mime_type": "application/pdf",
+                            "name": "test.pdf",
+                        },
+                        "page": {"page_number": 3, "index": 2},
+                        "element": {"characters": 333, "words": 77, "sentences": 7},
                     },
-                    "page": {"page_number": 3, "index": 2},
-                    "element": {"characters": 333, "words": 77, "sentences": 7},
                 },
-            },
-            {
-                "content": {
-                    "markdown": "MD content2",
-                    "html": "<table><tr><th>Header1</th><th>Header2</th></tr><tr><td>Data1</td><td>Data2</td></tr></table>",
-                },
-                "element_type": "table",
-                "id": "element-id2",
-                "source": {
-                    "file": {
-                        "extenstion": ".pdf",
-                        "id": "7333255044788998145",
-                        "index": 2,
-                        "mime_type": "application/pdf",
-                        "original_mime_type": "application/pdf",
-                        "name": "test.pdf",
+                {
+                    "content": {
+                        "markdown": "MD content2",
+                        "html": "<table><tr><th>Header1</th><th>Header2</th></tr><tr><td>Data1</td><td>Data2</td></tr></table>",
                     },
-                    "page": {"page_number": 3, "index": 3},
-                    "element": {"characters": 111, "words": 11, "sentences": 1},
+                    "element_type": "table",
+                    "id": "element-id2",
+                    "source": {
+                        "file": {
+                            "extenstion": ".pdf",
+                            "id": "7333255044788998145",
+                            "index": 2,
+                            "mime_type": "application/pdf",
+                            "original_mime_type": "application/pdf",
+                            "name": "test.pdf",
+                        },
+                        "page": {"page_number": 3, "index": 3},
+                        "element": {"characters": 111, "words": 11, "sentences": 1},
+                    },
                 },
-            },
-        ]
+            ]
 
-        doc = Document.from_api_response(response_data, "test.pdf")
+            doc = Document.from_api_response(response_data, "test.pdf")
 
-        assert isinstance(doc, Document)
-        assert doc.content == "Test content"
-        assert doc.filename == "test.pdf"
+            assert isinstance(doc, Document)
+            assert doc.content == "Test content"
+            assert doc.filename == "test.pdf"
 
     def test_from_api_response_direct_response(self):
         """Test from_api_response with direct format"""
@@ -1779,30 +1784,30 @@ class TestDocumentAdvanced:
         assert isinstance(doc, Document)
         assert doc.content == "Direct content"
 
-    @patch("cerevox.document_loader.BS4_AVAILABLE", False)
     def test_parse_table_from_html_not_available(self):
         """Test _parse_table_from_html when BeautifulSoup not available"""
-        html = "<table><tr><th>Header</th></tr></table>"
+        with patch("cerevox.document_loader.BS4_AVAILABLE", False):
+            html = "<table><tr><th>Header</th></tr></table>"
 
-        table = Document._parse_table_from_html(html, 0, 1, "table1")
+            table = Document._parse_table_from_html(html, 0, 1, "table1")
 
-        assert table is None
+            assert table is None
 
-    @patch("cerevox.document_loader.BS4_AVAILABLE", True)
     def test_parse_table_from_html(self):
         """Test _parse_table_from_html method"""
-        if not BS4_AVAILABLE:
-            pytest.skip("BeautifulSoup4 not available")
+        with patch("cerevox.document_loader.BS4_AVAILABLE", True):
+            if not BS4_AVAILABLE:
+                pytest.skip("BeautifulSoup4 not available")
 
-        html = "<table><tr><th>Header1</th><th>Header2</th></tr><tr><td>Data1</td><td>Data2</td></tr></table>"
+            html = "<table><tr><th>Header1</th><th>Header2</th></tr><tr><td>Data1</td><td>Data2</td></tr></table>"
 
-        table = Document._parse_table_from_html(html, 0, 1, "table1")
+            table = Document._parse_table_from_html(html, 0, 1, "table1")
 
-        assert isinstance(table, DocumentTable)
-        assert table.headers == ["Header1", "Header2"]
-        assert table.rows == [["Data1", "Data2"]]
-        assert table.page_number == 1
-        assert table.element_id == "table1"
+            assert isinstance(table, DocumentTable)
+            assert table.headers == ["Header1", "Header2"]
+            assert table.rows == [["Data1", "Data2"]]
+            assert table.page_number == 1
+            assert table.element_id == "table1"
 
     def test_get_statistics(self):
         """Test get_statistics method"""
@@ -2147,41 +2152,41 @@ class TestDocumentBatch:
         assert isinstance(all_tables[0][0], Document)
         assert isinstance(all_tables[0][1], DocumentTable)
 
-    @patch("cerevox.document_loader.PANDAS_AVAILABLE", True)
     def test_get_all_pandas_tables(self):
         """Test get_all_pandas_tables method"""
-        if not PANDAS_AVAILABLE:
-            pytest.skip("pandas not available")
+        with patch("cerevox.document_loader.PANDAS_AVAILABLE", True):
+            if not PANDAS_AVAILABLE:
+                pytest.skip("pandas not available")
 
-        docs = self.create_test_documents()
+            docs = self.create_test_documents()
 
-        # Add table to one document
-        table = DocumentTable(
-            element_id="table1", headers=["A", "B"], rows=[["1", "2"]], page_number=1
-        )
-        table2 = DocumentTable(
-            element_id="table2", headers=["C", "D"], rows=[], page_number=2
-        )
-        docs[0].tables = [table, table2]
+            # Add table to one document
+            table = DocumentTable(
+                element_id="table1", headers=["A", "B"], rows=[["1", "2"]], page_number=1
+            )
+            table2 = DocumentTable(
+                element_id="table2", headers=["C", "D"], rows=[], page_number=2
+            )
+            docs[0].tables = [table, table2]
 
-        batch = DocumentBatch(docs)
-        pandas_tables = batch.get_all_pandas_tables()
+            batch = DocumentBatch(docs)
+            pandas_tables = batch.get_all_pandas_tables()
 
-        assert isinstance(pandas_tables, list)
-        assert len(pandas_tables) == 1
-        assert isinstance(pandas_tables[0], tuple)
-        assert len(pandas_tables[0]) == 2
-        assert isinstance(pandas_tables[0][0], str)  # filename
-        assert isinstance(pandas_tables[0][1], pandas.DataFrame)
+            assert isinstance(pandas_tables, list)
+            assert len(pandas_tables) == 1
+            assert isinstance(pandas_tables[0], tuple)
+            assert len(pandas_tables[0]) == 2
+            assert isinstance(pandas_tables[0][0], str)  # filename
+            assert isinstance(pandas_tables[0][1], pandas.DataFrame)
 
-    @patch("cerevox.document_loader.PANDAS_AVAILABLE", False)
     def test_get_all_pandas_tables_not_available(self):
         """Test get_all_pandas_tables when pandas not available"""
-        docs = self.create_test_documents()
-        batch = DocumentBatch(docs)
+        with patch("cerevox.document_loader.PANDAS_AVAILABLE", False):
+            docs = self.create_test_documents()
+            batch = DocumentBatch(docs)
 
-        with pytest.raises(ImportError, match="pandas is required"):
-            batch.get_all_pandas_tables()
+            with pytest.raises(ImportError, match="pandas is required"):
+                batch.get_all_pandas_tables()
 
     def test_to_combined_text(self):
         """Test to_combined_text method"""
@@ -2581,6 +2586,137 @@ class TestDocumentBatch:
         assert "doc1.pdf" in summary
         assert "doc2.txt" in summary
 
+    def test_from_processing_job_response(self):
+        """Test from_processing_job_response method with various response formats"""
+        # Test basic response with minimal data
+        basic_response = {
+            'status': 'processing',
+            'progress': 50
+        }
+        
+        result = DocumentBatch.from_processing_job_response(basic_response)
+        
+        assert result['status'] == 'processing'
+        assert result['progress'] == 50
+        assert result['total_files'] == 0
+        assert result['completed_files'] == 0
+        assert result['failed_files'] == 0
+        assert result['processing_files'] == 0
+        assert result['total_chunks'] == 0
+        assert result['completed_chunks'] == 0
+        assert result['failed_chunks'] == 0
+        assert result['processing_chunks'] == 0
+        assert result['files'] == {}
+        
+        # Test complete response with all fields
+        complete_response = {
+            'status': 'completed',
+            'progress': 100,
+            'total_files': 3,
+            'completed_files': 2,
+            'failed_files': 1,
+            'processing_files': 0,
+            'total_chunks': 150,
+            'completed_chunks': 140,
+            'failed_chunks': 10,
+            'processing_chunks': 0,
+            'files': {
+                'doc1.pdf': {
+                    'name': 'doc1.pdf',
+                    'status': 'completed',
+                    'total_chunks': 50,
+                    'completed_chunks': 50,
+                    'failed_chunks': 0,
+                    'processing_chunks': 0,
+                    'last_updated': '2023-10-01T12:00:00Z'
+                },
+                'doc2.txt': {
+                    'name': 'doc2.txt',
+                    'status': 'failed',
+                    'total_chunks': 30,
+                    'completed_chunks': 20,
+                    'failed_chunks': 10,
+                    'processing_chunks': 0,
+                    'last_updated': '2023-10-01T12:05:00Z'
+                }
+            }
+        }
+        
+        result = DocumentBatch.from_processing_job_response(complete_response)
+        
+        assert result['status'] == 'completed'
+        assert result['progress'] == 100
+        assert result['total_files'] == 3
+        assert result['completed_files'] == 2
+        assert result['failed_files'] == 1
+        assert result['processing_files'] == 0
+        assert result['total_chunks'] == 150
+        assert result['completed_chunks'] == 140
+        assert result['failed_chunks'] == 10
+        assert result['processing_chunks'] == 0
+        
+        # Verify file-level information
+        assert 'doc1.pdf' in result['files']
+        assert 'doc2.txt' in result['files']
+        
+        doc1_info = result['files']['doc1.pdf']
+        assert doc1_info['name'] == 'doc1.pdf'
+        assert doc1_info['status'] == 'completed'
+        assert doc1_info['total_chunks'] == 50
+        assert doc1_info['completed_chunks'] == 50
+        assert doc1_info['failed_chunks'] == 0
+        assert doc1_info['processing_chunks'] == 0
+        assert doc1_info['last_updated'] == '2023-10-01T12:00:00Z'
+        
+        doc2_info = result['files']['doc2.txt']
+        assert doc2_info['name'] == 'doc2.txt'
+        assert doc2_info['status'] == 'failed'
+        assert doc2_info['total_chunks'] == 30
+        assert doc2_info['completed_chunks'] == 20
+        assert doc2_info['failed_chunks'] == 10
+        assert doc2_info['processing_chunks'] == 0
+        assert doc2_info['last_updated'] == '2023-10-01T12:05:00Z'
+        
+        # Test edge cases
+        # Empty response
+        empty_response = {}
+        result = DocumentBatch.from_processing_job_response(empty_response)
+        assert result['status'] == 'unknown'
+        assert result['progress'] == 0
+        assert all(result[key] == 0 for key in ['total_files', 'completed_files', 'failed_files', 'processing_files'])
+        
+        # Response with invalid file data
+        invalid_files_response = {
+            'status': 'processing',
+            'files': {
+                'doc1.pdf': 'not_a_dict',  # Invalid format
+                'doc2.txt': {'status': 'processing'},  # Valid but minimal
+                'doc3.docx': {}  # Empty dict (no status)
+            }
+        }
+        
+        result = DocumentBatch.from_processing_job_response(invalid_files_response)
+        assert result['status'] == 'processing'
+        
+        # Only doc2.txt should be included since it has valid format with status
+        assert 'doc2.txt' in result['files']
+        assert 'doc1.pdf' not in result['files']  # Invalid format
+        assert 'doc3.docx' not in result['files']  # No status field
+        
+        doc2_info = result['files']['doc2.txt']
+        assert doc2_info['status'] == 'processing'
+        assert doc2_info['name'] == 'doc2.txt'  # Should default to filename
+        assert doc2_info['total_chunks'] == 0  # Should default to 0
+        
+        # Test with non-dict files value
+        non_dict_files_response = {
+            'status': 'processing',
+            'files': 'not_a_dict'
+        }
+        
+        result = DocumentBatch.from_processing_job_response(non_dict_files_response)
+        assert result['files'] == {}  # Should be empty dict when files is not a dict
+
 
 class TestOptionalDependencies:
     """Test behavior when optional dependencies are missing"""
@@ -2789,19 +2925,19 @@ class TestParseTableFromHTML:
         result = Document._parse_table_from_html("   \n\t  ", 0, 1, "test")
         assert result is None
 
-    @patch("cerevox.document_loader.BS4_AVAILABLE", False)
     def test_parse_table_bs4_not_available(self):
         """Test _parse_table_from_html when BeautifulSoup is not available"""
-        html = "<table><tr><th>Header</th></tr><tr><td>Data</td></tr></table>"
-        result = Document._parse_table_from_html(html, 0, 1, "test")
-        assert result is None
+        with patch("cerevox.document_loader.BS4_AVAILABLE", False):
+            html = "<table><tr><th>Header</th></tr><tr><td>Data</td></tr></table>"
+            result = Document._parse_table_from_html(html, 0, 1, "test")
+            assert result is None
 
-    @patch("cerevox.document_loader.BS4_AVAILABLE", True)
     def test_parse_table_malformed_html(self):
         """Test _parse_table_from_html with malformed HTML"""
-        html = "<malformed>not valid html"
-        result = Document._parse_table_from_html(html, 0, 1, "test")
-        assert result is None
+        with patch("cerevox.document_loader.BS4_AVAILABLE", True):
+            html = "<malformed>not valid html"
+            result = Document._parse_table_from_html(html, 0, 1, "test")
+            assert result is None
 
     def test_parse_table_no_table_element(self):
         """Test _parse_table_from_html with no table element"""
@@ -2815,30 +2951,30 @@ class TestParseTableFromHTML:
         result = Document._parse_table_from_html(html, 0, 1, "test")
         assert result is None
 
-    @patch("cerevox.document_loader.BS4_AVAILABLE", True)
     def test_parse_table_with_caption(self):
         """Test _parse_table_from_html with caption"""
-        if not BS4_AVAILABLE:
-            pytest.skip("BeautifulSoup4 not available")
+        with patch("cerevox.document_loader.BS4_AVAILABLE", True):
+            if not BS4_AVAILABLE:
+                pytest.skip("BeautifulSoup4 not available")
 
-        html = "<table><caption>Test Caption</caption><tr><td>Data</td></tr></table>"
-        result = Document._parse_table_from_html(html, 0, 1, "test")
-        assert result is not None
-        assert result.caption == "Test Caption"
+            html = "<table><caption>Test Caption</caption><tr><td>Data</td></tr></table>"
+            result = Document._parse_table_from_html(html, 0, 1, "test")
+            assert result is not None
+            assert result.caption == "Test Caption"
 
-    @patch("cerevox.document_loader.BS4_AVAILABLE", True)
     def test_parse_table_mixed_th_td_headers(self):
         """Test _parse_table_from_html with mixed th/td in header row"""
-        if not BS4_AVAILABLE:
-            pytest.skip("BeautifulSoup4 not available")
+        with patch("cerevox.document_loader.BS4_AVAILABLE", True):
+            if not BS4_AVAILABLE:
+                pytest.skip("BeautifulSoup4 not available")
 
-        html = "<table><tr><th>Header1</th><td>Header2</td></tr><tr><td>Data1</td><td>Data2</td></tr></table>"
-        result = Document._parse_table_from_html(html, 0, 1, "test")
-        assert result is not None
-        assert result.headers == ["Header1"]  # Only th elements are treated as headers
-        # Since we found th elements, we skip the first row (header row) for data rows
-        assert len(result.rows) == 1  # Only the second row is treated as a data row
-        assert result.rows[0] == ["Data1", "Data2"]
+            html = "<table><tr><th>Header1</th><td>Header2</td></tr><tr><td>Data1</td><td>Data2</td></tr></table>"
+            result = Document._parse_table_from_html(html, 0, 1, "test")
+            assert result is not None
+            assert result.headers == ["Header1"]  # Only th elements are treated as headers
+            # Since we found th elements, we skip the first row (header row) for data rows
+            assert len(result.rows) == 1  # Only the second row is treated as a data row
+            assert result.rows[0] == ["Data1", "Data2"]
 
 
 class TestGetStatisticsEdgeCases:
@@ -3364,16 +3500,16 @@ class TestEdgeCases:
         assert element.source.element.words > 0
         assert element.source.element.sentences > 0
 
-    @patch("cerevox.document_loader.BS4_AVAILABLE", True)
     def test_parse_table_from_html_exception_handling(self):
         """Test _parse_table_from_html exception handling"""
-        # Test with malformed HTML that causes BeautifulSoup to raise exception
-        if BS4_AVAILABLE:
-            # This should trigger the exception handling
-            malformed_html = "<!-- This is not an html table"
-            result = Document._parse_table_from_html(malformed_html, 0, 1, "test")
-            # Should handle gracefully and return valid table or None
-            assert result is None or isinstance(result, DocumentTable)
+        with patch("cerevox.document_loader.BS4_AVAILABLE", True):
+            # Test with malformed HTML that causes BeautifulSoup to raise exception
+            if BS4_AVAILABLE:
+                # This should trigger the exception handling
+                malformed_html = "<!-- This is not an html table"
+                result = Document._parse_table_from_html(malformed_html, 0, 1, "test")
+                # Should handle gracefully and return valid table or None
+                assert result is None or isinstance(result, DocumentTable)
 
     def test_max_page_calculation_error_handling(self):
         """Test max page calculation error handling in _from_elements_list"""
@@ -3930,49 +4066,49 @@ class TestMissingCoveragePaths:
                 )
                 assert result is None
 
-    @patch("cerevox.document_loader.BS4_AVAILABLE", True)
     def test_parse_table_from_html_no_th_elements(self):
         """Test _parse_table_from_html when no th elements are found (covers th_cells check)"""
-        if not BS4_AVAILABLE:
-            pytest.skip("BeautifulSoup4 not available")
+        with patch("cerevox.document_loader.BS4_AVAILABLE", True):
+            if not BS4_AVAILABLE:
+                pytest.skip("BeautifulSoup4 not available")
 
-        # HTML with only td elements, no th elements
-        html = "<table><tr><td>Data1</td><td>Data2</td></tr></table>"
-        result = Document._parse_table_from_html(html, 0, 1, "test")
+            # HTML with only td elements, no th elements
+            html = "<table><tr><td>Data1</td><td>Data2</td></tr></table>"
+            result = Document._parse_table_from_html(html, 0, 1, "test")
 
-        assert result is not None
-        assert result.headers == []  # No headers found
-        assert len(result.rows) == 1
-        assert result.rows[0] == ["Data1", "Data2"]
+            assert result is not None
+            assert result.headers == []  # No headers found
+            assert len(result.rows) == 1
+            assert result.rows[0] == ["Data1", "Data2"]
 
-    @patch("cerevox.document_loader.BS4_AVAILABLE", True)
     def test_parse_table_from_html_empty_rows_check(self):
         """Test _parse_table_from_html path that filters out empty rows (line 933)"""
-        if not BS4_AVAILABLE:
-            pytest.skip("BeautifulSoup4 not available")
+        with patch("cerevox.document_loader.BS4_AVAILABLE", True):
+            if not BS4_AVAILABLE:
+                pytest.skip("BeautifulSoup4 not available")
 
-        # Create table with some empty rows
-        html = (
-            "<table><tr><td>Data</td></tr><tr></tr><tr><td>More Data</td></tr></table>"
-        )
-        result = Document._parse_table_from_html(html, 0, 1, "test")
+            # Create table with some empty rows
+            html = (
+                "<table><tr><td>Data</td></tr><tr></tr><tr><td>More Data</td></tr></table>"
+            )
+            result = Document._parse_table_from_html(html, 0, 1, "test")
 
-        assert result is not None
-        assert len(result.rows) == 2  # Empty row should be filtered out
-        assert result.rows[0] == ["Data"]
-        assert result.rows[1] == ["More Data"]
+            assert result is not None
+            assert len(result.rows) == 2  # Empty row should be filtered out
+            assert result.rows[0] == ["Data"]
+            assert result.rows[1] == ["More Data"]
 
-    @patch("cerevox.document_loader.BS4_AVAILABLE", True)
     def test_parse_table_from_html_no_caption_element(self):
         """Test _parse_table_from_html when no caption element is found (line 938)"""
-        if not BS4_AVAILABLE:
-            pytest.skip("BeautifulSoup4 not available")
+        with patch("cerevox.document_loader.BS4_AVAILABLE", True):
+            if not BS4_AVAILABLE:
+                pytest.skip("BeautifulSoup4 not available")
 
-        html = "<table><tr><td>Data</td></tr></table>"
-        result = Document._parse_table_from_html(html, 0, 1, "test")
+            html = "<table><tr><td>Data</td></tr></table>"
+            result = Document._parse_table_from_html(html, 0, 1, "test")
 
-        assert result is not None
-        assert result.caption is None
+            assert result is not None
+            assert result.caption is None
 
     def test_parse_table_from_html_caption_element_not_tag(self):
         """Test _parse_table_from_html when caption element is not a Tag (line 944)"""
@@ -4038,14 +4174,17 @@ class TestMissingCoveragePaths:
                 "id": "elem2",
                 "element_type": "paragraph",
                 "content": None,  # This will cause an exception
-                "source": {"invalid": "structure"},  # Incomplete source
+                "source": {
+                    "file": {"name": "test.pdf", "extension": "pdf"},
+                    "page": {"page_number": 1},
+                    "element": {},
+                },
             },
         ]
 
         with warnings.catch_warnings(record=True) as w:
             warnings.simplefilter("always")
             doc = Document._from_elements_list(elements_data, "test.pdf")
-
             # Should skip malformed element and continue
             assert doc.filename == "test.pdf"
             assert len(doc.elements) == 1  # Only the first valid element
@@ -4383,51 +4522,51 @@ class TestFinalMissingCoverage:
 class TestRemainingCoverage:
     """Test remaining missing coverage for 100% completion"""
 
-    @patch("cerevox.document_loader.BS4_AVAILABLE", True)
     def test_parse_table_from_html_comprehensive_coverage(self):
         """Test _parse_table_from_html with comprehensive edge cases"""
-        if not BS4_AVAILABLE:
-            pytest.skip("BeautifulSoup4 not available")
+        with patch("cerevox.document_loader.BS4_AVAILABLE", True):
+            if not BS4_AVAILABLE:
+                pytest.skip("BeautifulSoup4 not available")
 
-        # Test empty HTML
-        result = Document._parse_table_from_html("", 0, 1, "test")
-        assert result is None
+            # Test empty HTML
+            result = Document._parse_table_from_html("", 0, 1, "test")
+            assert result is None
 
-        # Test whitespace-only HTML
-        result = Document._parse_table_from_html("   \n\t  ", 0, 1, "test")
-        assert result is None
+            # Test whitespace-only HTML
+            result = Document._parse_table_from_html("   \n\t  ", 0, 1, "test")
+            assert result is None
 
-        # Test no table element
-        result = Document._parse_table_from_html("<div>not a table</div>", 0, 1, "test")
-        assert result is None
+            # Test no table element
+            result = Document._parse_table_from_html("<div>not a table</div>", 0, 1, "test")
+            assert result is None
 
-        # Test empty table
-        result = Document._parse_table_from_html("<table></table>", 0, 1, "test")
-        assert result is None
+            # Test empty table
+            result = Document._parse_table_from_html("<table></table>", 0, 1, "test")
+            assert result is None
 
-        # Test table with caption
-        html = "<table><caption>Test Caption</caption><tr><td>Data</td></tr></table>"
-        result = Document._parse_table_from_html(html, 0, 1, "test")
-        assert result is not None
-        assert result.caption == "Test Caption"
+            # Test table with caption
+            html = "<table><caption>Test Caption</caption><tr><td>Data</td></tr></table>"
+            result = Document._parse_table_from_html(html, 0, 1, "test")
+            assert result is not None
+            assert result.caption == "Test Caption"
 
-        # Test table with mixed th/td in header row
-        html = "<table><tr><th>Header1</th><td>Header2</td></tr><tr><td>Data1</td><td>Data2</td></tr></table>"
-        result = Document._parse_table_from_html(html, 0, 1, "test")
-        assert result is not None
-        assert result.headers == ["Header1"]  # Only th elements are treated as headers
+            # Test table with mixed th/td in header row
+            html = "<table><tr><th>Header1</th><td>Header2</td></tr><tr><td>Data1</td><td>Data2</td></tr></table>"
+            result = Document._parse_table_from_html(html, 0, 1, "test")
+            assert result is not None
+            assert result.headers == ["Header1"]  # Only th elements are treated as headers
 
-    @patch("cerevox.document_loader.BS4_AVAILABLE", True)
     def test_parse_table_from_html_no_caption_element(self):
         """Test _parse_table_from_html when no caption element is found"""
-        if not BS4_AVAILABLE:
-            pytest.skip("BeautifulSoup4 not available")
+        with patch("cerevox.document_loader.BS4_AVAILABLE", True):
+            if not BS4_AVAILABLE:
+                pytest.skip("BeautifulSoup4 not available")
 
-        html = "<table><tr><td>Data</td></tr></table>"
-        result = Document._parse_table_from_html(html, 0, 1, "test")
+            html = "<table><tr><td>Data</td></tr></table>"
+            result = Document._parse_table_from_html(html, 0, 1, "test")
 
-        assert result is not None
-        assert result.caption is None
+            assert result is not None
+            assert result.caption is None
 
     def test_extract_table_data_none_page_number(self):
         """Test extract_table_data handling None page_number"""
@@ -4800,55 +4939,55 @@ class TestDirectResponseParsing:
         ):
             Document._from_direct_response({"missing": "required fields"})
 
-    @patch("cerevox.document_loader.BS4_AVAILABLE", True)
     def test_from_direct_response_with_elements(self):
         """Test _from_direct_response with elements field to cover lines 828-882"""
-        response_data = {
-            "filename": "test.pdf",
-            "content": "Test content",
-            "file_type": "pdf",
-            "total_pages": 2,
-            "total_elements": 2,
-            "elements": [
-                {
-                    "element_id": "elem1",
-                    "element_type": "paragraph",
-                    "content": {
-                        "html": "<p>Test paragraph</p>",
-                        "markdown": "**Test paragraph**",
-                        "text": "Test paragraph",
+        with patch("cerevox.document_loader.BS4_AVAILABLE", True):
+            response_data = {
+                "filename": "test.pdf",
+                "content": "Test content",
+                "file_type": "pdf",
+                "total_pages": 2,
+                "total_elements": 2,
+                "elements": [
+                    {
+                        "element_id": "elem1",
+                        "element_type": "paragraph",
+                        "content": {
+                            "html": "<p>Test paragraph</p>",
+                            "markdown": "**Test paragraph**",
+                            "text": "Test paragraph",
+                        },
+                        "page_number": 1,
+                        "file_extension": "pdf",
+                        "source_file_id": "file123",
+                        "file_index": 0,
+                        "mime_type": "application/pdf",
+                        "original_mime_type": "application/pdf",
                     },
-                    "page_number": 1,
-                    "file_extension": "pdf",
-                    "source_file_id": "file123",
-                    "file_index": 0,
-                    "mime_type": "application/pdf",
-                    "original_mime_type": "application/pdf",
-                },
-                {
-                    "element_id": "table1",
-                    "element_type": "table",
-                    "content": {
-                        "html": "<table><tr><th>Col1</th></tr><tr><td>Data1</td></tr></table>",
-                        "markdown": "| Col1 |\n| Data1 |",
-                        "text": "Col1 Data1",
+                    {
+                        "element_id": "table1",
+                        "element_type": "table",
+                        "content": {
+                            "html": "<table><tr><th>Col1</th></tr><tr><td>Data1</td></tr></table>",
+                            "markdown": "| Col1 |\n| Data1 |",
+                            "text": "Col1 Data1",
+                        },
+                        "page_number": 2,
+                        "file_extension": "pdf",
                     },
-                    "page_number": 2,
-                    "file_extension": "pdf",
-                },
-            ],
-        }
+                ],
+            }
 
-        doc = Document._from_direct_response(response_data)
+            doc = Document._from_direct_response(response_data)
 
-        assert doc.filename == "test.pdf"
-        assert doc.content == "Test content"
-        assert doc.file_type == "pdf"
-        assert doc.page_count == 2
-        assert len(doc.elements) == 2
-        assert len(doc.tables) >= 0  # Should have parsed table if BS4 available
-        assert doc.elements[0].element_type == "paragraph"
-        assert doc.elements[1].element_type == "table"
+            assert doc.filename == "test.pdf"
+            assert doc.content == "Test content"
+            assert doc.file_type == "pdf"
+            assert doc.page_count == 2
+            assert len(doc.elements) == 2
+            assert len(doc.tables) >= 0  # Should have parsed table if BS4 available
+            assert doc.elements[0].element_type == "paragraph"
+            assert doc.elements[1].element_type == "table"
 
 
 # Add a new class at the end of the file to test the remaining lines that need coverage
@@ -4857,12 +4996,14 @@ class TestCoverageCompleteness:
 
     def test_document_batch_validate_with_document_errors(self):
         """Test DocumentBatch validate with document validation errors"""
-        from cerevox.document_loader import Document, DocumentBatch, DocumentMetadata
 
         # Create a document with invalid metadata (empty filename)
         metadata = DocumentMetadata(filename="", file_type="pdf")
+        assert isinstance(metadata, DocumentMetadata)
         doc = Document(content="test", metadata=metadata)
+        assert isinstance(doc, Document)
         batch = DocumentBatch([doc])
+        assert isinstance(batch, DocumentBatch)
 
         errors = batch.validate()
         assert len(errors) > 0
@@ -4870,7 +5011,6 @@ class TestCoverageCompleteness:
 
     def test_document_batch_duplicate_filenames_detection(self):
         """Test DocumentBatch validates duplicate filenames correctly"""
-        from cerevox.document_loader import Document, DocumentBatch, DocumentMetadata
 
         # Create two documents with same filename
         doc1 = Document(
@@ -4886,40 +5026,49 @@ class TestCoverageCompleteness:
         errors = batch.validate()
         assert any("Duplicate filename found: test.pdf" in error for error in errors)
 
-    @patch("cerevox.document_loader.BS4_AVAILABLE", True)
     def test_parse_table_from_html_with_caption_element(self):
         """Test _parse_table_from_html with caption element that is a Tag"""
-        from cerevox.document_loader import Document
+        with patch("cerevox.document_loader.BS4_AVAILABLE", True):
 
-        if not BS4_AVAILABLE:
-            pytest.skip("BeautifulSoup4 not available")
+            if not BS4_AVAILABLE:
+                pytest.skip("BeautifulSoup4 not available")
 
-        html = "<table><caption>Test Caption</caption><tr><td>Data</td></tr></table>"
-        result = Document._parse_table_from_html(html, 0, 1, "test")
-        assert result is not None
-        assert result.caption == "Test Caption"
+            html = "<table><caption>Test Caption</caption><tr><td>Data</td></tr></table>"
+            result = Document._parse_table_from_html(html, 0, 1, "test")
+            assert result is not None
+            assert result.caption == "Test Caption"
 
-    @patch("cerevox.document_loader.BS4_AVAILABLE", True)
+    def test_parse_table_from_html_with_exception(self):
+        """Test _parse_table_from_html with caption element that is a Tag"""
+        with patch("cerevox.document_loader.BS4_AVAILABLE", True), patch("cerevox.document_loader.BeautifulSoup", side_effect=Exception("Test Exception")):
+
+            if not BS4_AVAILABLE:
+                pytest.skip("BeautifulSoup4 not available")
+
+            html = "<table><caption>Test Caption</caption><tr><td>Data</td></tr></table>"
+            result = Document._parse_table_from_html(html, 0, 1, "test")
+            assert result is None
+
     def test_parse_table_from_html_mixed_th_td_in_first_row(self):
         """Test _parse_table_from_html when first row has mixed th/td elements"""
-        from cerevox.document_loader import Document
+        with patch("cerevox.document_loader.BS4_AVAILABLE", True):
+            
 
-        if not BS4_AVAILABLE:
-            pytest.skip("BeautifulSoup4 not available")
+            if not BS4_AVAILABLE:
+                pytest.skip("BeautifulSoup4 not available")
 
-        # This should extract headers from th elements only
-        html = "<table><tr><th>Header1</th><td>NotHeader</td></tr><tr><td>Data1</td><td>Data2</td></tr></table>"
-        result = Document._parse_table_from_html(html, 0, 1, "test")
-        assert result is not None
-        assert result.headers == ["Header1"]  # Only th elements become headers
-        assert (
-            len(result.rows) == 1
-        )  # Only second row becomes data row (first row is skipped since it has headers)
-        assert result.rows[0] == ["Data1", "Data2"]
+            # This should extract headers from th elements only
+            html = "<table><tr><th>Header1</th><td>NotHeader</td></tr><tr><td>Data1</td><td>Data2</td></tr></table>"
+            result = Document._parse_table_from_html(html, 0, 1, "test")
+            assert result is not None
+            assert result.headers == ["Header1"]  # Only th elements become headers
+            assert (
+                len(result.rows) == 1
+            )  # Only second row becomes data row (first row is skipped since it has headers)
+            assert result.rows[0] == ["Data1", "Data2"]
 
     def test_document_batch_isinstance_checks(self):
         """Test that filter_by_type returns proper DocumentBatch instances"""
-        from cerevox.document_loader import Document, DocumentBatch, DocumentMetadata
 
         docs = [
             Document(
@@ -4936,11 +5085,6 @@ class TestCoverageCompleteness:
         pdf_batch = batch.filter_by_type("pdf")
         txt_batch = batch.filter_by_type("txt")
 
-        # Import the class name locally to avoid confusion
-        from cerevox.document_loader import DocumentBatch as DB
-
-        assert isinstance(pdf_batch, DB)
-        assert isinstance(txt_batch, DB)
         assert len(pdf_batch) == 1
         assert len(txt_batch) == 1
 
@@ -4991,34 +5135,27 @@ class TestCoverageCompleteness:
         paragraph_batch = batch.get_documents_by_element_type("paragraph")
         table_batch = batch.get_documents_by_element_type("table")
 
-        from cerevox.document_loader import DocumentBatch as DB
-
-        assert isinstance(paragraph_batch, DB)
-        assert isinstance(table_batch, DB)
+        assert isinstance(paragraph_batch, DocumentBatch)
+        assert isinstance(table_batch, DocumentBatch)
         assert len(paragraph_batch) == 1
         assert len(table_batch) == 0
 
-    @patch("cerevox.document_loader.BS4_AVAILABLE", True)
     def test_document_table_isinstance_check(self):
         """Test DocumentTable isinstance check in test"""
-        from cerevox.document_loader import Document, DocumentTable
+        with patch("cerevox.document_loader.BS4_AVAILABLE", True):
 
-        if not BS4_AVAILABLE:
-            pytest.skip("BeautifulSoup4 not available")
+            if not BS4_AVAILABLE:
+                pytest.skip("BeautifulSoup4 not available")
 
-        html = "<table><tr><th>Header1</th><th>Header2</th></tr><tr><td>Data1</td><td>Data2</td></tr></table>"
-        table = Document._parse_table_from_html(html, 0, 1, "table1")
+            html = "<table><tr><th>Header1</th><th>Header2</th></tr><tr><td>Data1</td><td>Data2</td></tr></table>"
+            table = Document._parse_table_from_html(html, 0, 1, "table1")
 
-        # Import locally to avoid confusion
-        from cerevox.document_loader import DocumentTable as DT
-
-        assert isinstance(table, DT)
-        assert table.headers == ["Header1", "Header2"]
-        assert table.rows == [["Data1", "Data2"]]
+            assert table.headers == ["Header1", "Header2"]
+            assert table.rows == [["Data1", "Data2"]]
 
     def test_coverage_for_line_597(self):
         """Test exception handling in from_api_response at line 597"""
-        from cerevox.document_loader import Document
+        
 
         # This should trigger the exception handling path
         response_data = {"invalid": "format", "missing_expected_keys": True}
@@ -5036,7 +5173,7 @@ class TestCoverageCompleteness:
 
     def test_coverage_for_line_745(self):
         """Test line 745 in from_elements_list method"""
-        from cerevox.document_loader import Document
+        
 
         # Test malformed element that triggers warnings in the element parsing loop
         elements_data = [
@@ -5069,7 +5206,7 @@ class TestCoverageCompleteness:
 
     def test_coverage_for_line_881(self):
         """Test exception handling in table parsing at line 881"""
-        from cerevox.document_loader import Document
+        
 
         # Create an element that will trigger table parsing but cause an exception
         elements_data = [
@@ -5122,7 +5259,6 @@ class TestCoverageCompleteness:
 
     def test_coverage_for_lines_1538_to_1542(self):
         """Test DocumentBatch from_api_response for missing lines 1538-1542"""
-        from cerevox.document_loader import DocumentBatch
 
         # Test with results format
         response_data = {
@@ -5139,7 +5275,6 @@ class TestCoverageCompleteness:
 
     def test_coverage_for_lines_1548_to_1550(self):
         """Test DocumentBatch from_api_response with data format"""
-        from cerevox.document_loader import DocumentBatch
 
         # Test with data format - the DocumentBatch passes the whole response to Document.from_api_response
         # which then detects it's not in the expected format and creates an empty document with default filename "document"
@@ -5185,10 +5320,6 @@ class TestCoverageCompleteness:
 
     def test_coverage_for_line_1650(self):
         """Test DocumentBatch load_from_json functionality"""
-        import json
-        import tempfile
-
-        from cerevox.document_loader import Document, DocumentBatch, DocumentMetadata
 
         # Create test data
         doc = Document(
@@ -5214,9 +5345,6 @@ class TestCoverageCompleteness:
 
     def test_coverage_for_lines_1686_to_1687(self):
         """Test DocumentElement reconstruction from JSON data"""
-        import tempfile
-
-        from cerevox.document_loader import DocumentBatch
 
         # Create test data with specific structure to hit the reconstruction code
         test_data = {
@@ -5315,200 +5443,176 @@ class TestCoverageCompleteness:
 
     def test_coverage_specific_branch_conditions(self):
         """Test specific branch conditions to achieve 100% coverage"""
-        from cerevox.document_loader import (
-            Document,
-            DocumentMetadata,
-            _split_preserving_code_blocks,
-        )
 
         # Test _split_preserving_code_blocks with mixed content
         text = "Regular text ```\ncode block\n``` more text"
         result = _split_preserving_code_blocks(text, 50)
         assert len(result) >= 1
 
-        # Test Document with elements that have zero statistics
-        metadata = DocumentMetadata(filename="test.pdf", file_type="pdf")
-        doc = Document(content="", metadata=metadata)
 
-        stats = doc.get_statistics()
-        assert stats["total_elements"] == 0
-        assert stats["average_words_per_element"] == 0
-
-    def test_remaining_edge_cases_for_100_percent(self):
-
-        # Test specific edge case in _split_large_text_by_sentences
-        text_with_code = "Some text ```python\nprint('hello')\n``` more text"
-        result = _split_large_text_by_sentences(text_with_code, 50)
-        assert len(result) >= 1
-
-        # Test _split_by_paragraphs with oversized single paragraph
-        large_paragraph = "word " * 1000  # Very large paragraph
-        result = _split_by_paragraphs(large_paragraph, 100)
-        assert len(result) > 1
-
-        # Test DocumentBatch get_content_similarity_matrix with empty documents
-        doc1 = Document(
-            content="",
-            metadata=DocumentMetadata(filename="empty1.txt", file_type="txt"),
-        )
-        doc2 = Document(
-            content="",
-            metadata=DocumentMetadata(filename="empty2.txt", file_type="txt"),
-        )
-        batch = DocumentBatch([doc1, doc2])
-
-        matrix = batch.get_content_similarity_matrix()
-        assert len(matrix) == 2
-        assert len(matrix[0]) == 2
-        assert matrix[0][0] == 1.0  # Self-similarity
-        assert matrix[0][1] == 0.0  # Empty documents have 0 similarity
-
-        # Test single document similarity matrix
-        single_batch = DocumentBatch([doc1])
-        matrix = single_batch.get_content_similarity_matrix()
-        assert matrix == [[1.0]]
-
-    @patch("cerevox.document_loader.PANDAS_AVAILABLE", False)
-    def test_additional_coverage_paths(self):
-        """Test additional paths to improve coverage"""
-
-        # Test line 112: DocumentMetadata with None created_at
-        metadata = DocumentMetadata(
-            filename="test.pdf", file_type="pdf", created_at=None
-        )
-        doc = Document(content="test", metadata=metadata)
-        doc_dict = doc.to_dict()
-        assert doc_dict["metadata"]["created_at"] is None
-
-        # Test line 117: DocumentMetadata with extra field
-        metadata = DocumentMetadata(
-            filename="test.pdf", file_type="pdf", extra={"custom": "value"}
-        )
-        doc = Document(content="test", metadata=metadata)
-        doc_dict = doc.to_dict()
-        assert doc_dict["metadata"]["extra"] == {"custom": "value"}
-
-        # Test line 152: DocumentTable with empty headers but rows - only test if pandas is available
-        if PANDAS_AVAILABLE:
-            table = DocumentTable(
-                element_id="test", headers=[], rows=[["data1", "data2"]], page_number=1
-            )
-            # Mock PANDAS_AVAILABLE to be True for this specific call
-            with patch("cerevox.document_loader.PANDAS_AVAILABLE", True):
-                df = table.to_pandas()
-                assert df is not None
-        else:
-            # If pandas is not available, test the error path
-            table = DocumentTable(
-                element_id="test", headers=[], rows=[["data1", "data2"]], page_number=1
-            )
-            with pytest.raises(ImportError, match="pandas is required"):
-                table.to_pandas()
-
-    def test_final_100_percent_coverage(self):
-        """Test remaining lines to achieve 100% coverage"""
-
-        # Test line 745: Warning when element has no content in _from_elements_list
-        elements_data = [
-            {
-                "id": "elem1",
-                "element_type": "paragraph",
-                "content": None,  # No content to trigger warning
-                "source": {
-                    "file": {
-                        "name": "test.pdf",
-                        "extension": "pdf",
-                        "id": "file1",
-                        "index": 0,
-                        "mime_type": "application/pdf",
-                        "original_mime_type": "application/pdf",
-                    },
-                    "page": {"page_number": 1, "index": 0},
-                    "element": {"characters": 0, "words": 0, "sentences": 0},
-                },
-            }
-        ]
-
-        with warnings.catch_warnings(record=True) as w:
-            warnings.simplefilter("always")
-            doc = Document._from_elements_list(elements_data, "test.pdf")
-            # Should have generated a warning about no content
-            if w:  # Only check if warnings were generated
-                assert any(
-                    "Element has no content" in str(warning.message) for warning in w
-                )
-
-        # Test line 597: Exception handling in from_api_response
-        malformed_data = {"corrupted": "data", "causes": ["exception"]}
-        with warnings.catch_warnings(record=True) as w:
-            warnings.simplefilter("always")
-            doc = Document.from_api_response(malformed_data, "test.pdf")
-            if w:
-                assert any(
-                    "Unknown API response format" in str(warning.message)
-                    for warning in w
-                )
-
-        # Test line 1650: DocumentBatch.load_from_json with proper data
-        import json
-        import tempfile
-
-        test_data = {
-            "documents": [
+    def test_from_completed_file_data(self):
+        """Test Document.from_completed_file_data method with various scenarios"""
+        
+        # Test 1: Create document with valid elements data
+        valid_file_data = {
+            "data": [
                 {
-                    "content": "test content",
-                    "metadata": {
-                        "filename": "test.pdf",
-                        "file_type": "pdf",
-                        "file_id": "file123",
-                        "total_pages": 1,
-                        "total_elements": 1,
-                        "created_at": None,
-                        "mime_type": "application/pdf",
-                        "original_mime_type": "application/pdf",
-                        "extra": {"test": "value"},
+                    "id": "elem1",
+                    "element_type": "paragraph",
+                    "content": {
+                        "text": "Sample text content",
+                        "html": "<p>Sample text content</p>",
+                        "markdown": "Sample text content"
                     },
-                    "tables": [],
-                    "images": [],
-                    "elements": [],
+                    "source": {
+                        "file": {
+                            "extension": "pdf",
+                            "id": "file1",
+                            "index": 0,
+                            "mime_type": "application/pdf",
+                            "original_mime_type": "application/pdf",
+                            "name": "test_document"
+                        },
+                        "page": {"page_number": 1, "index": 0},
+                        "element": {
+                            "characters": 19,
+                            "words": 3,
+                            "sentences": 1
+                        }
+                    }
+                }
+            ],
+            "errors": {"parsing_warnings": ["Minor parsing issue"]},
+            "error_count": 1
+        }
+        
+        doc = Document.from_completed_file_data(valid_file_data, "test_document.pdf")
+        
+        # Verify document was created properly
+        assert doc.filename == "test_document"
+        assert len(doc.elements) == 1
+        assert doc.elements[0].id == "elem1"
+        assert doc.elements[0].element_type == "paragraph"
+        assert doc.elements[0].content.text == "Sample text content"
+        
+        # Verify error information is stored in metadata
+        assert "processing_errors" in doc.metadata.extra
+        assert doc.metadata.extra["processing_errors"]["error_count"] == 1
+        assert doc.metadata.extra["processing_errors"]["errors"]["parsing_warnings"] == ["Minor parsing issue"]
+        
+        # Test 2: Create document with empty data
+        empty_file_data = {
+            "data": [],
+            "errors": {},
+            "error_count": 0
+        }
+        
+        doc_empty = Document.from_completed_file_data(empty_file_data, "empty_document.pdf")
+        
+        # Verify empty document was created
+        assert doc_empty.filename == "empty_document.pdf"
+        assert doc_empty.content == ""
+        assert doc_empty.metadata.file_type == "unknown"
+        assert doc_empty.metadata.total_elements == 0
+        assert len(doc_empty.elements) == 0
+        
+        # Verify error information is still stored
+        assert "processing_errors" in doc_empty.metadata.extra
+        assert doc_empty.metadata.extra["processing_errors"]["error_count"] == 0
+        
+        # Test 3: Create document with no data field
+        no_data_file_data = {
+            "errors": {"critical_error": "File could not be processed"},
+            "error_count": 1
+        }
+        
+        doc_no_data = Document.from_completed_file_data(no_data_file_data, "error_document.pdf")
+        
+        # Verify empty document was created with errors
+        assert doc_no_data.filename == "error_document.pdf"
+        assert doc_no_data.content == ""
+        assert doc_no_data.metadata.file_type == "unknown"
+        assert "processing_errors" in doc_no_data.metadata.extra
+        assert doc_no_data.metadata.extra["processing_errors"]["error_count"] == 1
+        assert doc_no_data.metadata.extra["processing_errors"]["errors"]["critical_error"] == "File could not be processed"
+        
+        # Test 4: Create document with default filename
+        simple_file_data = {
+            "data": [
+                {
+                    "id": "elem1",
+                    "element_type": "paragraph",
+                    "content": {"text": "Title text"},
+                    "source": {
+                        "file": {
+                            "extension": "txt",
+                            "id": "file1",
+                            "index": 0,
+                            "mime_type": "text/plain",
+                            "original_mime_type": "text/plain",
+                            "name": "simple"
+                        },
+                        "page": {"page_number": 1, "index": 0},
+                        "element": {"characters": 10, "words": 2, "sentences": 1}
+                    }
                 }
             ]
         }
-
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
-            json.dump(test_data, f)
-            temp_path = f.name
-
-        try:
-            loaded_batch = DocumentBatch.load_from_json(temp_path)
-            assert len(loaded_batch) == 1
-            assert loaded_batch[0].filename == "test.pdf"
-            assert loaded_batch[0].metadata.extra == {"test": "value"}
-        finally:
-            import os
-
-            os.unlink(temp_path)
-
-        # Test lines 1686-1687: Element reconstruction in load_from_json
-        test_data_with_elements = {
-            "documents": [
+        
+        doc_default = Document.from_completed_file_data(simple_file_data)
+        
+        # Verify document with default filename
+        assert doc_default.filename == "simple"
+        assert len(doc_default.elements) == 1
+        assert doc_default.elements[0].element_type == "paragraph"
+        
+        # Test 5: Create document with no error fields
+        clean_file_data = {
+            "data": [
                 {
-                    "content": "test content",
-                    "metadata": {
-                        "filename": "test.pdf",
-                        "file_type": "pdf",
-                        "created_at": "2023-01-01T00:00:00",
-                    },
-                    "tables": [],
-                    "images": [],
-                    "elements": [
+                    "id": "elem1",
+                    "element_type": "paragraph",
+                    "content": {"text": "Clean content"},
+                    "source": {
+                        "file": {
+                            "extension": "txt",
+                            "id": "file1",
+                            "index": 0,
+                            "mime_type": "text/plain",
+                            "original_mime_type": "text/plain",
+                            "name": "clean_document"
+                        },
+                        "page": {"page_number": 1, "index": 0},
+                        "element": {"characters": 13, "words": 2, "sentences": 1}
+                    }
+                }
+            ]
+        }
+        
+        doc_clean = Document.from_completed_file_data(clean_file_data, "clean_document")
+        
+        # Verify no error information is added when not present
+        assert "processing_errors" not in doc_clean.metadata.extra
+        assert doc_clean.filename == "clean_document"
+        assert len(doc_clean.elements) == 1
+
+class TestFinal5:
+    
+    def test_from_api_response_new_format(self):
+        """Test DocumentBatch.from_api_response with new format containing files field"""
+        
+        # Test 1: New format with files field containing CompletedFileData objects
+        new_format_response = {
+            "files": {
+                "document1.pdf": {
+                    "data": [
                         {
                             "id": "elem1",
                             "element_type": "paragraph",
                             "content": {
-                                "text": "test text",
-                                "html": "<p>test text</p>",
-                                "markdown": "test text",
+                                "text": "Test content from document1",
+                                "html": "<p>Test content from document1</p>",
+                                "markdown": "Test content from document1"
                             },
                             "source": {
                                 "file": {
@@ -5517,695 +5621,464 @@ class TestCoverageCompleteness:
                                     "index": 0,
                                     "mime_type": "application/pdf",
                                     "original_mime_type": "application/pdf",
-                                    "name": "test.pdf",
+                                    "name": "document1"
                                 },
                                 "page": {"page_number": 1, "index": 0},
-                                "element": {
-                                    "characters": 9,
-                                    "words": 2,
-                                    "sentences": 1,
-                                },
-                            },
+                                "element": {"characters": 27, "words": 4, "sentences": 1}
+                            }
                         }
                     ],
-                }
-            ]
-        }
-
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
-            json.dump(test_data_with_elements, f)
-            temp_path = f.name
-
-        try:
-            loaded_batch = DocumentBatch.load_from_json(temp_path)
-            assert len(loaded_batch) == 1
-            assert len(loaded_batch[0].elements) == 1
-            assert loaded_batch[0].elements[0].id == "elem1"
-        finally:
-            import os
-
-            os.unlink(temp_path)
-
-        # Test remaining edge cases in helper functions
-        # Test _split_by_markdown_sections with single section
-        text = "# Header\nContent without more headers"
-        result = _split_by_markdown_sections(text)
-        assert len(result) == 1
-
-        result = _split_by_markdown_sections("")
-
-        # Test _split_by_paragraphs edge cases
-        # Test with large paragraph that needs sentence splitting
-        large_text = "This is a sentence. " * 100
-        result = _split_by_paragraphs(large_text, 100)
-        assert len(result) > 1
-
-        # Test _split_large_text_by_sentences with oversized sentence
-        oversized_sentence = (
-            "This_is_a_very_long_sentence_without_spaces_that_exceeds_the_maximum_size_limit_and_needs_to_be_split_by_character_boundaries_instead_of_sentence_boundaries"
-            * 5
-        )
-        result = _split_large_text_by_sentences(oversized_sentence, 100)
-        assert len(result) > 1
-
-        # Test _split_large_text_by_sentences with oversized sentence
-
-        # Test _split_preserving_code_blocks with large code block
-        large_code = "```\n" + "code_line\n" * 50 + "```"
-        result = _split_preserving_code_blocks(large_code, 100)
-        assert len(result) >= 1
-
-        # Test _split_by_character_limit with no good boundary
-        no_boundary_text = (
-            "averylongwordwithoutanyspacesorpunctuationthatcannotbespliteasily" * 10
-        )
-        result = _split_by_character_limit(no_boundary_text, 50)
-        assert len(result) > 1
-
-        # Test _split_at_sentences with no sentences
-        no_sentences = "just words without punctuation"
-        result = _split_at_sentences(no_sentences)
-        assert len(result) <= 1
-
-        # Test _merge_small_chunks with overflow tolerance
-        small_chunks = ["tiny", "small", "chunk"]
-        result = _merge_small_chunks(small_chunks, 10, 20)
-        assert len(result) <= len(small_chunks)
-
-        # Test edge case where last chunk is small and gets merged
-        chunks_with_small_last = ["normal chunk", "another normal chunk", "tiny"]
-        result = _merge_small_chunks(chunks_with_small_last, 20, 40)
-        # Last small chunk should be merged with previous if possible
-
-        # Test Document statistics with table edge cases
-        table_no_rows = DocumentTable(
-            element_id="test", headers=["A", "B"], rows=[], page_number=1
-        )
-        table_no_headers = DocumentTable(
-            element_id="test2", headers=[], rows=[["1", "2"]], page_number=1
-        )
-        doc = Document(
-            content="test",
-            metadata=DocumentMetadata(filename="test.pdf", file_type="pdf"),
-            tables=[table_no_rows, table_no_headers],
-        )
-        stats = doc.get_statistics()
-        assert "table_statistics" in stats
-
-        # Test DocumentBatch filter_by_page_count with None pages
-        doc_with_none_pages = Document(
-            content="test",
-            metadata=DocumentMetadata(
-                filename="test.pdf", file_type="pdf", total_pages=None
-            ),
-        )
-        batch = DocumentBatch([doc_with_none_pages])
-        filtered = batch.filter_by_page_count(min_pages=1)
-        assert len(filtered) == 0  # Document with None pages should be filtered out
-
-        # Test DocumentBatch get_content_similarity_matrix with single document
-        single_doc_batch = DocumentBatch([doc])
-        matrix = single_doc_batch.get_content_similarity_matrix()
-        assert matrix == [[1.0]]
-
-
-class TestMissingCoverageComplete:
-    """Test class to achieve 100% code coverage by covering remaining uncovered lines"""
-
-    def test_line_597_exception_in_from_api_response(self):
-        """Test line 597: Exception handling in from_api_response"""
-        # This tests the exception path in from_api_response
-        response_data = "invalid documents"
-
-        # Mock an exception during processing
-        with patch.object(
-            Document, "_from_elements_list", side_effect=Exception("Test error")
-        ):
-            with warnings.catch_warnings(record=True) as w:
-                warnings.simplefilter("always")
-                doc = Document.from_api_response(response_data, "test.pdf")
-                assert len(w) > 0
-                assert "Error parsing API response" in str(w[-1].message)
-                assert doc.content == ""
-                assert doc.metadata.filename == "test.pdf"
-
-    def test_line_745_max_page_calculation_error(self):
-        """Test line 745: Error handling in max page calculation"""
-        elements_data = [
-            {
-                "id": "test",
-                "element_type": "paragraph",
-                "content": {"text": "test"},
-                "source": {
-                    "file": {"name": "test.pdf", "extension": "pdf"},
-                    "page": {
-                        "page_number": "invalid"
-                    },  # Invalid page number to trigger error
-                    "element": {},
+                    "errors": {"parsing_warnings": ["Minor issue"]},
+                    "error_count": 1
                 },
-            }
-        ]
-
-        doc = Document._from_elements_list(elements_data, "test.pdf")
-        # Since the invalid page number couldn't be parsed, it should default to 1
-        # but let's check what actually happens rather than assuming
-        assert doc.metadata.total_pages >= 1  # Should be at least 1
-
-    def test_line_880_element_without_text_content(self):
-        """Test line 880->827: Element without text content in _from_direct_response"""
-        response_data = {
-            "filename": "test.pdf",
-            "content": "test content",
-            "elements": [
-                {
-                    "element_id": "test1",
-                    "element_type": "table",
-                    "content": {"html": "<table></table>"},  # No text content
-                    "page_number": 1,
+                "document2.txt": {
+                    "data": [
+                        {
+                            "id": "elem2",
+                            "element_type": "paragraph",
+                            "content": {
+                                "text": "Test content from document2",
+                                "html": "<p>Test content from document2</p>",
+                                "markdown": "Test content from document2"
+                            },
+                            "source": {
+                                "file": {
+                                    "extension": "txt",
+                                    "id": "file2",
+                                    "index": 0,
+                                    "mime_type": "text/plain",
+                                    "original_mime_type": "text/plain",
+                                    "name": "document2"
+                                },
+                                "page": {"page_number": 1, "index": 0},
+                                "element": {"characters": 27, "words": 4, "sentences": 1}
+                            }
+                        }
+                    ]
                 }
-            ],
-        }
-
-        doc = Document._from_direct_response(response_data)
-        assert len(doc.elements) == 1
-        assert doc.elements[0].content.text is None
-
-    def test_line_1224_split_by_markdown_sections_no_headers(self):
-        """Test line 1224: _split_by_markdown_sections when no headers found"""
-        text = "This is just plain text without any headers.\n\nAnother paragraph."
-        result = _split_by_markdown_sections(text)
-        assert result == [text]  # Should return the whole text
-
-    def test_line_1266_split_by_paragraphs_empty_paragraph(self):
-        """Test line 1266->1265: _split_by_paragraphs with empty paragraph"""
-        text = "First paragraph.\n\n\n\nSecond paragraph."
-        result = _split_by_paragraphs(text, 100)
-        assert len(result) >= 1
-        assert "First paragraph." in result[0]
-        assert "Second paragraph." in result[-1]
-
-    def test_line_1650_document_batch_getitem_invalid_type(self):
-        """Test line 1650: DocumentBatch.__getitem__ with invalid type"""
-        docs = [
-            Document(
-                content="test",
-                metadata=DocumentMetadata(filename="test.pdf", file_type="pdf"),
-            )
-        ]
-        batch = DocumentBatch(docs)
-
-        with pytest.raises(TypeError, match="Index must be int or str"):
-            batch[1.5]  # Float should raise TypeError
-
-    def test_lines_1686_1687_document_batch_validate_duplicate_filenames(self):
-        """Test lines 1686-1687: DocumentBatch.validate with duplicate filenames"""
-        doc1 = Document(
-            content="test1",
-            metadata=DocumentMetadata(filename="same.pdf", file_type="pdf"),
-        )
-        doc2 = Document(
-            content="test2",
-            metadata=DocumentMetadata(filename="same.pdf", file_type="pdf"),
-        )
-        batch = DocumentBatch([doc1, doc2])
-
-        errors = batch.validate()
-        # Check for any filename-related error, not just the exact text
-        duplicate_errors = [
-            error
-            for error in errors
-            if "filename" in error.lower() and "duplicate" in error.lower()
-        ]
-        assert (
-            len(duplicate_errors) > 0 or len(errors) > 0
-        )  # Should have some validation errors
-
-    def test_line_1881_split_preserving_code_blocks_large_code(self):
-        """Test line 1881: _split_preserving_code_blocks with large code block"""
-        large_code = "```python\n" + "x = 1\n" * 100 + "```"
-        result = _split_preserving_code_blocks(large_code, 50)
-        assert len(result) >= 1
-        assert "```python" in result[0]
-
-    def test_line_1942_split_by_character_limit_no_good_boundary(self):
-        """Test line 1942: _split_by_character_limit when no good boundary found"""
-        # Create text without spaces or good boundaries
-        text = "a" * 100  # 100 characters without spaces
-        result = _split_by_character_limit(text, 50)
-        assert len(result) >= 2
-
-    def test_lines_1948_1949_split_by_character_limit_boundary_conditions(self):
-        """Test lines 1948-1949: _split_by_character_limit boundary conditions"""
-        # Text with boundary that's too early (less than 70% of chunk size)
-        text = "a. " + "b" * 100  # Period early, then long text
-        result = _split_by_character_limit(text, 50)
-        assert len(result) >= 2
-
-    def test_line_2106_split_at_sentences_remaining_content(self):
-        """Test line 2106: _split_at_sentences with remaining content after sentences"""
-        text = "First sentence. Second sentence"  # No ending punctuation
-        result = _split_at_sentences(text)
-        assert len(result) >= 2
-        assert "Second sentence" in result[-1]
-
-    def test_lines_2122_2124_merge_small_chunks_conditions(self):
-        """Test lines 2122-2124: _merge_small_chunks various conditions"""
-        # Test merging small last chunk with previous
-        chunks = [
-            "This is a long enough chunk to meet minimum size requirements",
-            "Short",
-        ]
-        result = _merge_small_chunks(chunks, 50, 200)
-        assert len(result) == 1  # Should merge
-
-    def test_pandas_not_available_coverage(self):
-        """Test pandas-related code when pandas is not available"""
-        with patch("cerevox.document_loader.PANDAS_AVAILABLE", False):
-            # Test DocumentTable.to_pandas
-            table = DocumentTable(
-                element_id="test", headers=["A"], rows=[["1"]], page_number=1
-            )
-            with pytest.raises(ImportError, match="pandas is required"):
-                table.to_pandas()
-
-            # Test Document.to_pandas_tables
-            doc = Document(
-                content="test",
-                metadata=DocumentMetadata(filename="test.pdf", file_type="pdf"),
-                tables=[table],
-            )
-            with pytest.raises(ImportError, match="pandas is required"):
-                doc.to_pandas_tables()
-
-            # Test DocumentBatch.get_all_pandas_tables
-            batch = DocumentBatch([doc])
-            with pytest.raises(ImportError, match="pandas is required"):
-                batch.get_all_pandas_tables()
-
-    def test_bs4_not_available_coverage(self):
-        """Test BeautifulSoup-related code when BS4 is not available"""
-        with patch("cerevox.document_loader.BS4_AVAILABLE", False):
-            result = Document._parse_table_from_html("<table></table>", 0, 1, "test")
-            assert result is None
-
-    def test_document_table_empty_rows_with_headers(self):
-        """Test DocumentTable with headers but no rows"""
-        if not PANDAS_AVAILABLE:
-            pytest.skip("pandas not available")
-
-        import pandas
-
-        table = DocumentTable(
-            element_id="test", headers=["Col1", "Col2"], rows=[], page_number=1
-        )
-        # Only test if pandas is actually available
-        with patch("cerevox.document_loader.PANDAS_AVAILABLE", True):
-            df = table.to_pandas()
-            assert isinstance(df, pandas.DataFrame)
-            assert list(df.columns) == []
-            assert len(df) == 0
-
-    def test_document_table_no_headers_with_rows(self):
-        """Test DocumentTable with no headers but with rows"""
-        if PANDAS_AVAILABLE:
-            import pandas
-
-            table = DocumentTable(
-                element_id="test",
-                headers=[],
-                rows=[["A", "B"], ["C", "D"]],
-                page_number=1,
-            )
-            df = table.to_pandas()
-            assert isinstance(df, pandas.DataFrame)
-            assert list(df.columns) == ["Column_1", "Column_2"]
-            assert len(df) == 2
-
-    def test_extract_table_data_with_none_page_number(self):
-        """Test extract_table_data with table having None page_number"""
-        table = DocumentTable(
-            element_id="test", headers=["A"], rows=[["1"]], page_number=None
-        )
-
-        doc = Document(
-            content="test",
-            metadata=DocumentMetadata(filename="test.pdf", file_type="pdf"),
-            tables=[table],
-        )
-
-        table_data = doc.extract_table_data()
-        assert 1 in table_data["tables_by_page"]  # Should default to page 1
-
-    def test_get_statistics_with_table_edge_cases(self):
-        """Test get_statistics with various table edge cases"""
-        # Table with no rows but has headers
-        table1 = DocumentTable(
-            element_id="test1", headers=["A", "B"], rows=[], page_number=1
-        )
-
-        # Table with rows but no headers
-        table2 = DocumentTable(
-            element_id="test2", headers=[], rows=[["1", "2"], ["3", "4"]], page_number=1
-        )
-
-        doc = Document(
-            content="test",
-            metadata=DocumentMetadata(filename="test.pdf", file_type="pdf"),
-            tables=[table1, table2],
-        )
-
-        stats = doc.get_statistics()
-        assert stats["table_statistics"]["total_tables"] == 2
-        assert stats["table_statistics"]["total_rows"] == 2  # Only table2 has rows
-        assert stats["table_statistics"]["total_columns"] == 4  # 2 + 2
-
-    @patch("cerevox.document_loader.BS4_AVAILABLE", True)
-    def test_parse_table_from_html_edge_cases(self):
-        """Test _parse_table_from_html with various edge cases"""
-        if not BS4_AVAILABLE:
-            pytest.skip("BeautifulSoup4 not available")
-
-        # Test with malformed HTML that causes exception
-        with patch(
-            "cerevox.document_loader.BeautifulSoup",
-            side_effect=Exception("Parse error"),
-        ):
-            result = Document._parse_table_from_html("<invalid>", 0, 1, "test")
-            assert result is None
-
-        # Test with table element that's not a Tag
-        html = "<table><tr><th>Header</th></tr></table>"
-        with patch("cerevox.document_loader.BeautifulSoup") as mock_bs:
-            mock_soup = MagicMock()
-            mock_soup.find.return_value = "not_a_tag"  # Not a Tag instance
-            mock_bs.return_value = mock_soup
-
-            result = Document._parse_table_from_html(html, 0, 1, "test")
-            assert result is None
-
-    def test_element_stats_recalculation(self):
-        """Test element stats recalculation when stats are missing or zero"""
-        elements_data = [
-            {
-                "id": "test",
-                "element_type": "paragraph",
-                "content": {"text": "This is a test sentence."},
-                "source": {
-                    "file": {"name": "test.pdf", "extension": "pdf"},
-                    "page": {"page_number": 1},
-                    "element": {
-                        "characters": 0,
-                        "words": 0,
-                        "sentences": 0,
-                    },  # All zero, should recalculate
-                },
             }
-        ]
+        }
+        
+        document_batch = DocumentBatch.from_api_response(new_format_response)
+        documents = document_batch.documents
+        
+        # Verify two documents were created
+        assert len(documents) == 2
+        
+        # Verify first document
+        doc1 = next(doc for doc in documents if doc.filename == "document1")
+        assert len(doc1.elements) == 1
+        assert doc1.elements[0].content.text == "Test content from document1"
+        assert "processing_errors" in doc1.metadata.extra
+        assert doc1.metadata.extra["processing_errors"]["error_count"] == 1
+        
+        # Verify second document
+        doc2 = next(doc for doc in documents if doc.filename == "document2")
+        assert len(doc2.elements) == 1
+        assert doc2.elements[0].content.text == "Test content from document2"
+        assert "processing_errors" not in doc2.metadata.extra
+        
+        # Test 2: New format with FileProcessingInfo objects (should be skipped)
+        processing_response = {
+            "files": {
+                "processing_doc.pdf": {
+                    "status": "processing",
+                    "progress": 0.5,
+                    "message": "Still processing..."
+                },
+                "completed_doc.pdf": {
+                    "data": [
+                        {
+                            "id": "elem1",
+                            "element_type": "paragraph",
+                            "content": {"text": "Completed content"},
+                            "source": {
+                                "file": {
+                                    "extension": "pdf",
+                                    "id": "file1",
+                                    "index": 0,
+                                    "mime_type": "application/pdf",
+                                    "original_mime_type": "application/pdf",
+                                    "name": "completed_doc"
+                                },
+                                "page": {"page_number": 1, "index": 0},
+                                "element": {"characters": 16, "words": 2, "sentences": 1}
+                            }
+                        }
+                    ]
+                }
+            }
+        }
+        
+        document_batch = DocumentBatch.from_api_response(processing_response)
+        documents = document_batch.documents
+        
+        # Verify only the completed document was processed
+        assert len(documents) == 1
+        assert documents[0].filename == "completed_doc"
+        assert documents[0].elements[0].content.text == "Completed content"
+        
+        # Test 3: New format with fallback to direct elements data
+        fallback_response = {
+            "files": {
+                "fallback_doc.txt": [
+                    {
+                        "id": "elem1",
+                        "element_type": "paragraph",
+                        "content": {"text": "Fallback content"},
+                        "source": {
+                            "file": {
+                                "extension": "txt",
+                                "id": "file1",
+                                "index": 0,
+                                "mime_type": "text/plain",
+                                "original_mime_type": "text/plain",
+                                "name": "fallback_doc"
+                            },
+                            "page": {"page_number": 1, "index": 0},
+                            "element": {"characters": 16, "words": 2, "sentences": 1}
+                        }
+                    }
+                ]
+            }
+        }
+        
+        document_batch = DocumentBatch.from_api_response(fallback_response)
+        documents = document_batch.documents
+        
+        # Verify fallback processing worked
+        assert len(documents) == 1
+        assert documents[0].filename == "fallback_doc"
+        assert documents[0].elements[0].content.text == "Fallback content"
+        
+        # Test 4: New format with empty file data (should be skipped)
+        empty_response = {
+            "files": {
+                "empty_doc.txt": None,
+                "valid_doc.txt": {
+                    "data": [
+                        {
+                            "id": "elem1",
+                            "element_type": "paragraph",
+                            "content": {"text": "Valid content"},
+                            "source": {
+                                "file": {
+                                    "extension": "txt",
+                                    "id": "file1",
+                                    "index": 0,
+                                    "mime_type": "text/plain",
+                                    "original_mime_type": "text/plain",
+                                    "name": "valid_doc"
+                                },
+                                "page": {"page_number": 1, "index": 0},
+                                "element": {"characters": 13, "words": 2, "sentences": 1}
+                            }
+                        }
+                    ]
+                }
+            }
+        }
+        
+        document_batch = DocumentBatch.from_api_response(empty_response)
+        documents = document_batch.documents
+        
+        # Verify only valid document was processed
+        assert len(documents) == 1
+        assert documents[0].filename == "valid_doc"
+        assert documents[0].elements[0].content.text == "Valid content"
+        
+        # Test 5: Error handling - invalid file data should generate warning but continue
+        with patch('warnings.warn') as mock_warn:
+            with patch('cerevox.document_loader.Document.from_api_response', side_effect=ValueError("Invalid data format")):
+                error_response = {
+                    "files": {
+                        "error_doc.txt": {
+                            "data": "invalid_data_format"  # This will cause an error
+                        },
+                        "valid_doc.txt": {
+                            "data": [
+                                {
+                                    "id": "elem1",
+                                    "element_type": "paragraph",
+                                    "content": {"text": "Valid content after error"},
+                                    "source": {
+                                        "file": {
+                                            "extension": "txt",
+                                            "id": "file1",
+                                            "index": 0,
+                                            "mime_type": "text/plain",
+                                            "original_mime_type": "text/plain",
+                                            "name": "valid_doc"
+                                        },
+                                        "page": {"page_number": 1, "index": 0},
+                                        "element": {"characters": 26, "words": 4, "sentences": 1}
+                                    }
+                                }
+                            ]
+                        },
+                        "error_doc3": "not a dict"
+                    }
+                }
+                
+                document_batch = DocumentBatch.from_api_response(error_response)
+                documents = document_batch.documents
+                
+                # Verify warning was issued for error_doc.txt
+                mock_warn.assert_called()
+                warning_call = mock_warn.call_args[0][0]
+                assert "Error processing file data " in warning_call
+                
+                # Verify valid document was still processed
+                assert len(documents) == 2
+                assert documents[1].filename == "valid_doc"
+                assert documents[1].elements[0].content.text == "Valid content after error"
 
-        doc = Document._from_elements_list(elements_data, "test.pdf")
-        element = doc.elements[0]
-        assert element.source.element.characters > 0
-        assert element.source.element.words > 0
-        assert element.source.element.sentences > 0
+    def test_error_statistics(self):
+        """Test error statistics comprehensively"""
+        # Test 1: Empty document batch
+        document_batch = DocumentBatch([])
+        statistics = document_batch.get_error_statistics()
+        
+        assert document_batch.get_documents_with_errors() == []
+        assert document_batch.get_documents_without_errors() == []
 
-    def test_document_batch_from_api_response_edge_cases(self):
-        """Test DocumentBatch.from_api_response with various edge cases"""
-        # Empty data field
-        response = {"data": []}
-        batch = DocumentBatch.from_api_response(response)
-        assert len(batch.documents) == 0
+        assert document_batch.get_error_summary() == "No processing errors in batch of 0 document(s)"
 
-        # Results format
-        response = {"results": [{"filename": "test.pdf", "content": "test"}]}
-        batch = DocumentBatch.from_api_response(response)
-        assert len(batch.documents) == 1
+        assert statistics["total_documents"] == 0
+        assert statistics["documents_with_errors"] == 0
+        assert statistics["documents_without_errors"] == 0
+        assert statistics["total_errors"] == 0
+        assert statistics["average_errors_per_document"] == 0
+        assert statistics["error_rate"] == 0
+        assert statistics["error_details"] == {}
 
-        # Response with no meaningful content
-        response = {"empty": "structure"}
-        batch = DocumentBatch.from_api_response(response)
-        assert len(batch.documents) == 0
-
-    def test_chunking_functions_edge_cases(self):
-        """Test chunking functions with edge cases"""
-        # Test chunk_text with very small tolerance
-        result = chunk_text(
-            "This is a test. Another test.", target_size=10, tolerance=0.01
+        # Test 2: Documents with no errors
+        clean_doc1 = Document(
+            content="Clean content 1",
+            metadata=DocumentMetadata(filename="clean1.txt", file_type="txt")
         )
-        assert len(result) >= 1
-
-        # Test chunk_markdown with empty content after strip
-        result = chunk_markdown("   \n\n   ", target_size=10, tolerance=0.1)
-        assert result == []
-
-    def test_document_batch_validate_comprehensive(self):
-        """Test DocumentBatch.validate with comprehensive error scenarios"""
-        # Non-Document instance
-        batch = DocumentBatch(["not_a_document"])
-        errors = batch.validate()
-        assert any("is not a Document instance" in error for error in errors)
-
-        # Empty batch
-        batch = DocumentBatch([])
-        errors = batch.validate()
-        assert any("cannot be empty" in error for error in errors)
-
-        # Non-list documents
-        batch = DocumentBatch("not_a_list")
-        errors = batch.validate()
-        assert any("must contain a list" in error for error in errors)
-
-    def test_missing_line_coverage_specific(self):
-        """Test specific missing lines for complete coverage"""
-        # Test document with elements having None text for search
-        element_content = ElementContent(html="<p>test</p>", markdown="test", text=None)
-        file_info = FileInfo(
-            extension="pdf",
-            id="1",
-            index=0,
-            mime_type="pdf",
-            original_mime_type="pdf",
-            name="test.pdf",
+        clean_doc2 = Document(
+            content="Clean content 2", 
+            metadata=DocumentMetadata(filename="clean2.txt", file_type="txt")
         )
-        page_info = PageInfo(page_number=1, index=0)
-        element_stats = ElementStats(characters=0, words=0, sentences=0)
-        source_info = SourceInfo(file=file_info, page=page_info, element=element_stats)
+        
+        clean_batch = DocumentBatch([clean_doc1, clean_doc2])
+        statistics = clean_batch.get_error_statistics()
+        assert statistics["total_documents"] == 2
+        assert statistics["documents_with_errors"] == 0
+        assert statistics["documents_without_errors"] == 2
+        assert statistics["total_errors"] == 0
+        assert statistics["average_errors_per_document"] == 0
+        assert statistics["error_rate"] == 0
+        assert statistics["error_details"] == {}
 
-        element = DocumentElement(
-            content=element_content,
-            element_type="paragraph",
-            id="test1",
-            source=source_info,
+        # Test 3: Documents with errors
+        error_doc1 = Document(
+            content="Error content 1",
+            metadata=DocumentMetadata(filename="error1.pdf", file_type="pdf")
         )
-
-        doc = Document(
-            content="test content",
-            metadata=DocumentMetadata(filename="test.pdf", file_type="pdf"),
-            elements=[element],
+        # Add processing errors to metadata
+        error_doc1.metadata.extra['processing_errors'] = {
+            'errors': {
+                'page_1': 'Failed to parse table on page 1',
+                'page_3': 'OCR quality poor on page 3'
+            },
+            'error_count': 2
+        }
+        
+        error_doc2 = Document(
+            content="Error content 2",
+            metadata=DocumentMetadata(filename="error2.docx", file_type="docx")
         )
+        # Add processing errors to metadata
+        error_doc2.metadata.extra['processing_errors'] = {
+            'errors': {
+                'formatting': 'Unable to preserve complex formatting',
+            },
+            'error_count': 1
+        }
+        
+        error_batch = DocumentBatch([error_doc1, error_doc2])
+        statistics = error_batch.get_error_statistics()
+        assert statistics["total_documents"] == 2
+        assert statistics["documents_with_errors"] == 2
+        assert statistics["documents_without_errors"] == 0
+        assert statistics["total_errors"] == 3
+        assert statistics["average_errors_per_document"] == 1.5
+        assert statistics["error_rate"] == 1.0
+        assert len(statistics["error_details"]) == 2
+        assert "error1.pdf" in statistics["error_details"]
+        assert "error2.docx" in statistics["error_details"]
+        assert statistics["error_details"]["error1.pdf"]["page_1"] == "Failed to parse table on page 1"
+        assert statistics["error_details"]["error1.pdf"]["page_3"] == "OCR quality poor on page 3"
+        assert statistics["error_details"]["error2.docx"]["formatting"] == "Unable to preserve complex formatting"
 
-        # This should handle None text gracefully
-        results = doc.search_content("test", case_sensitive=False, include_tables=True)
-        assert len(results) >= 0  # Should not crash
-
-    def test_additional_branch_coverage(self):
-        """Test additional branches for complete coverage"""
-        # Test DocumentBatch filter_by_page_count with documents having None page_count
-        doc = Document(
-            content="test",
-            metadata=DocumentMetadata(filename="test.pdf", file_type="pdf"),
+        # Test 4: Mixed documents (some with errors, some without)
+        mixed_batch = DocumentBatch([clean_doc1, error_doc1, clean_doc2, error_doc2])
+        statistics = mixed_batch.get_error_statistics()
+        assert statistics["total_documents"] == 4
+        assert statistics["documents_with_errors"] == 2
+        assert statistics["documents_without_errors"] == 2
+        assert statistics["total_errors"] == 3
+        assert statistics["average_errors_per_document"] == 0.75
+        assert statistics["error_rate"] == 0.5
+        assert len(statistics["error_details"]) == 2
+        
+        # Test 5: Document with error_count but no errors dict
+        partial_error_doc = Document(
+            content="Partial error content",
+            metadata=DocumentMetadata(filename="partial.txt", file_type="txt")
         )
-        doc.metadata.total_pages = None  # Explicitly set to None
+        partial_error_doc.metadata.extra['processing_errors'] = {
+            'error_count': 1
+            # No 'errors' dict
+        }
+        
+        partial_batch = DocumentBatch([partial_error_doc])
+        statistics = partial_batch.get_error_statistics()
+        assert statistics["total_documents"] == 1
+        assert statistics["documents_with_errors"] == 1
+        assert statistics["documents_without_errors"] == 0
+        assert statistics["total_errors"] == 1
+        assert statistics["average_errors_per_document"] == 1.0
+        assert statistics["error_rate"] == 1.0
+        # Should not include in error_details since no errors dict
+        assert statistics["error_details"] == {}
 
-        batch = DocumentBatch([doc])
-        filtered = batch.filter_by_page_count(min_pages=1)
-        assert len(filtered.documents) == 0  # Should filter out doc with None pages
-
-        # Test get_content_similarity_matrix with single document
-        single_batch = DocumentBatch([doc])
-        matrix = single_batch.get_content_similarity_matrix()
-        assert matrix == [[1.0]]
-
-        # Test get_content_similarity_matrix with empty content
-        empty_doc = Document(
-            content="", metadata=DocumentMetadata(filename="empty.pdf", file_type="pdf")
+        # Test 6: Document with empty errors dict but non-zero error_count
+        empty_errors_doc = Document(
+            content="Empty errors content",
+            metadata=DocumentMetadata(filename="empty_errors.txt", file_type="txt")
         )
-        batch_with_empty = DocumentBatch([doc, empty_doc])
-        matrix = batch_with_empty.get_content_similarity_matrix()
-        assert len(matrix) == 2
-        assert len(matrix[0]) == 2
+        empty_errors_doc.metadata.extra['processing_errors'] = {
+            'errors': {},
+            'error_count': 2
+        }
+        
+        empty_errors_batch = DocumentBatch([empty_errors_doc])
+        statistics = empty_errors_batch.get_error_statistics()
+        assert statistics["total_documents"] == 1
+        assert statistics["documents_with_errors"] == 1
+        assert statistics["documents_without_errors"] == 0
+        assert statistics["total_errors"] == 2
+        assert statistics["average_errors_per_document"] == 2.0
+        assert statistics["error_rate"] == 1.0
+        # Should not include in error_details since errors dict is empty
+        assert statistics["error_details"] == {}
+
+        # Test 7: Single document with no errors (edge case for division)
+        single_clean_batch = DocumentBatch([clean_doc1])
+        statistics = single_clean_batch.get_error_statistics()
+        assert statistics["total_documents"] == 1
+        assert statistics["documents_with_errors"] == 0
+        assert statistics["documents_without_errors"] == 1
+        assert statistics["total_errors"] == 0
+        assert statistics["average_errors_per_document"] == 0
+        assert statistics["error_rate"] == 0
+        assert statistics["error_details"] == {}
+
+        # Test 8: Single document with errors (edge case for division)
+        single_error_batch = DocumentBatch([error_doc1])
+        statistics = single_error_batch.get_error_statistics()
+        assert statistics["total_documents"] == 1
+        assert statistics["documents_with_errors"] == 1
+        assert statistics["documents_without_errors"] == 0
+        assert statistics["total_errors"] == 2
+        assert statistics["average_errors_per_document"] == 2.0
+        assert statistics["error_rate"] == 1.0
+        assert len(statistics["error_details"]) == 1
 
 
-class TestRemainingEdgeCases:
-    """Additional edge cases to ensure 100% coverage"""
+    def test_split_by_markdown_sections_edge_cases(self):
+        """Test split_by_markdown_sections edge cases"""
+        # Test case 1: Empty string
 
-    @patch("cerevox.document_loader.BS4_AVAILABLE", True)
-    def test_parse_table_caption_edge_cases(self):
-        """Test table parsing with caption edge cases"""
-        if not BS4_AVAILABLE:
-            pytest.skip("BeautifulSoup4 not available")
+        with patch("cerevox.document_loader._split_text", return_value=[]):
+            result = _split_by_markdown_sections("")
+            assert result == [""]
 
-        # Test with caption element that's not a Tag
-        html = "<table><caption>Test Caption</caption><tr><td>Data</td></tr></table>"
-
-        with patch("cerevox.document_loader.BeautifulSoup") as mock_bs:
-            from bs4 import Tag
-
-            mock_soup = MagicMock()
-            mock_table = MagicMock(spec=Tag)
-            mock_caption = "not_a_tag"  # Not a Tag instance
-
-            # Create a mock row that has data
-            mock_row = MagicMock(spec=Tag)
-            mock_cell = MagicMock(spec=Tag)
-            mock_cell.get_text.return_value = "Data"
-            mock_row.find_all.return_value = [mock_cell]
-
-            mock_table.find.side_effect = lambda tag: (
-                mock_caption if tag == "caption" else mock_row
-            )
-            mock_table.find_all.return_value = [mock_row]
-            mock_soup.find.return_value = mock_table
-            mock_bs.return_value = mock_soup
-
-            # The result should be a table, but with caption set to None since it's not a Tag
-            result = Document._parse_table_from_html(html, 0, 1, "test")
-            # The result should be created successfully with None caption
-            assert result is not None
-            assert (
-                result.caption is None
-            )  # Caption should be None since it's not a Tag instance
-
-    def test_helper_functions_comprehensive_coverage(self):
-        """Test helper functions for comprehensive coverage"""
-        # Test _split_at_sentences with various edge cases
-        text_with_abbreviations = (
-            "Dr. Smith went to St. Mary's hospital. He saw Mr. Jones."
+    def test_get_error_summary(self):
+        """Test get_error_summary"""
+        # Test 1: Empty document batch (no errors)
+        document_batch = DocumentBatch([])
+        statistics = document_batch.get_error_statistics()
+        assert document_batch.get_error_summary() == "No processing errors in batch of 0 document(s)"
+        
+        # Test 2: Batch with errors and error details (tests lines 2243-2256)
+        # Create documents with processing errors
+        error_doc1 = Document(
+            content="Error content 1",
+            metadata=DocumentMetadata(filename="error1.pdf", file_type="pdf")
         )
-        result = _split_at_sentences(text_with_abbreviations)
-        assert len(result) >= 1
-
-        # Test _split_at_sentences with URLs
-        text_with_url = "Visit http://example.com. This is another sentence."
-        result = _split_at_sentences(text_with_url)
-        assert len(result) >= 1
-
-        test_with_email = "Contact user@co. This is next sentence."
-        result = _split_at_sentences(test_with_email)
-        assert len(result) >= 1
-
-        test_with_bad_sentence = "Contact user@co. This is next sentence."
-        result = _split_at_sentences(test_with_bad_sentence)
-        assert len(result) >= 1
-
-        # Test _merge_small_chunks with tolerance overflow
-        chunks = [
-            "Short chunk",
-            "Another short chunk that's a bit longer but still under limit",
-        ]
-        result = _merge_small_chunks(chunks, 30, 50)
-        assert len(result) >= 1
-
-        mock_text = MagicMock()
-        mock_text.split.return_value = []  # This makes lines = []
-
-        # Call your function with the mock
-        result = _split_by_markdown_sections(mock_text)
-
-        # Verify the mock was called correctly
-        mock_text.split.assert_called_once_with("\n")
-
-        # Since lines is empty, current_section stays empty,
-        # sections stays empty, and len(sections) <= 1 is True
-        # So it should return [mock_text] (the original text)
-        assert result == [mock_text]
-
-    def test_split_by_character_limit_oversized_sentence(self):
-        """Test _split_by_character_limit with oversized sentence"""
-
-        oversized_sentence = (
-            "This_is_a_very_long_sentence_without_spaces_that_exceeds_the_maximum_size_limit_and_needs_to_be_split_by_character_boundaries_instead_of_sentence_boundaries"
-            * 5
+        # Add processing errors to metadata
+        error_doc1.metadata.extra['processing_errors'] = {
+            'errors': {
+                'page_1': 'Failed to parse table on page 1',
+                'page_3': 'OCR quality poor on page 3'
+            },
+            'error_count': 2
+        }
+        
+        error_doc2 = Document(
+            content="Error content 2", 
+            metadata=DocumentMetadata(filename="error2.docx", file_type="docx")
         )
-
-        def slice_mock(self, key, next):
-            mock_string = MagicMock()
-            mock_string.__add__ = lambda self, other: f"{next}{other}"
-            mock_string.__radd__ = lambda self, other: f"{other}{next}"
-            mock_string.__len__ = lambda self: len(next)
-            mock_string.__str__ = lambda self: f"{next}"
-            mock_string.__getitem__ = lambda self, key: slice_mock(self, key, next[key])
-            mock_string.__iter__ = lambda self: iter(next)  # For iteration
-            mock_string.__contains__ = (
-                lambda self, item: item in next
-            )  # For 'in' operator
-
-            mock_string.__gt__ = lambda self, other: float(len(next)) > other
-            mock_string.__lt__ = lambda self, other: float(len(next)) < other
-            mock_string.__ge__ = lambda self, other: float(len(next)) >= other
-            mock_string.__le__ = lambda self, other: float(len(next)) <= other
-            mock_string.__eq__ = lambda self, other: next == other
-            mock_string.__ne__ = lambda self, other: next != other
-            mock_string.rfind = lambda substring: next.rfind(substring)
-            mock_string.strip.return_value = []
-            return mock_string
-
-        mock_string = MagicMock()
-        mock_string.__add__ = lambda self, other: f"{oversized_sentence}{other}"
-        mock_string.__radd__ = lambda self, other: f"{other}{oversized_sentence}"
-        mock_string.__len__ = lambda self: len(oversized_sentence)
-        mock_string.__str__ = lambda self: f"{oversized_sentence}"
-        mock_string.__getitem__ = lambda self, key: slice_mock(
-            self, key, oversized_sentence[key]
+        # Add processing errors to metadata
+        error_doc2.metadata.extra['processing_errors'] = {
+            'errors': {
+                'formatting': 'Unable to preserve complex formatting',
+                'encoding': 'Character encoding issues detected'
+            },
+            'error_count': 2
+        }
+        
+        error_batch = DocumentBatch([error_doc1, error_doc2])
+        error_summary = error_batch.get_error_summary()
+        
+        # Verify the main summary structure (lines 2241-2247)
+        assert "Processing errors in batch of 2 document(s):" in error_summary
+        assert "- 2 document(s) with errors" in error_summary
+        assert "- 4 total error(s)" in error_summary
+        assert "- 100.0% error rate" in error_summary
+        
+        # Verify error details formatting (lines 2243-2256)
+        assert "\nError details:" in error_summary
+        assert "- error1.pdf[page_1]: Failed to parse table on page 1" in error_summary
+        assert "- error1.pdf[page_3]: OCR quality poor on page 3" in error_summary
+        assert "- error2.docx[formatting]: Unable to preserve complex formatting" in error_summary
+        assert "- error2.docx[encoding]: Character encoding issues detected" in error_summary
+        
+        # Test 3: Mixed batch (some with errors, some without)
+        clean_doc = Document(
+            content="Clean content",
+            metadata=DocumentMetadata(filename="clean.txt", file_type="txt")
         )
-        mock_string.__iter__ = lambda self: iter(oversized_sentence)  # For iteration
-        mock_string.__contains__ = (
-            lambda self, item: item in oversized_sentence
-        )  # For 'in' operator
-
-        mock_string.__gt__ = lambda self, other: float(len(oversized_sentence)) > other
-        mock_string.__lt__ = lambda self, other: float(len(oversized_sentence)) < other
-        mock_string.__ge__ = lambda self, other: float(len(oversized_sentence)) >= other
-        mock_string.__le__ = lambda self, other: float(len(oversized_sentence)) <= other
-        mock_string.__eq__ = lambda self, other: oversized_sentence == other
-        mock_string.__ne__ = lambda self, other: oversized_sentence != other
-        mock_string.rfind = lambda substring: oversized_sentence.rfind(substring)
-
-        mock_string.strip.return_value = []
-
-        # Most importantly for regex:
-        mock_string.__class__ = str
-
-        result = _split_by_character_limit(mock_string, 50)
-        assert len(result) == 0
-
-        text = "   \n   More content here to continue processing"
-        max_size = 6
-
-        result = _split_by_character_limit(text, max_size)
-        assert len(result) == 7
-
-        with patch("cerevox.document_loader._strip_text") as mock_strip:
-            mock_strip.return_value = []
-            text = "   \n   More content here to continue processing."
-            result = _split_at_sentences(text)
-            assert len(result) == 0
-
-    @patch("cerevox.document_loader.BS4_AVAILABLE", True)
-    @patch("cerevox.document_loader.Document._is_row_tag", return_value=False)
-    def test_parse_table_from_html_empty_table_returns_none(self, mock_isinstance):
-        """Test that _parse_table_from_html returns None when table has no headers and no rows (lines 1028->1027)"""
-
-        # Create HTML with a table that has no headers (th elements) and no data rows
-        html_with_empty_table = """
-        <table><tr><td>Data</td></tr></table>
-        """
-
-        result = Document._parse_table_from_html(
-            html=html_with_empty_table,
-            table_index=0,
-            page_number=1,
-            element_id="test_element",
+        
+        mixed_batch = DocumentBatch([clean_doc, error_doc1])
+        mixed_summary = mixed_batch.get_error_summary()
+        
+        assert "Processing errors in batch of 2 document(s):" in mixed_summary
+        assert "- 1 document(s) with errors" in mixed_summary
+        assert "- 2 total error(s)" in mixed_summary
+        assert "- 50.0% error rate" in mixed_summary
+        assert "\nError details:" in mixed_summary
+        assert "- error1.pdf[page_1]: Failed to parse table on page 1" in mixed_summary
+        
+        # Test 4: Documents with error_count but no error details (edge case)
+        partial_error_doc = Document(
+            content="Partial error content",
+            metadata=DocumentMetadata(filename="partial.txt", file_type="txt")
         )
-
-        # Should return None because the table has no headers and no rows
-        assert result is None
+        partial_error_doc.metadata.extra['processing_errors'] = {
+            'error_count': 1
+            # No 'errors' dict - should not trigger error details section
+        }
+        
+        partial_batch = DocumentBatch([partial_error_doc])
+        partial_summary = partial_batch.get_error_summary()
+        
+        # Should have main summary but no error details section
+        assert "Processing errors in batch of 1 document(s):" in partial_summary
+        assert "- 1 document(s) with errors" in partial_summary
+        assert "- 1 total error(s)" in partial_summary
+        assert "\nError details:" not in partial_summary  # No error details

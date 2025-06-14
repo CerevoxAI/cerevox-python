@@ -2690,8 +2690,8 @@ class TestJobResponseValidation:
 
         assert response.status == JobStatus.PROCESSING
         assert response.request_id == "test-job"
-        assert response.progress == 0  # Default value
-        assert response.message == ""  # Default value
+        assert response.progress == None  # Default value
+        assert response.message == None  # Default value
 
 
 class TestSpecificCoverageMisses:
