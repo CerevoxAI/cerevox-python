@@ -5,10 +5,8 @@ Comprehensive tests to achieve 100% code coverage for the models,
 including all methods, error handling, and edge cases.
 """
 
-from datetime import datetime
 from io import BytesIO, StringIO
 from pathlib import Path
-from typing import Any, Dict, List
 
 import pytest
 from pydantic import ValidationError
@@ -270,10 +268,22 @@ class TestJobResponse:
         job = JobResponse(status=JobStatus.PROCESSING, request_id="req123")
         assert job.status == JobStatus.PROCESSING
         assert job.request_id == "req123"
-        assert job.progress == 0  # Default value
-        assert job.message == ""  # Default value
-        assert job.processed_files is None
+        assert job.age_seconds is None
+        assert job.progress is None
+        assert job.created_at is None
+        assert job.completed_chunks is None
+        assert job.failed_chunks is None
+        assert job.processing_chunks is None
+        assert job.total_chunks is None
         assert job.total_files is None
+        assert job.completed_files is None
+        assert job.failed_files is None
+        assert job.processing_files is None
+        assert job.files is None
+        assert job.errors is None
+        assert job.error_count is None
+        assert job.message is None
+        assert job.processed_files is None
         assert job.result is None
         assert job.results is None
         assert job.error is None
