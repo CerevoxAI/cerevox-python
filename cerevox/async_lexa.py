@@ -7,15 +7,31 @@ import json
 import os
 import re
 import time
+import warnings
 
 # Async Request Handling
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Union
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    List,
+    Optional,
+    Union,
+)
 from urllib.parse import unquote, urlparse
 
 import aiofiles
 import aiohttp
+
+# Optional tqdm import for progress bars
+try:
+    from tqdm import tqdm
+
+    TQDM_AVAILABLE = True
+except ImportError:
+    TQDM_AVAILABLE = False
 
 # Internal
 from .document_loader import DocumentBatch
@@ -280,35 +296,144 @@ class AsyncLexa:
 
     # Private Async Methods
 
+    def _is_tqdm_available(self) -> bool:
+        """Check if tqdm is available"""
+        return TQDM_AVAILABLE and tqdm is not None
+
+    def _create_progress_callback(
+        self, show_progress: bool = False
+    ) -> Optional[Callable[[JobResponse], None]]:
+        """
+        Create a progress callback function using tqdm if requested and available.
+
+        Args:
+            show_progress: Whether to show progress bar
+
+        Returns:
+            Progress callback function or None
+        """
+        if not show_progress:
+            return None
+
+        print(f"TQDM_AVAILABLE: {TQDM_AVAILABLE}")
+        print(f"self._is_tqdm_available(): {self._is_tqdm_available()}")
+
+        if not self._is_tqdm_available():
+            warnings.warn(
+                "tqdm is not available. Progress bar disabled. Install with: pip install tqdm",
+                ImportWarning,
+            )
+            return None
+
+        pbar = None
+
+        def progress_callback(status: JobResponse) -> None:
+            nonlocal pbar
+
+            # Initialize progress bar on first call
+            if pbar is None:
+                total = 100  # Progress is in percentage
+                pbar = tqdm(
+                    total=total,
+                    desc="Processing",
+                    unit="%",
+                    bar_format="{l_bar}{bar}| {n:.0f}/{total:.0f}% [{elapsed}<{remaining}, {rate_fmt}]",
+                )
+
+            # Update progress bar
+            if status.progress is not None:
+                # Update to current progress
+                pbar.n = status.progress
+
+                # Update description with file/chunk info
+                desc_parts = ["Processing"]
+
+                if (
+                    status.total_files is not None
+                    and status.completed_files is not None
+                ):
+                    desc_parts.append(
+                        f"Files: {status.completed_files}/{status.total_files}"
+                    )
+
+                if (
+                    status.total_chunks is not None
+                    and status.completed_chunks is not None
+                ):
+                    desc_parts.append(
+                        f"Chunks: {status.completed_chunks}/{status.total_chunks}"
+                    )
+
+                if status.failed_chunks and status.failed_chunks > 0:
+                    desc_parts.append(f"Errors: {status.failed_chunks}")
+
+                pbar.set_description(" | ".join(desc_parts))
+                pbar.refresh()
+
+                # Close progress bar when complete
+                if status.status in [
+                    JobStatus.COMPLETE,
+                    JobStatus.PARTIAL_SUCCESS,
+                    JobStatus.FAILED,
+                ]:
+                    pbar.close()
+
+        return progress_callback
+
     async def _get_documents(
         self,
         request_id: str,
         max_poll_time: Optional[float] = None,
         poll_interval: Optional[float] = None,
         progress_callback: Optional[Callable[[JobResponse], None]] = None,
+        show_progress: bool = False,
     ) -> DocumentBatch:
         """
         Get parsed documents from a completed job
 
         Args:
             request_id: The job identifier
+            max_poll_time: Maximum time to wait in seconds
             poll_interval: Time between polling attempts in seconds
-            max_poll_time: Maximum time to wait in seconds (None for no timeout)
             progress_callback: Optional function to call with status updates
+            show_progress: Whether to show a progress bar using tqdm
 
         Returns:
             DocumentBatch containing the parsed documents
         """
+        # Create progress callback if show_progress is True and no callback provided
+        if show_progress and progress_callback is None:
+            progress_callback = self._create_progress_callback(show_progress)
+
         status = await self._wait_for_completion(
             request_id, max_poll_time, poll_interval, progress_callback
         )
 
-        if not status.result:
-            return DocumentBatch([])
+        # Handle the new response structure where results are in files field
+        if status.files:
+            # New format: files field contains CompletedFileData objects
+            all_elements: List[Any] = []
+            for filename, file_data in status.files.items():
+                # Check if this is CompletedFileData (has 'data' field)
+                if hasattr(file_data, "data") and file_data.data:
+                    # Add all elements from this file
+                    all_elements.extend(file_data.data)
+                elif isinstance(file_data, dict) and "data" in file_data:
+                    # Handle dict representation of CompletedFileData
+                    all_elements.extend(file_data["data"])
 
-        # The status.result contains the actual API response with the "data" field
-        # Parse using our enhanced Document.from_api_response method
-        return DocumentBatch.from_api_response(status.result)
+            # If we have elements, create DocumentBatch from them
+            if all_elements:
+                # Convert to the format expected by DocumentBatch.from_api_response
+                # The DocumentBatch expects either a list of elements or a dict with 'data' field
+                return DocumentBatch.from_api_response(all_elements)
+
+        # Fallback to old format for backward compatibility
+        if status.result:
+            return DocumentBatch.from_api_response(status.result)
+
+        # Return empty document batch if no data
+        return DocumentBatch([])
 
     async def _get_file_info_from_url(self, url: str) -> FileInfo:
         """
@@ -810,25 +935,31 @@ class AsyncLexa:
         max_poll_time: Optional[float] = None,
         poll_interval: Optional[float] = None,
         progress_callback: Optional[Callable[[JobResponse], None]] = None,
+        show_progress: bool = False,
     ) -> DocumentBatch:
         """
         Parse files and receive documents.
 
         Args:
-            files: List of files to parse
-            mode: Processing mode
+            files: List of files to parse (supports paths, raw content, or streams)
+            mode: Processing mode for the files
             max_poll_time: Maximum time to wait for completion
             poll_interval: Time between status checks
             progress_callback: Optional callback for progress updates
+            show_progress: Whether to show a progress bar using tqdm
 
         Returns:
             DocumentBatch containing parsed documents
         """
         result = await self._upload_files(files, mode)
         if not result.request_id:
-            raise LexaError(FAILED_ID)
+            raise LexaError("Failed to get request ID from upload")
         return await self._get_documents(
-            result.request_id, max_poll_time, poll_interval, progress_callback
+            result.request_id,
+            max_poll_time,
+            poll_interval,
+            progress_callback,
+            show_progress,
         )
 
     async def parse_urls(
@@ -838,9 +969,10 @@ class AsyncLexa:
         max_poll_time: Optional[float] = None,
         poll_interval: Optional[float] = None,
         progress_callback: Optional[Callable[[JobResponse], None]] = None,
+        show_progress: bool = False,
     ) -> DocumentBatch:
         """
-        Parse URLs
+        Parse URLs and receive documents.
 
         Args:
             urls: List of URLs to parse
@@ -848,15 +980,20 @@ class AsyncLexa:
             max_poll_time: Maximum time to wait for completion
             poll_interval: Time between status checks
             progress_callback: Optional callback for progress updates
+            show_progress: Whether to show a progress bar using tqdm
 
         Returns:
             DocumentBatch containing parsed documents
         """
         result = await self._upload_urls(urls, mode)
         if not result.request_id:
-            raise LexaError(FAILED_ID)
+            raise LexaError("Failed to get request ID from upload")
         return await self._get_documents(
-            result.request_id, max_poll_time, poll_interval, progress_callback
+            result.request_id,
+            max_poll_time,
+            poll_interval,
+            progress_callback,
+            show_progress,
         )
 
     # Amazon S3 Integration (public)
@@ -896,6 +1033,7 @@ class AsyncLexa:
         max_poll_time: Optional[float] = None,
         poll_interval: Optional[float] = None,
         progress_callback: Optional[Callable[[JobResponse], None]] = None,
+        show_progress: bool = False,
     ) -> DocumentBatch:
         """
         Parse files from an S3 folder
@@ -907,15 +1045,20 @@ class AsyncLexa:
             max_poll_time: Maximum time to wait for completion
             poll_interval: Time between status checks
             progress_callback: Optional callback for progress updates
+            show_progress: Whether to show a progress bar using tqdm
 
         Returns:
             DocumentBatch containing parsed documents
         """
         result = await self._upload_s3_folder(bucket_name, folder_path, mode)
         if not result.request_id:
-            raise LexaError(FAILED_ID)
+            raise LexaError("Failed to get request ID from upload")
         return await self._get_documents(
-            result.request_id, max_poll_time, poll_interval, progress_callback
+            result.request_id,
+            max_poll_time,
+            poll_interval,
+            progress_callback,
+            show_progress,
         )
 
     # Box Integration (public)
@@ -938,6 +1081,7 @@ class AsyncLexa:
         max_poll_time: Optional[float] = None,
         poll_interval: Optional[float] = None,
         progress_callback: Optional[Callable[[JobResponse], None]] = None,
+        show_progress: bool = False,
     ) -> DocumentBatch:
         """
         Parse files from a Box folder
@@ -948,15 +1092,20 @@ class AsyncLexa:
             max_poll_time: Maximum time to wait for completion
             poll_interval: Time between status checks
             progress_callback: Optional callback for progress updates
+            show_progress: Whether to show a progress bar using tqdm
 
         Returns:
             DocumentBatch containing parsed documents
         """
         result = await self._upload_box_folder(box_folder_id, mode)
         if not result.request_id:
-            raise LexaError(FAILED_ID)
+            raise LexaError("Failed to get request ID from upload")
         return await self._get_documents(
-            result.request_id, max_poll_time, poll_interval, progress_callback
+            result.request_id,
+            max_poll_time,
+            poll_interval,
+            progress_callback,
+            show_progress,
         )
 
     # Dropbox Integration (public)
@@ -979,6 +1128,7 @@ class AsyncLexa:
         max_poll_time: Optional[float] = None,
         poll_interval: Optional[float] = None,
         progress_callback: Optional[Callable[[JobResponse], None]] = None,
+        show_progress: bool = False,
     ) -> DocumentBatch:
         """
         Parse files from a Dropbox folder
@@ -989,15 +1139,20 @@ class AsyncLexa:
             max_poll_time: Maximum time to wait for completion
             poll_interval: Time between status checks
             progress_callback: Optional callback for progress updates
+            show_progress: Whether to show a progress bar using tqdm
 
         Returns:
             DocumentBatch containing parsed documents
         """
         result = await self._upload_dropbox_folder(folder_path, mode)
         if not result.request_id:
-            raise LexaError(FAILED_ID)
+            raise LexaError("Failed to get request ID from upload")
         return await self._get_documents(
-            result.request_id, max_poll_time, poll_interval, progress_callback
+            result.request_id,
+            max_poll_time,
+            poll_interval,
+            progress_callback,
+            show_progress,
         )
 
     # Microsoft SharePoint Integration (public)
@@ -1053,26 +1208,32 @@ class AsyncLexa:
         max_poll_time: Optional[float] = None,
         poll_interval: Optional[float] = None,
         progress_callback: Optional[Callable[[JobResponse], None]] = None,
+        show_progress: bool = False,
     ) -> DocumentBatch:
         """
         Parse files from a SharePoint folder
 
         Args:
-            drive_id: Drive ID
-            folder_id: SharePoint folder ID to process
+            drive_id: Drive ID within the site
+            folder_id: Microsoft folder ID to process
             mode: Processing mode
             max_poll_time: Maximum time to wait for completion
             poll_interval: Time between status checks
             progress_callback: Optional callback for progress updates
+            show_progress: Whether to show a progress bar using tqdm
 
         Returns:
             DocumentBatch containing parsed documents
         """
         result = await self._upload_sharepoint_folder(drive_id, folder_id, mode)
         if not result.request_id:
-            raise LexaError(FAILED_ID)
+            raise LexaError("Failed to get request ID from upload")
         return await self._get_documents(
-            result.request_id, max_poll_time, poll_interval, progress_callback
+            result.request_id,
+            max_poll_time,
+            poll_interval,
+            progress_callback,
+            show_progress,
         )
 
     # Salesforce Integration (public)
@@ -1095,25 +1256,31 @@ class AsyncLexa:
         max_poll_time: Optional[float] = None,
         poll_interval: Optional[float] = None,
         progress_callback: Optional[Callable[[JobResponse], None]] = None,
+        show_progress: bool = False,
     ) -> DocumentBatch:
         """
         Parse files from a Salesforce folder
 
         Args:
-            folder_name: Name of the Salesforce folder to process
+            folder_name: Name of the folder for organization
             mode: Processing mode
             max_poll_time: Maximum time to wait for completion
             poll_interval: Time between status checks
             progress_callback: Optional callback for progress updates
+            show_progress: Whether to show a progress bar using tqdm
 
         Returns:
             DocumentBatch containing parsed documents
         """
         result = await self._upload_salesforce_folder(folder_name, mode)
         if not result.request_id:
-            raise LexaError(FAILED_ID)
+            raise LexaError("Failed to get request ID from upload")
         return await self._get_documents(
-            result.request_id, max_poll_time, poll_interval, progress_callback
+            result.request_id,
+            max_poll_time,
+            poll_interval,
+            progress_callback,
+            show_progress,
         )
 
     # Sendme Integration (public)
@@ -1125,6 +1292,7 @@ class AsyncLexa:
         max_poll_time: Optional[float] = None,
         poll_interval: Optional[float] = None,
         progress_callback: Optional[Callable[[JobResponse], None]] = None,
+        show_progress: bool = False,
     ) -> DocumentBatch:
         """
         Parse files from Sendme
@@ -1135,13 +1303,18 @@ class AsyncLexa:
             max_poll_time: Maximum time to wait for completion
             poll_interval: Time between status checks
             progress_callback: Optional callback for progress updates
+            show_progress: Whether to show a progress bar using tqdm
 
         Returns:
             DocumentBatch containing parsed documents
         """
         result = await self._upload_sendme_files(ticket, mode)
         if not result.request_id:
-            raise LexaError(FAILED_ID)
+            raise LexaError("Failed to get request ID from upload")
         return await self._get_documents(
-            result.request_id, max_poll_time, poll_interval, progress_callback
+            result.request_id,
+            max_poll_time,
+            poll_interval,
+            progress_callback,
+            show_progress,
         )

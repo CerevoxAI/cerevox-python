@@ -8,6 +8,7 @@ including all methods, error handling, and edge cases.
 import asyncio
 import json
 import os
+import sys
 import tempfile
 from concurrent.futures import ThreadPoolExecutor
 from io import BytesIO
@@ -20,6 +21,7 @@ import pytest
 import pytest_asyncio
 from pydantic_core import ValidationError
 
+import cerevox.async_lexa
 from cerevox.async_lexa import AsyncLexa
 from cerevox.exceptions import (
     LexaAuthError,
@@ -1283,7 +1285,9 @@ class TestGetDocuments:
                     mock_batch = Mock()
                     mock_from_api.return_value = mock_batch
 
-                    result = await client._get_documents("test-request-id")
+                    result = await client._get_documents(
+                        "test-request-id", None, None, None, True
+                    )
                     assert result == mock_batch
                     mock_from_api.assert_called_once()
 
@@ -1308,6 +1312,264 @@ class TestGetDocuments:
                 result = await client._get_documents("test-request-id")
                 assert isinstance(result, DocumentBatch)
                 assert len(result) == 0
+
+    def test_get_documents_new_format(self):
+        """Test get_documents with new format"""
+        client = AsyncLexa(api_key="test-key")
+
+        # Test case 1: New format with CompletedFileData objects (hasattr version)
+        mock_file_data_1 = Mock()
+        mock_file_data_1.data = [
+            {
+                "id": "elem1",
+                "element_type": "paragraph",
+                "content": {
+                    "text": "Test content 1",
+                    "html": "<p>Test content 1</p>",
+                    "markdown": "Test content 1",
+                },
+                "source": {
+                    "file": {
+                        "name": "test1.pdf",
+                        "extension": "pdf",
+                        "id": "file1",
+                        "index": 0,
+                        "mime_type": "application/pdf",
+                        "original_mime_type": "application/pdf",
+                    },
+                    "page": {"page_number": 1, "index": 0},
+                    "element": {"characters": 14, "words": 3, "sentences": 1},
+                },
+            }
+        ]
+
+        mock_file_data_2 = Mock()
+        mock_file_data_2.data = [
+            {
+                "id": "elem2",
+                "element_type": "paragraph",
+                "content": {
+                    "text": "Test content 2",
+                    "html": "<p>Test content 2</p>",
+                    "markdown": "Test content 2",
+                },
+                "source": {
+                    "file": {
+                        "name": "test2.pdf",
+                        "extension": "pdf",
+                        "id": "file2",
+                        "index": 1,
+                        "mime_type": "application/pdf",
+                        "original_mime_type": "application/pdf",
+                    },
+                    "page": {"page_number": 1, "index": 0},
+                    "element": {"characters": 14, "words": 3, "sentences": 1},
+                },
+            }
+        ]
+
+        mock_status = Mock()
+        mock_status.files = {
+            "test1.pdf": mock_file_data_1,
+            "test2.pdf": mock_file_data_2,
+        }
+        mock_status.result = None
+
+        with patch.object(client, "_wait_for_completion", return_value=mock_status):
+            with patch("cerevox.async_lexa.DocumentBatch") as MockDocumentBatch:
+                mock_batch = Mock()
+                MockDocumentBatch.from_api_response.return_value = mock_batch
+
+                result = asyncio.run(client._get_documents("test-request-id"))
+
+                # Verify _wait_for_completion was called
+                client._wait_for_completion.assert_called_once()
+
+                # Verify DocumentBatch.from_api_response was called with combined elements
+                MockDocumentBatch.from_api_response.assert_called_once()
+                call_args = MockDocumentBatch.from_api_response.call_args[0][0]
+
+                # Should contain elements from both files
+                assert len(call_args) == 2
+                assert call_args[0]["id"] == "elem1"
+                assert call_args[1]["id"] == "elem2"
+                assert result == mock_batch
+
+        # Test case 2: New format with dict representation of CompletedFileData
+        mock_status_dict = Mock()
+        mock_status_dict.files = {
+            "test1.pdf": {
+                "data": [
+                    {
+                        "id": "elem1",
+                        "element_type": "paragraph",
+                        "content": {
+                            "text": "Dict test content",
+                            "html": "<p>Dict test content</p>",
+                            "markdown": "Dict test content",
+                        },
+                        "source": {
+                            "file": {
+                                "name": "test1.pdf",
+                                "extension": "pdf",
+                                "id": "file1",
+                                "index": 0,
+                                "mime_type": "application/pdf",
+                                "original_mime_type": "application/pdf",
+                            },
+                            "page": {"page_number": 1, "index": 0},
+                            "element": {"characters": 17, "words": 3, "sentences": 1},
+                        },
+                    }
+                ]
+            }
+        }
+        mock_status_dict.result = None
+
+        with patch.object(
+            client, "_wait_for_completion", return_value=mock_status_dict
+        ):
+            with patch("cerevox.async_lexa.DocumentBatch") as MockDocumentBatch:
+                mock_batch = Mock()
+                MockDocumentBatch.from_api_response.return_value = mock_batch
+
+                result = asyncio.run(client._get_documents("test-request-id"))
+
+                # Verify DocumentBatch.from_api_response was called
+                MockDocumentBatch.from_api_response.assert_called_once()
+                call_args = MockDocumentBatch.from_api_response.call_args[0][0]
+
+                assert len(call_args) == 1
+                assert call_args[0]["id"] == "elem1"
+                assert call_args[0]["content"]["text"] == "Dict test content"
+                assert result == mock_batch
+
+        # Test case 3: New format with empty data arrays (should return empty DocumentBatch)
+        mock_file_data_empty = Mock()
+        mock_file_data_empty.data = []
+
+        mock_status_empty = Mock()
+        mock_status_empty.files = {"test.pdf": mock_file_data_empty}
+        mock_status_empty.result = None
+
+        with patch.object(
+            client, "_wait_for_completion", return_value=mock_status_empty
+        ):
+            with patch("cerevox.async_lexa.DocumentBatch") as MockDocumentBatch:
+                mock_empty_batch = Mock()
+                MockDocumentBatch.return_value = mock_empty_batch
+
+                result = asyncio.run(client._get_documents("test-request-id"))
+
+                # Should create empty DocumentBatch since no elements were found
+                MockDocumentBatch.assert_called_once_with([])
+                assert result == mock_empty_batch
+
+        # Test case 4: New format with None data (should skip)
+        mock_file_data_none = Mock()
+        mock_file_data_none.data = None
+
+        mock_status_none = Mock()
+        mock_status_none.files = {"test.pdf": mock_file_data_none}
+        mock_status_none.result = None
+
+        with patch.object(
+            client, "_wait_for_completion", return_value=mock_status_none
+        ):
+            with patch("cerevox.async_lexa.DocumentBatch") as MockDocumentBatch:
+                mock_empty_batch = Mock()
+                MockDocumentBatch.return_value = mock_empty_batch
+
+                result = asyncio.run(client._get_documents("test-request-id"))
+
+                # Should create empty DocumentBatch since data was None
+                MockDocumentBatch.assert_called_once_with([])
+                assert result == mock_empty_batch
+
+        # Test case 5: Mixed file types - some with data, some without
+        mock_file_with_data = Mock()
+        mock_file_with_data.data = [
+            {
+                "id": "elem1",
+                "element_type": "paragraph",
+                "content": {"text": "Valid content"},
+                "source": {
+                    "file": {
+                        "name": "valid.pdf",
+                        "extension": "pdf",
+                        "id": "f1",
+                        "index": 0,
+                        "mime_type": "application/pdf",
+                        "original_mime_type": "application/pdf",
+                    },
+                    "page": {"page_number": 1, "index": 0},
+                    "element": {"characters": 13, "words": 2, "sentences": 1},
+                },
+            }
+        ]
+
+        mock_file_no_data = Mock()
+        mock_file_no_data.data = None
+
+        mock_status_mixed = Mock()
+        mock_status_mixed.files = {
+            "valid.pdf": mock_file_with_data,
+            "empty.pdf": mock_file_no_data,
+        }
+        mock_status_mixed.result = None
+
+        with patch.object(
+            client, "_wait_for_completion", return_value=mock_status_mixed
+        ):
+            with patch("cerevox.async_lexa.DocumentBatch") as MockDocumentBatch:
+                mock_batch = Mock()
+                MockDocumentBatch.from_api_response.return_value = mock_batch
+
+                result = asyncio.run(client._get_documents("test-request-id"))
+
+                # Should only include elements from file with data
+                MockDocumentBatch.from_api_response.assert_called_once()
+                call_args = MockDocumentBatch.from_api_response.call_args[0][0]
+
+                assert len(call_args) == 1
+                assert call_args[0]["id"] == "elem1"
+                assert result == mock_batch
+
+        # Test case 6: Fallback to old format when no files field
+        mock_status_old = Mock()
+        mock_status_old.files = None
+        mock_status_old.result = {"test": "old format data"}
+
+        with patch.object(client, "_wait_for_completion", return_value=mock_status_old):
+            with patch("cerevox.async_lexa.DocumentBatch") as MockDocumentBatch:
+                mock_batch = Mock()
+                MockDocumentBatch.from_api_response.return_value = mock_batch
+
+                result = asyncio.run(client._get_documents("test-request-id"))
+
+                # Should use old format fallback
+                MockDocumentBatch.from_api_response.assert_called_once_with(
+                    {"test": "old format data"}
+                )
+                assert result == mock_batch
+
+        # Test case 7: No data at all (should return empty DocumentBatch)
+        mock_status_no_data = Mock()
+        mock_status_no_data.files = None
+        mock_status_no_data.result = None
+
+        with patch.object(
+            client, "_wait_for_completion", return_value=mock_status_no_data
+        ):
+            with patch("cerevox.async_lexa.DocumentBatch") as MockDocumentBatch:
+                mock_empty_batch = Mock()
+                MockDocumentBatch.return_value = mock_empty_batch
+
+                result = asyncio.run(client._get_documents("test-request-id"))
+
+                # Should return empty DocumentBatch
+                MockDocumentBatch.assert_called_once_with([])
+                assert result == mock_empty_batch
 
 
 class TestCloudStorageIntegrationPrivate:
@@ -4285,3 +4547,282 @@ class TestFinal100PercentCoverageCompletion:
                 LexaError, match="max_retries must be a non-negative integer"
             ):
                 await client._request("GET", "/v0/test")
+
+
+class TestAsyncLexaNewFormat:
+
+    @pytest.mark.asyncio
+    async def test_create_progress_callback(self):
+        """Test create_progress_callback comprehensive functionality"""
+        async with AsyncLexa(api_key="test-key") as client:
+            # Test show_progress=False returns None
+            progress_callback = client._create_progress_callback(show_progress=False)
+            assert progress_callback is None
+
+            # Test show_progress=True returns callback when tqdm is available
+            progress_callback = client._create_progress_callback(show_progress=True)
+            assert progress_callback is not None
+            assert callable(progress_callback)
+
+    @pytest.mark.asyncio
+    async def test_create_progress_callback_tqdm_not_available(self):
+        """Test create_progress_callback when tqdm is not available"""
+
+        async with AsyncLexa(api_key="test-key") as client:
+            # Patch the _is_tqdm_available method to return False
+            with patch.object(client, "_is_tqdm_available", return_value=False):
+                with patch("warnings.warn") as mock_warn:
+                    progress_callback = client._create_progress_callback(
+                        show_progress=True
+                    )
+
+                    # Should return None when tqdm is not available
+                    assert progress_callback is None
+
+                    # Should warn about tqdm not being available
+                    mock_warn.assert_called_once_with(
+                        "tqdm is not available. Progress bar disabled. Install with: pip install tqdm",
+                        ImportWarning,
+                    )
+
+    @pytest.mark.asyncio
+    async def test_create_progress_callback_functionality(self):
+        """Test the actual progress callback functionality"""
+        async with AsyncLexa(api_key="test-key") as client:
+            # Mock tqdm
+            mock_tqdm_instance = Mock()
+            mock_tqdm_class = Mock(return_value=mock_tqdm_instance)
+
+            with patch("cerevox.async_lexa.tqdm", mock_tqdm_class):
+                progress_callback = client._create_progress_callback(show_progress=True)
+                assert progress_callback is not None
+
+                # Test initial call - should create progress bar
+                status = JobResponse(
+                    request_id="test-123",
+                    status=JobStatus.PROCESSING,
+                    progress=25,
+                    total_files=10,
+                    completed_files=3,
+                    total_chunks=100,
+                    completed_chunks=25,
+                    failed_chunks=0,
+                )
+
+                progress_callback(status)
+
+                # Verify tqdm was initialized
+                mock_tqdm_class.assert_called_once_with(
+                    total=100,
+                    desc="Processing",
+                    unit="%",
+                    bar_format="{l_bar}{bar}| {n:.0f}/{total:.0f}% [{elapsed}<{remaining}, {rate_fmt}]",
+                )
+
+                # Verify progress was set
+                assert mock_tqdm_instance.n == 25
+
+                # Verify description was updated
+                expected_desc = "Processing | Files: 3/10 | Chunks: 25/100"
+                mock_tqdm_instance.set_description.assert_called_with(expected_desc)
+                mock_tqdm_instance.refresh.assert_called()
+
+    @patch("cerevox.async_lexa.TQDM_AVAILABLE", True)
+    @pytest.mark.asyncio
+    async def test_create_progress_callback_with_failed_chunks(self):
+        """Test progress callback with failed chunks"""
+        async with AsyncLexa(api_key="test-key") as client:
+            mock_tqdm_instance = Mock()
+            mock_tqdm_class = Mock(return_value=mock_tqdm_instance)
+
+            with patch("cerevox.async_lexa.tqdm", mock_tqdm_class):
+                progress_callback = client._create_progress_callback(show_progress=True)
+
+                # Test with failed chunks
+                status = JobResponse(
+                    request_id="test-123",
+                    status=JobStatus.PROCESSING,
+                    progress=50,
+                    total_files=5,
+                    completed_files=2,
+                    total_chunks=50,
+                    completed_chunks=25,
+                    failed_chunks=3,
+                )
+
+                progress_callback(status)
+
+                # Verify description includes error count
+                expected_desc = "Processing | Files: 2/5 | Chunks: 25/50 | Errors: 3"
+                mock_tqdm_instance.set_description.assert_called_with(expected_desc)
+
+    @patch("cerevox.async_lexa.TQDM_AVAILABLE", True)
+    @pytest.mark.asyncio
+    async def test_create_progress_callback_completion_statuses(self):
+        """Test progress callback with completion statuses"""
+        async with AsyncLexa(api_key="test-key") as client:
+            mock_tqdm_instance = Mock()
+            mock_tqdm_class = Mock(return_value=mock_tqdm_instance)
+
+            completion_statuses = [
+                JobStatus.COMPLETE,
+                JobStatus.PARTIAL_SUCCESS,
+                JobStatus.FAILED,
+            ]
+
+            for status_type in completion_statuses:
+                with patch("cerevox.async_lexa.tqdm", mock_tqdm_class):
+                    progress_callback = client._create_progress_callback(
+                        show_progress=True
+                    )
+
+                    status = JobResponse(
+                        request_id="test-123",
+                        status=status_type,
+                        progress=100,
+                        total_files=1,
+                        completed_files=1,
+                        total_chunks=10,
+                        completed_chunks=10,
+                        failed_chunks=0,
+                    )
+
+                    progress_callback(status)
+
+                    # Verify progress bar was closed on completion
+                    mock_tqdm_instance.close.assert_called()
+
+    @patch("cerevox.async_lexa.TQDM_AVAILABLE", True)
+    @pytest.mark.asyncio
+    async def test_create_progress_callback_minimal_status(self):
+        """Test progress callback with minimal status information"""
+        async with AsyncLexa(api_key="test-key") as client:
+            mock_tqdm_instance = Mock()
+            mock_tqdm_class = Mock(return_value=mock_tqdm_instance)
+
+            with patch("cerevox.async_lexa.tqdm", mock_tqdm_class):
+                progress_callback = client._create_progress_callback(show_progress=True)
+
+                # Test with only progress information
+                status = JobResponse(
+                    request_id="test-123", status=JobStatus.PROCESSING, progress=30
+                )
+
+                progress_callback(status)
+
+                # Should still work with minimal info
+                assert mock_tqdm_instance.n == 30
+                mock_tqdm_instance.set_description.assert_called_with("Processing")
+
+    @patch("cerevox.async_lexa.TQDM_AVAILABLE", True)
+    @pytest.mark.asyncio
+    async def test_create_progress_callback_closure_state(self):
+        """Test that progress callback maintains closure state correctly"""
+        async with AsyncLexa(api_key="test-key") as client:
+            mock_tqdm_instance = Mock()
+            mock_tqdm_class = Mock(return_value=mock_tqdm_instance)
+
+            with patch("cerevox.async_lexa.tqdm", mock_tqdm_class):
+                progress_callback = client._create_progress_callback(show_progress=True)
+
+                # First call should initialize tqdm
+                status1 = JobResponse(
+                    request_id="test-123", status=JobStatus.PROCESSING, progress=25
+                )
+                progress_callback(status1)
+
+                # Verify tqdm was created
+                assert mock_tqdm_class.call_count == 1
+
+                # Second call should reuse the same tqdm instance
+                status2 = JobResponse(
+                    request_id="test-123", status=JobStatus.PROCESSING, progress=50
+                )
+                progress_callback(status2)
+
+                # Should not create another tqdm instance
+                assert mock_tqdm_class.call_count == 1
+                # Should update progress to new value
+                assert mock_tqdm_instance.n == 50
+
+    @patch("cerevox.async_lexa.TQDM_AVAILABLE", True)
+    @pytest.mark.asyncio
+    async def test_create_progress_callback_multiple_instances(self):
+        """Test that different callback instances are independent"""
+        async with AsyncLexa(api_key="test-key") as client:
+            mock_tqdm_instance1 = Mock()
+            mock_tqdm_instance2 = Mock()
+            mock_tqdm_class = Mock(
+                side_effect=[mock_tqdm_instance1, mock_tqdm_instance2]
+            )
+
+            with patch("cerevox.async_lexa.tqdm", mock_tqdm_class):
+                # Create two separate progress callbacks
+                callback1 = client._create_progress_callback(show_progress=True)
+                callback2 = client._create_progress_callback(show_progress=True)
+
+                # Use both callbacks
+                status = JobResponse(
+                    request_id="test-123", status=JobStatus.PROCESSING, progress=30
+                )
+
+                callback1(status)
+                callback2(status)
+
+                # Both should create their own tqdm instances
+                assert mock_tqdm_class.call_count == 2
+                assert mock_tqdm_instance1.n == 30
+                assert mock_tqdm_instance2.n == 30
+
+    def test_new_import(self):
+        """Test new import"""
+        import importlib
+
+        # Save the original module state for restoration
+        original_async_lexa = sys.modules.get("cerevox.async_lexa")
+
+        try:
+            # Test successful import case - mock tqdm to be available
+            mock_tqdm = Mock()
+            with patch.dict("sys.modules", {"tqdm": mock_tqdm}):
+                # Remove the module from cache to force reimport
+                if "cerevox.async_lexa" in sys.modules:
+                    del sys.modules["cerevox.async_lexa"]
+
+                # Import the module fresh
+                import cerevox.async_lexa
+
+                # Verify that TQDM_AVAILABLE is True when import succeeds
+                assert cerevox.async_lexa.TQDM_AVAILABLE is True
+
+            # Test ImportError case - cause tqdm import to fail
+            with patch.dict("sys.modules", {}, clear=False):
+                # Remove both tqdm and async_lexa from modules
+                modules_to_remove = ["tqdm", "cerevox.async_lexa"]
+                for module in modules_to_remove:
+                    if module in sys.modules:
+                        del sys.modules[module]
+
+                # Mock tqdm import to raise ImportError
+                original_import = __builtins__["__import__"]
+
+                def mock_import(name, *args, **kwargs):
+                    if name == "tqdm":
+                        raise ImportError("No module named 'tqdm'")
+                    return original_import(name, *args, **kwargs)
+
+                with patch("builtins.__import__", side_effect=mock_import):
+                    # Import the module fresh
+                    import cerevox.async_lexa
+
+                    # Verify that TQDM_AVAILABLE is False when ImportError occurs
+                    assert cerevox.async_lexa.TQDM_AVAILABLE is False
+        finally:
+            # Restore the original module state
+            if "cerevox.async_lexa" in sys.modules:
+                del sys.modules["cerevox.async_lexa"]
+            if original_async_lexa is not None:
+                sys.modules["cerevox.async_lexa"] = original_async_lexa
+            else:
+                # Force a clean reimport of the module in its normal state
+                import cerevox.async_lexa

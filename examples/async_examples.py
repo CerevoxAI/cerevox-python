@@ -253,7 +253,7 @@ async def demo_cloud_integrations():
         print("   • Configure OAuth tokens for each service")
         print("   • Use parse_[service]_folder() methods to process documents")
         print("   • All integrations support progress callbacks")
-        print("   • Supports all processing modes (FAST, DEFAULT, COMPETITIVE)")
+        print("   • Supports all processing modes (DEFAULT, ADVANCED)")
 
 
 async def demo_document_analysis(documents: DocumentBatch):
@@ -493,7 +493,7 @@ async def main():
         print("   ✅ Native async/await support throughout")
         print("   ✅ File and URL parsing with progress tracking")
         print("   ✅ Comprehensive cloud storage integrations")
-        print("   ✅ Multiple processing modes (FAST, DEFAULT, COMPETITIVE)")
+        print("   ✅ Multiple processing modes (DEFAULT, ADVANCED)")
         print("   ✅ Structured document loading and analysis")
         print("   ✅ Advanced export capabilities (JSON, Markdown, Text)")
         print("   ✅ Robust error handling and retry mechanisms")
