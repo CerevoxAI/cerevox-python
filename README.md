@@ -38,7 +38,10 @@
 pip install cerevox
 ```
 
-**Requirements:** Python 3.9+ • API key from [Cerevox](https://cerevox.ai/lexa)
+## 📋 Requirements
+
+- Python 3.9+
+- API key from [Cerevox](https://cerevox.ai/lexa)
 
 ## 🚀 Quick Start
 

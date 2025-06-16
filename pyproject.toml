@@ -57,8 +57,10 @@ dev = [
     "black>=24.0.0",
     "isort>=5.0.0", 
     "mypy>=1.0.0",
+    "types-Pygments",
     "types-beautifulsoup4",
     "types-requests",
+    "types-tqdm",
     "safety>=3.0.0",
     "bandit[toml]>=1.7.0",
 ]
@@ -77,8 +79,10 @@ all = [
     "black>=24.0.0",
     "isort>=5.0.0", 
     "mypy>=1.0.0",
+    "types-Pygments",
     "types-beautifulsoup4",
     "types-requests",
+    "types-tqdm",
     "safety>=3.0.0",
     "bandit[toml]>=1.7.0",
 ]

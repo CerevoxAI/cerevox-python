@@ -10,7 +10,10 @@ from collections import Counter
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, Iterator, List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Any, Dict, Iterator, List, Optional, Tuple, Union
+
+if TYPE_CHECKING:
+    from typing_extensions import TypeGuard
 
 # Optional pandas import for advanced table features
 
@@ -204,21 +207,21 @@ class DocumentImage:
 
 
 # Helper function for robust document type checking across different import contexts
-def is_document_instance(obj) -> bool:
+def is_document_instance(obj: Any) -> bool:
     """
     Check if an object is a Document instance.
     This is more robust than isinstance() when dealing with different import contexts.
-    
+
     Args:
         obj: Object to check
-        
+
     Returns:
         bool: True if obj is a Document instance
     """
     return (
-        hasattr(obj, '__class__') and
-        obj.__class__.__name__ == 'Document' and
-        obj.__class__.__module__ == 'cerevox.document_loader'
+        hasattr(obj, "__class__")
+        and obj.__class__.__name__ == "Document"
+        and obj.__class__.__module__ == "cerevox.document_loader"
     )
 
 
@@ -724,32 +727,34 @@ class Document:
     ) -> "Document":
         """
         Create Document from CompletedFileData structure (new API response format).
-        
+
         Args:
             file_data: Dict containing 'data', 'errors', and 'error_count' fields
             filename: Name of the file
-            
+
         Returns:
             Document object with error information properly stored
         """
         # Extract elements data
         elements_data = file_data.get("data", [])
-        
+
         # Create document from elements
         if elements_data:
             doc = cls._from_elements_list(elements_data, filename)
         else:
             # Create empty document if no data
-            metadata = DocumentMetadata(filename=filename, file_type="unknown", total_elements=0)
+            metadata = DocumentMetadata(
+                filename=filename, file_type="unknown", total_elements=0
+            )
             doc = cls(content="", metadata=metadata)
-        
+
         # Store error information in document metadata
-        if 'errors' in file_data or 'error_count' in file_data:
-            doc.metadata.extra['processing_errors'] = {
-                'errors': file_data.get('errors', {}),
-                'error_count': file_data.get('error_count', 0)
+        if "errors" in file_data or "error_count" in file_data:
+            doc.metadata.extra["processing_errors"] = {
+                "errors": file_data.get("errors", {}),
+                "error_count": file_data.get("error_count", 0),
             }
-        
+
         return doc
 
     @classmethod
@@ -814,7 +819,9 @@ class Document:
                 element_stats_raw = source.get("element", {})
 
                 # Handle both 'extension' and 'extenstion' (typo in API response)
-                file_extension = file_source.get("extension") or file_source.get("extenstion", "")
+                file_extension = file_source.get("extension") or file_source.get(
+                    "extenstion", ""
+                )
 
                 file_info_obj = FileInfo(
                     extension=file_extension,
@@ -1040,6 +1047,11 @@ class Document:
         )
 
     @staticmethod
+    def _is_tag_instance(element: Any) -> "TypeGuard[Tag]":
+        """Check if element is a Tag instance"""
+        return isinstance(element, Tag)
+
+    @staticmethod
     def _parse_table_from_html(
         html: str,
         table_index: int,
@@ -1085,12 +1097,13 @@ class Document:
         start_index = 1 if headers else 0
 
         for row in all_rows[start_index:]:
-            cells = row.find_all(["td", "th"])
-            row_data = [
-                cell.get_text(strip=True) for cell in cells if isinstance(cell, Tag)
-            ]
-            if row_data:  # Only add non-empty rows
-                rows.append(row_data)
+            if Document._is_tag_instance(row):
+                cells = row.find_all(["td", "th"])
+                row_data = [
+                    cell.get_text(strip=True) for cell in cells if isinstance(cell, Tag)
+                ]
+                if row_data:  # Only add non-empty rows
+                    rows.append(row_data)
 
         # Return None if both headers and rows are empty (empty table)
         if not headers and not rows:
@@ -1386,47 +1399,46 @@ class Document:
             "total_characters": total_chars,
         }
 
-    def get_processing_errors(self) -> Dict[str, Any]:
+    def get_processing_errors(self) -> Any:
         """
         Get processing error information for this document.
-        
+
         Returns:
             Dict containing error information from the processing job
         """
-        return self.metadata.extra.get('processing_errors', {
-            'errors': {},
-            'error_count': 0
-        })
-    
-    def has_processing_errors(self) -> bool:
+        return self.metadata.extra.get(
+            "processing_errors", {"errors": {}, "error_count": 0}
+        )
+
+    def has_processing_errors(self) -> Any:
         """
         Check if this document had any processing errors.
-        
+
         Returns:
             True if there were processing errors, False otherwise
         """
         error_info = self.get_processing_errors()
-        return error_info.get('error_count', 0) > 0
-    
+        return error_info.get("error_count", 0) > 0
+
     def get_error_summary(self) -> str:
         """
         Get a human-readable summary of processing errors for this document.
-        
+
         Returns:
             String summary of processing errors
         """
         error_info = self.get_processing_errors()
-        error_count = error_info.get('error_count', 0)
-        
+        error_count = error_info.get("error_count", 0)
+
         if error_count == 0:
             return "No processing errors"
-        
-        errors = error_info.get('errors', {})
-        
+
+        errors = error_info.get("errors", {})
+
         error_messages = []
         for location, message in errors.items():
             error_messages.append(f"{location}: {message}")
-        
+
         return f"{error_count} processing error(s): " + "; ".join(error_messages)
 
 
@@ -1843,7 +1855,9 @@ th { background-color: #f2f2f2; }
         for i, doc in enumerate(self.documents):
             # Use helper function for robust type checking across different import contexts
             if not is_document_instance(doc):
-                errors.append(f"Document {i} is not a Document instance (got {type(doc).__name__})")
+                errors.append(
+                    f"Document {i} is not a Document instance (got {type(doc).__name__})"
+                )
                 continue
 
             valid_documents.append(doc)
@@ -1992,62 +2006,72 @@ th { background-color: #f2f2f2; }
     ) -> Dict[str, Any]:
         """
         Extract processing information from a job response (for progress tracking).
-        
+
         Args:
             response_data: Job response data with processing status
-            
+
         Returns:
             Dict containing processing progress information
         """
         progress_info = {
-            'status': response_data.get('status', 'unknown'),
-            'progress': response_data.get('progress', 0),
-            'total_files': response_data.get('total_files', 0),
-            'completed_files': response_data.get('completed_files', 0),
-            'failed_files': response_data.get('failed_files', 0),
-            'processing_files': response_data.get('processing_files', 0),
-            'total_chunks': response_data.get('total_chunks', 0),
-            'completed_chunks': response_data.get('completed_chunks', 0),
-            'failed_chunks': response_data.get('failed_chunks', 0),
-            'processing_chunks': response_data.get('processing_chunks', 0),
-            'files': {}
+            "status": response_data.get("status", "unknown"),
+            "progress": response_data.get("progress", 0),
+            "total_files": response_data.get("total_files", 0),
+            "completed_files": response_data.get("completed_files", 0),
+            "failed_files": response_data.get("failed_files", 0),
+            "processing_files": response_data.get("processing_files", 0),
+            "total_chunks": response_data.get("total_chunks", 0),
+            "completed_chunks": response_data.get("completed_chunks", 0),
+            "failed_chunks": response_data.get("failed_chunks", 0),
+            "processing_chunks": response_data.get("processing_chunks", 0),
+            "files": {},
         }
-        
+
         # Extract file-level progress if available
-        if 'files' in response_data and isinstance(response_data['files'], dict):
-            for filename, file_info in response_data['files'].items():
-                if isinstance(file_info, dict) and 'status' in file_info:
-                    progress_info['files'][filename] = {
-                        'name': file_info.get('name', filename),
-                        'status': file_info.get('status', 'unknown'),
-                        'total_chunks': file_info.get('total_chunks', 0),
-                        'completed_chunks': file_info.get('completed_chunks', 0),
-                        'failed_chunks': file_info.get('failed_chunks', 0),
-                        'processing_chunks': file_info.get('processing_chunks', 0),
-                        'last_updated': file_info.get('last_updated')
+        if "files" in response_data and isinstance(response_data["files"], dict):
+            for filename, file_info in response_data["files"].items():
+                if isinstance(file_info, dict) and "status" in file_info:
+                    progress_info["files"][filename] = {
+                        "name": file_info.get("name", filename),
+                        "status": file_info.get("status", "unknown"),
+                        "total_chunks": file_info.get("total_chunks", 0),
+                        "completed_chunks": file_info.get("completed_chunks", 0),
+                        "failed_chunks": file_info.get("failed_chunks", 0),
+                        "processing_chunks": file_info.get("processing_chunks", 0),
+                        "last_updated": file_info.get("last_updated"),
                     }
-        
+
         return progress_info
 
     @classmethod
     def from_api_response(
-        cls, response_data: Dict[str, Any], filenames: Optional[List[str]] = None
+        cls,
+        response_data: Union[Dict[str, Any], List[Any]],
+        filenames: Optional[List[str]] = None,
     ) -> "DocumentBatch":
         """Create DocumentBatch from API response data with support for new response structure"""
         documents: List[Document] = []
 
+        # Handle case where response_data is a list (direct elements format)
+        if isinstance(response_data, list):
+            # Direct list of elements - create single document
+            doc = Document.from_api_response(response_data) if response_data else None
+            documents.append(doc) if doc else None
+            return cls(documents)
+
+        # From here, response_data is guaranteed to be a Dict[str, Any]
         # Handle the new completed job response structure with files field
         if "files" in response_data and isinstance(response_data["files"], dict):
             # New format: files field contains CompletedFileData objects by filename
             for filename, file_data in response_data["files"].items():
                 try:
                     # Check if this is CompletedFileData (has 'data' field)
-                    if isinstance(file_data, dict) and 'data' in file_data:
+                    if isinstance(file_data, dict) and "data" in file_data:
                         # Use new helper method for better handling
                         doc = Document.from_completed_file_data(file_data, filename)
                         documents.append(doc)
                     # Handle FileProcessingInfo objects (for processing jobs)
-                    elif isinstance(file_data, dict) and 'status' in file_data:
+                    elif isinstance(file_data, dict) and "status" in file_data:
                         # This is processing info, not completed data - skip for now
                         # Could be used for progress tracking in the future
                         continue
@@ -2062,7 +2086,7 @@ th { background-color: #f2f2f2; }
                         UserWarning,
                     )
                     continue
-        
+
         # Handle legacy formats for backward compatibility
         elif filenames:
             # Multiple files response - legacy format
@@ -2178,7 +2202,7 @@ th { background-color: #f2f2f2; }
     def get_error_statistics(self) -> Dict[str, Any]:
         """
         Get comprehensive error statistics across all documents in the batch.
-        
+
         Returns:
             Dict containing error statistics for the entire batch
         """
@@ -2186,73 +2210,77 @@ th { background-color: #f2f2f2; }
         documents_with_errors = 0
         total_errors = 0
         error_details = {}
-        
+
         for doc in self.documents:
             error_info = doc.get_processing_errors()
-            error_count = error_info.get('error_count', 0)
-            
+            error_count = error_info.get("error_count", 0)
+
             if error_count > 0:
                 documents_with_errors += 1
                 total_errors += error_count
-                
+
                 # Collect error details
-                errors = error_info.get('errors', {})
+                errors = error_info.get("errors", {})
                 if errors:
                     error_details[doc.filename] = errors
-        
+
         return {
-            'total_documents': total_documents,
-            'documents_with_errors': documents_with_errors,
-            'documents_without_errors': total_documents - documents_with_errors,
-            'total_errors': total_errors,
-            'average_errors_per_document': total_errors / total_documents if total_documents > 0 else 0,
-            'error_rate': documents_with_errors / total_documents if total_documents > 0 else 0,
-            'error_details': error_details
+            "total_documents": total_documents,
+            "documents_with_errors": documents_with_errors,
+            "documents_without_errors": total_documents - documents_with_errors,
+            "total_errors": total_errors,
+            "average_errors_per_document": (
+                total_errors / total_documents if total_documents > 0 else 0
+            ),
+            "error_rate": (
+                documents_with_errors / total_documents if total_documents > 0 else 0
+            ),
+            "error_details": error_details,
         }
-    
+
     def get_documents_with_errors(self) -> List[Document]:
         """
         Get all documents that had processing errors.
-        
+
         Returns:
             List of Document objects that had processing errors
         """
         return [doc for doc in self.documents if doc.has_processing_errors()]
-    
+
     def get_documents_without_errors(self) -> List[Document]:
         """
         Get all documents that had no processing errors.
-        
+
         Returns:
             List of Document objects that had no processing errors
         """
         return [doc for doc in self.documents if not doc.has_processing_errors()]
-    
+
     def get_error_summary(self) -> str:
         """
         Get a human-readable summary of processing errors for the entire batch.
-        
+
         Returns:
             String summary of processing errors across all documents
         """
         stats = self.get_error_statistics()
-        
-        if stats['total_errors'] == 0:
+
+        if stats["total_errors"] == 0:
             return f"No processing errors in batch of {stats['total_documents']} document(s)"
-        
+
         summary_parts = [
             f"Processing errors in batch of {stats['total_documents']} document(s):",
             f"- {stats['documents_with_errors']} document(s) with errors",
             f"- {stats['total_errors']} total error(s)",
-            f"- {stats['error_rate']:.1%} error rate"
+            f"- {stats['error_rate']:.1%} error rate",
         ]
-        
-        if stats['error_details']:
+
+        if stats["error_details"]:
             summary_parts.append("\nError details:")
-            for filename, errors in stats['error_details'].items():
+            for filename, errors in stats["error_details"].items():
                 for location, message in errors.items():
                     summary_parts.append(f"- {filename}[{location}]: {message}")
-        
+
         return "\n".join(summary_parts)
 
 
@@ -2327,9 +2355,11 @@ def chunk_text(text: str, target_size: int = 500, tolerance: float = 0.1) -> Lis
 
     return [chunk for chunk in chunks if chunk.strip()]
 
+
 def _split_text(text: str, pattern: str) -> List[str]:
     """Split text by a given pattern."""
     return text.split(pattern)
+
 
 def _split_by_markdown_sections(text: str) -> List[str]:
     """Split text by markdown headers, preserving header hierarchy."""
@@ -2619,7 +2649,6 @@ def _split_at_sentences(text: str) -> List[str]:
 
             if word_before in abbreviations or (i >= 0 and text[i] in ["/", "@"]):
                 is_abbreviation = True
-
 
         # Check what follows
         after_match = text[end_pos:].lstrip()

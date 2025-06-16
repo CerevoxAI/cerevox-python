@@ -2,6 +2,36 @@
 
 Advanced usage patterns and real-world applications with Cerevox.
 
+## Table of Contents
+
+- [Content Analysis & Search](#content-analysis--search)
+  - [Document Statistics and Analysis](#document-statistics-and-analysis)
+  - [Advanced Content Search](#advanced-content-search)
+  - [Batch Document Analysis](#batch-document-analysis)
+- [Table Extraction & Processing](#table-extraction--processing)
+  - [Advanced Table Analysis](#advanced-table-analysis)
+  - [Convert to Pandas for Analysis](#convert-to-pandas-for-analysis)
+  - [Export Tables](#export-tables)
+- [Performance Optimization](#performance-optimization)
+  - [High-Volume Processing](#high-volume-processing)
+  - [Progress Tracking](#progress-tracking)
+- [Document Format Conversion](#document-format-conversion)
+  - [Multiple Output Formats](#multiple-output-formats)
+- [Advanced Element Processing](#advanced-element-processing)
+  - [Element Type Filtering](#element-type-filtering)
+  - [Structured Data Extraction](#structured-data-extraction)
+  - [Cross-Document Element Analysis](#cross-document-element-analysis)
+- [Error Handling & Resilience](#error-handling--resilience)
+  - [Robust Processing Pipeline](#robust-processing-pipeline)
+  - [Custom Error Recovery](#custom-error-recovery)
+  - [Monitoring and Logging](#monitoring-and-logging)
+- [Custom Integration Patterns](#custom-integration-patterns)
+  - [Database Integration](#database-integration)
+  - [API Integration](#api-integration)
+  - [Custom Processing Pipeline](#custom-processing-pipeline)
+
+---
+
 ## Content Analysis & Search
 
 ### Document Statistics and Analysis

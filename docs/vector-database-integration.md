@@ -2,6 +2,28 @@
 
 Cerevox is engineered specifically for vector databases and RAG applications with intelligent chunking and structure preservation.
 
+## Table of Contents
+
+- [Quick Start](#quick-start)
+  - [Basic Text Chunks for Vector Databases](#basic-text-chunks-for-vector-databases)
+  - [Markdown Chunks with Structure Preservation](#markdown-chunks-with-structure-preservation)
+- [Smart Chunking Features](#smart-chunking-features)
+  - [🎯 Structure-Aware Chunking](#-structure-aware-chunking)
+  - [📏 Precision Control](#-precision-control)
+- [Vector Database Examples](#vector-database-examples)
+  - [Pinecone Integration](#pinecone-integration)
+  - [ChromaDB Integration](#chromadb-integration)
+  - [Weaviate Integration](#weaviate-integration)
+  - [Qdrant Integration](#qdrant-integration)
+- [Standalone Chunking Functions](#standalone-chunking-functions)
+- [RAG Application Example](#rag-application-example)
+- [Best Practices](#best-practices)
+  - [Chunk Size Recommendations](#chunk-size-recommendations)
+  - [Metadata Utilization](#metadata-utilization)
+  - [Performance Optimization](#performance-optimization)
+
+---
+
 ## Quick Start
 
 ### Basic Text Chunks for Vector Databases

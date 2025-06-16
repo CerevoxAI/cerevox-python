@@ -2,6 +2,39 @@
 
 Migrate from popular document processing tools to Cerevox for better performance and accuracy.
 
+## Table of Contents
+
+- [Performance Comparison](#performance-comparison)
+- [From LlamaIndex](#from-llamaindex)
+- [From Unstructured](#from-unstructured)
+- [From Amazon Textract](#from-amazon-textract)
+- [From PyPDF2/pdfplumber](#from-pypdf2pdfplumber)
+- [From DocumentCloud](#from-documentcloud)
+- [Migration Checklist](#migration-checklist)
+  - [✅ Pre-Migration](#-pre-migration)
+  - [✅ During Migration](#-during-migration)
+  - [✅ Post-Migration](#-post-migration)
+- [Common Migration Patterns](#common-migration-patterns)
+  - [Pattern 1: Basic Text Extraction](#pattern-1-basic-text-extraction)
+  - [Pattern 2: Batch Processing](#pattern-2-batch-processing)
+  - [Pattern 3: Vector Database Preparation](#pattern-3-vector-database-preparation)
+- [Getting Help](#getting-help)
+
+---
+
+## Performance Comparison
+
+| Tool | Processing Speed | Table Accuracy | Async Support | Vector DB Ready |
+|------|-----------------|----------------|---------------|-----------------|
+| **Cerevox** | ⚡ Fastest | 🎯 Highest | ✅ Native | ✅ Optimized |
+| LlamaIndex | 🐌 Slow | ⚠️ Basic | ❌ No | ⚠️ Manual |
+| Unstructured | 🐌 Slow | ⚠️ Medium | ❌ No | ⚠️ Manual |
+| Textract | 🕐 Medium | ⚠️ Medium | ⚠️ Manual | ❌ No |
+| PyPDF2 | 🕐 Medium | ❌ Poor | ❌ No | ❌ No |
+| DocumentCloud | 🕐 Manual | ⚠️ Basic | ❌ Web Only | ❌ No |
+
+---
+
 ## From LlamaIndex
 
 LlamaIndex users can easily migrate to Cerevox for improved document parsing and chunking.
@@ -286,16 +319,6 @@ async with AsyncLexa() as client:
 - **Vector database preparation** for RAG applications
 
 ---
-
-## Performance Comparison
-
-| Tool | Processing Speed | Table Accuracy | Async Support | Vector DB Ready |
-|------|-----------------|----------------|---------------|-----------------|
-| **Cerevox** | ⚡ Fastest | 🎯 Highest | ✅ Native | ✅ Optimized |
-| LlamaIndex | 🐌 Slow | ⚠️ Basic | ❌ No | ⚠️ Manual |
-| Unstructured | 🐌 Slow | ⚠️ Medium | ❌ No | ⚠️ Manual |
-| Textract | 🕐 Medium | ⚠️ Medium | ⚠️ Manual | ❌ No |
-| PyPDF2 | 🕐 Medium | ❌ Poor | ❌ No | ❌ No |
 
 ## Migration Checklist
 

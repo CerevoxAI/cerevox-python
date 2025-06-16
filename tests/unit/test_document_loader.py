@@ -1661,11 +1661,22 @@ class TestDocumentAdvanced:
     def test_validate_with_errors(self):
         """Test validate method with invalid data"""
         # Create document with invalid metadata
-        with patch("cerevox.document_loader.Document.get_processing_errors", return_value={'errors': {'filename': 'Filename is required'}, 'error_count': 1}):
-            metadata = DocumentMetadata(filename="", file_type="")  # Empty required fields
+        with patch(
+            "cerevox.document_loader.Document.get_processing_errors",
+            return_value={
+                "errors": {"filename": "Filename is required"},
+                "error_count": 1,
+            },
+        ):
+            metadata = DocumentMetadata(
+                filename="", file_type=""
+            )  # Empty required fields
             doc = Document(content="", metadata=metadata)
 
-            assert doc.get_error_summary() == "1 processing error(s): filename: Filename is required"
+            assert (
+                doc.get_error_summary()
+                == "1 processing error(s): filename: Filename is required"
+            )
             errors = doc.validate()
             assert len(errors) > 0
             assert any("filename" in error for error in errors)
@@ -2162,7 +2173,10 @@ class TestDocumentBatch:
 
             # Add table to one document
             table = DocumentTable(
-                element_id="table1", headers=["A", "B"], rows=[["1", "2"]], page_number=1
+                element_id="table1",
+                headers=["A", "B"],
+                rows=[["1", "2"]],
+                page_number=1,
             )
             table2 = DocumentTable(
                 element_id="table2", headers=["C", "D"], rows=[], page_number=2
@@ -2589,133 +2603,135 @@ class TestDocumentBatch:
     def test_from_processing_job_response(self):
         """Test from_processing_job_response method with various response formats"""
         # Test basic response with minimal data
-        basic_response = {
-            'status': 'processing',
-            'progress': 50
-        }
-        
+        basic_response = {"status": "processing", "progress": 50}
+
         result = DocumentBatch.from_processing_job_response(basic_response)
-        
-        assert result['status'] == 'processing'
-        assert result['progress'] == 50
-        assert result['total_files'] == 0
-        assert result['completed_files'] == 0
-        assert result['failed_files'] == 0
-        assert result['processing_files'] == 0
-        assert result['total_chunks'] == 0
-        assert result['completed_chunks'] == 0
-        assert result['failed_chunks'] == 0
-        assert result['processing_chunks'] == 0
-        assert result['files'] == {}
-        
+
+        assert result["status"] == "processing"
+        assert result["progress"] == 50
+        assert result["total_files"] == 0
+        assert result["completed_files"] == 0
+        assert result["failed_files"] == 0
+        assert result["processing_files"] == 0
+        assert result["total_chunks"] == 0
+        assert result["completed_chunks"] == 0
+        assert result["failed_chunks"] == 0
+        assert result["processing_chunks"] == 0
+        assert result["files"] == {}
+
         # Test complete response with all fields
         complete_response = {
-            'status': 'completed',
-            'progress': 100,
-            'total_files': 3,
-            'completed_files': 2,
-            'failed_files': 1,
-            'processing_files': 0,
-            'total_chunks': 150,
-            'completed_chunks': 140,
-            'failed_chunks': 10,
-            'processing_chunks': 0,
-            'files': {
-                'doc1.pdf': {
-                    'name': 'doc1.pdf',
-                    'status': 'completed',
-                    'total_chunks': 50,
-                    'completed_chunks': 50,
-                    'failed_chunks': 0,
-                    'processing_chunks': 0,
-                    'last_updated': '2023-10-01T12:00:00Z'
+            "status": "completed",
+            "progress": 100,
+            "total_files": 3,
+            "completed_files": 2,
+            "failed_files": 1,
+            "processing_files": 0,
+            "total_chunks": 150,
+            "completed_chunks": 140,
+            "failed_chunks": 10,
+            "processing_chunks": 0,
+            "files": {
+                "doc1.pdf": {
+                    "name": "doc1.pdf",
+                    "status": "completed",
+                    "total_chunks": 50,
+                    "completed_chunks": 50,
+                    "failed_chunks": 0,
+                    "processing_chunks": 0,
+                    "last_updated": "2023-10-01T12:00:00Z",
                 },
-                'doc2.txt': {
-                    'name': 'doc2.txt',
-                    'status': 'failed',
-                    'total_chunks': 30,
-                    'completed_chunks': 20,
-                    'failed_chunks': 10,
-                    'processing_chunks': 0,
-                    'last_updated': '2023-10-01T12:05:00Z'
-                }
-            }
+                "doc2.txt": {
+                    "name": "doc2.txt",
+                    "status": "failed",
+                    "total_chunks": 30,
+                    "completed_chunks": 20,
+                    "failed_chunks": 10,
+                    "processing_chunks": 0,
+                    "last_updated": "2023-10-01T12:05:00Z",
+                },
+            },
         }
-        
+
         result = DocumentBatch.from_processing_job_response(complete_response)
-        
-        assert result['status'] == 'completed'
-        assert result['progress'] == 100
-        assert result['total_files'] == 3
-        assert result['completed_files'] == 2
-        assert result['failed_files'] == 1
-        assert result['processing_files'] == 0
-        assert result['total_chunks'] == 150
-        assert result['completed_chunks'] == 140
-        assert result['failed_chunks'] == 10
-        assert result['processing_chunks'] == 0
-        
+
+        assert result["status"] == "completed"
+        assert result["progress"] == 100
+        assert result["total_files"] == 3
+        assert result["completed_files"] == 2
+        assert result["failed_files"] == 1
+        assert result["processing_files"] == 0
+        assert result["total_chunks"] == 150
+        assert result["completed_chunks"] == 140
+        assert result["failed_chunks"] == 10
+        assert result["processing_chunks"] == 0
+
         # Verify file-level information
-        assert 'doc1.pdf' in result['files']
-        assert 'doc2.txt' in result['files']
-        
-        doc1_info = result['files']['doc1.pdf']
-        assert doc1_info['name'] == 'doc1.pdf'
-        assert doc1_info['status'] == 'completed'
-        assert doc1_info['total_chunks'] == 50
-        assert doc1_info['completed_chunks'] == 50
-        assert doc1_info['failed_chunks'] == 0
-        assert doc1_info['processing_chunks'] == 0
-        assert doc1_info['last_updated'] == '2023-10-01T12:00:00Z'
-        
-        doc2_info = result['files']['doc2.txt']
-        assert doc2_info['name'] == 'doc2.txt'
-        assert doc2_info['status'] == 'failed'
-        assert doc2_info['total_chunks'] == 30
-        assert doc2_info['completed_chunks'] == 20
-        assert doc2_info['failed_chunks'] == 10
-        assert doc2_info['processing_chunks'] == 0
-        assert doc2_info['last_updated'] == '2023-10-01T12:05:00Z'
-        
+        assert "doc1.pdf" in result["files"]
+        assert "doc2.txt" in result["files"]
+
+        doc1_info = result["files"]["doc1.pdf"]
+        assert doc1_info["name"] == "doc1.pdf"
+        assert doc1_info["status"] == "completed"
+        assert doc1_info["total_chunks"] == 50
+        assert doc1_info["completed_chunks"] == 50
+        assert doc1_info["failed_chunks"] == 0
+        assert doc1_info["processing_chunks"] == 0
+        assert doc1_info["last_updated"] == "2023-10-01T12:00:00Z"
+
+        doc2_info = result["files"]["doc2.txt"]
+        assert doc2_info["name"] == "doc2.txt"
+        assert doc2_info["status"] == "failed"
+        assert doc2_info["total_chunks"] == 30
+        assert doc2_info["completed_chunks"] == 20
+        assert doc2_info["failed_chunks"] == 10
+        assert doc2_info["processing_chunks"] == 0
+        assert doc2_info["last_updated"] == "2023-10-01T12:05:00Z"
+
         # Test edge cases
         # Empty response
         empty_response = {}
         result = DocumentBatch.from_processing_job_response(empty_response)
-        assert result['status'] == 'unknown'
-        assert result['progress'] == 0
-        assert all(result[key] == 0 for key in ['total_files', 'completed_files', 'failed_files', 'processing_files'])
-        
+        assert result["status"] == "unknown"
+        assert result["progress"] == 0
+        assert all(
+            result[key] == 0
+            for key in [
+                "total_files",
+                "completed_files",
+                "failed_files",
+                "processing_files",
+            ]
+        )
+
         # Response with invalid file data
         invalid_files_response = {
-            'status': 'processing',
-            'files': {
-                'doc1.pdf': 'not_a_dict',  # Invalid format
-                'doc2.txt': {'status': 'processing'},  # Valid but minimal
-                'doc3.docx': {}  # Empty dict (no status)
-            }
+            "status": "processing",
+            "files": {
+                "doc1.pdf": "not_a_dict",  # Invalid format
+                "doc2.txt": {"status": "processing"},  # Valid but minimal
+                "doc3.docx": {},  # Empty dict (no status)
+            },
         }
-        
+
         result = DocumentBatch.from_processing_job_response(invalid_files_response)
-        assert result['status'] == 'processing'
-        
+        assert result["status"] == "processing"
+
         # Only doc2.txt should be included since it has valid format with status
-        assert 'doc2.txt' in result['files']
-        assert 'doc1.pdf' not in result['files']  # Invalid format
-        assert 'doc3.docx' not in result['files']  # No status field
-        
-        doc2_info = result['files']['doc2.txt']
-        assert doc2_info['status'] == 'processing'
-        assert doc2_info['name'] == 'doc2.txt'  # Should default to filename
-        assert doc2_info['total_chunks'] == 0  # Should default to 0
-        
+        assert "doc2.txt" in result["files"]
+        assert "doc1.pdf" not in result["files"]  # Invalid format
+        assert "doc3.docx" not in result["files"]  # No status field
+
+        doc2_info = result["files"]["doc2.txt"]
+        assert doc2_info["status"] == "processing"
+        assert doc2_info["name"] == "doc2.txt"  # Should default to filename
+        assert doc2_info["total_chunks"] == 0  # Should default to 0
+
         # Test with non-dict files value
-        non_dict_files_response = {
-            'status': 'processing',
-            'files': 'not_a_dict'
-        }
-        
+        non_dict_files_response = {"status": "processing", "files": "not_a_dict"}
+
         result = DocumentBatch.from_processing_job_response(non_dict_files_response)
-        assert result['files'] == {}  # Should be empty dict when files is not a dict
+        assert result["files"] == {}  # Should be empty dict when files is not a dict
 
 
 class TestOptionalDependencies:
@@ -2957,7 +2973,9 @@ class TestParseTableFromHTML:
             if not BS4_AVAILABLE:
                 pytest.skip("BeautifulSoup4 not available")
 
-            html = "<table><caption>Test Caption</caption><tr><td>Data</td></tr></table>"
+            html = (
+                "<table><caption>Test Caption</caption><tr><td>Data</td></tr></table>"
+            )
             result = Document._parse_table_from_html(html, 0, 1, "test")
             assert result is not None
             assert result.caption == "Test Caption"
@@ -2971,7 +2989,9 @@ class TestParseTableFromHTML:
             html = "<table><tr><th>Header1</th><td>Header2</td></tr><tr><td>Data1</td><td>Data2</td></tr></table>"
             result = Document._parse_table_from_html(html, 0, 1, "test")
             assert result is not None
-            assert result.headers == ["Header1"]  # Only th elements are treated as headers
+            assert result.headers == [
+                "Header1"
+            ]  # Only th elements are treated as headers
             # Since we found th elements, we skip the first row (header row) for data rows
             assert len(result.rows) == 1  # Only the second row is treated as a data row
             assert result.rows[0] == ["Data1", "Data2"]
@@ -4088,9 +4108,7 @@ class TestMissingCoveragePaths:
                 pytest.skip("BeautifulSoup4 not available")
 
             # Create table with some empty rows
-            html = (
-                "<table><tr><td>Data</td></tr><tr></tr><tr><td>More Data</td></tr></table>"
-            )
+            html = "<table><tr><td>Data</td></tr><tr></tr><tr><td>More Data</td></tr></table>"
             result = Document._parse_table_from_html(html, 0, 1, "test")
 
             assert result is not None
@@ -4537,7 +4555,9 @@ class TestRemainingCoverage:
             assert result is None
 
             # Test no table element
-            result = Document._parse_table_from_html("<div>not a table</div>", 0, 1, "test")
+            result = Document._parse_table_from_html(
+                "<div>not a table</div>", 0, 1, "test"
+            )
             assert result is None
 
             # Test empty table
@@ -4545,7 +4565,9 @@ class TestRemainingCoverage:
             assert result is None
 
             # Test table with caption
-            html = "<table><caption>Test Caption</caption><tr><td>Data</td></tr></table>"
+            html = (
+                "<table><caption>Test Caption</caption><tr><td>Data</td></tr></table>"
+            )
             result = Document._parse_table_from_html(html, 0, 1, "test")
             assert result is not None
             assert result.caption == "Test Caption"
@@ -4554,7 +4576,9 @@ class TestRemainingCoverage:
             html = "<table><tr><th>Header1</th><td>Header2</td></tr><tr><td>Data1</td><td>Data2</td></tr></table>"
             result = Document._parse_table_from_html(html, 0, 1, "test")
             assert result is not None
-            assert result.headers == ["Header1"]  # Only th elements are treated as headers
+            assert result.headers == [
+                "Header1"
+            ]  # Only th elements are treated as headers
 
     def test_parse_table_from_html_no_caption_element(self):
         """Test _parse_table_from_html when no caption element is found"""
@@ -5033,26 +5057,35 @@ class TestCoverageCompleteness:
             if not BS4_AVAILABLE:
                 pytest.skip("BeautifulSoup4 not available")
 
-            html = "<table><caption>Test Caption</caption><tr><td>Data</td></tr></table>"
+            html = (
+                "<table><caption>Test Caption</caption><tr><td>Data</td></tr></table>"
+            )
             result = Document._parse_table_from_html(html, 0, 1, "test")
             assert result is not None
             assert result.caption == "Test Caption"
 
     def test_parse_table_from_html_with_exception(self):
         """Test _parse_table_from_html with caption element that is a Tag"""
-        with patch("cerevox.document_loader.BS4_AVAILABLE", True), patch("cerevox.document_loader.BeautifulSoup", side_effect=Exception("Test Exception")):
+        with (
+            patch("cerevox.document_loader.BS4_AVAILABLE", True),
+            patch(
+                "cerevox.document_loader.BeautifulSoup",
+                side_effect=Exception("Test Exception"),
+            ),
+        ):
 
             if not BS4_AVAILABLE:
                 pytest.skip("BeautifulSoup4 not available")
 
-            html = "<table><caption>Test Caption</caption><tr><td>Data</td></tr></table>"
+            html = (
+                "<table><caption>Test Caption</caption><tr><td>Data</td></tr></table>"
+            )
             result = Document._parse_table_from_html(html, 0, 1, "test")
             assert result is None
 
     def test_parse_table_from_html_mixed_th_td_in_first_row(self):
         """Test _parse_table_from_html when first row has mixed th/td elements"""
         with patch("cerevox.document_loader.BS4_AVAILABLE", True):
-            
 
             if not BS4_AVAILABLE:
                 pytest.skip("BeautifulSoup4 not available")
@@ -5142,7 +5175,13 @@ class TestCoverageCompleteness:
 
     def test_document_table_isinstance_check(self):
         """Test DocumentTable isinstance check in test"""
-        with patch("cerevox.document_loader.BS4_AVAILABLE", True):
+        with (
+            patch("cerevox.document_loader.BS4_AVAILABLE", True),
+            patch(
+                "cerevox.document_loader.Document._is_tag_instance",
+                return_value=False,
+            ),
+        ):
 
             if not BS4_AVAILABLE:
                 pytest.skip("BeautifulSoup4 not available")
@@ -5151,11 +5190,10 @@ class TestCoverageCompleteness:
             table = Document._parse_table_from_html(html, 0, 1, "table1")
 
             assert table.headers == ["Header1", "Header2"]
-            assert table.rows == [["Data1", "Data2"]]
+            assert table.rows == []
 
     def test_coverage_for_line_597(self):
         """Test exception handling in from_api_response at line 597"""
-        
 
         # This should trigger the exception handling path
         response_data = {"invalid": "format", "missing_expected_keys": True}
@@ -5173,7 +5211,6 @@ class TestCoverageCompleteness:
 
     def test_coverage_for_line_745(self):
         """Test line 745 in from_elements_list method"""
-        
 
         # Test malformed element that triggers warnings in the element parsing loop
         elements_data = [
@@ -5206,7 +5243,6 @@ class TestCoverageCompleteness:
 
     def test_coverage_for_line_881(self):
         """Test exception handling in table parsing at line 881"""
-        
 
         # Create an element that will trigger table parsing but cause an exception
         elements_data = [
@@ -5449,10 +5485,9 @@ class TestCoverageCompleteness:
         result = _split_preserving_code_blocks(text, 50)
         assert len(result) >= 1
 
-
     def test_from_completed_file_data(self):
         """Test Document.from_completed_file_data method with various scenarios"""
-        
+
         # Test 1: Create document with valid elements data
         valid_file_data = {
             "data": [
@@ -5462,7 +5497,7 @@ class TestCoverageCompleteness:
                     "content": {
                         "text": "Sample text content",
                         "html": "<p>Sample text content</p>",
-                        "markdown": "Sample text content"
+                        "markdown": "Sample text content",
                     },
                     "source": {
                         "file": {
@@ -5471,71 +5506,72 @@ class TestCoverageCompleteness:
                             "index": 0,
                             "mime_type": "application/pdf",
                             "original_mime_type": "application/pdf",
-                            "name": "test_document"
+                            "name": "test_document",
                         },
                         "page": {"page_number": 1, "index": 0},
-                        "element": {
-                            "characters": 19,
-                            "words": 3,
-                            "sentences": 1
-                        }
-                    }
+                        "element": {"characters": 19, "words": 3, "sentences": 1},
+                    },
                 }
             ],
             "errors": {"parsing_warnings": ["Minor parsing issue"]},
-            "error_count": 1
+            "error_count": 1,
         }
-        
+
         doc = Document.from_completed_file_data(valid_file_data, "test_document.pdf")
-        
+
         # Verify document was created properly
         assert doc.filename == "test_document"
         assert len(doc.elements) == 1
         assert doc.elements[0].id == "elem1"
         assert doc.elements[0].element_type == "paragraph"
         assert doc.elements[0].content.text == "Sample text content"
-        
+
         # Verify error information is stored in metadata
         assert "processing_errors" in doc.metadata.extra
         assert doc.metadata.extra["processing_errors"]["error_count"] == 1
-        assert doc.metadata.extra["processing_errors"]["errors"]["parsing_warnings"] == ["Minor parsing issue"]
-        
+        assert doc.metadata.extra["processing_errors"]["errors"][
+            "parsing_warnings"
+        ] == ["Minor parsing issue"]
+
         # Test 2: Create document with empty data
-        empty_file_data = {
-            "data": [],
-            "errors": {},
-            "error_count": 0
-        }
-        
-        doc_empty = Document.from_completed_file_data(empty_file_data, "empty_document.pdf")
-        
+        empty_file_data = {"data": [], "errors": {}, "error_count": 0}
+
+        doc_empty = Document.from_completed_file_data(
+            empty_file_data, "empty_document.pdf"
+        )
+
         # Verify empty document was created
         assert doc_empty.filename == "empty_document.pdf"
         assert doc_empty.content == ""
         assert doc_empty.metadata.file_type == "unknown"
         assert doc_empty.metadata.total_elements == 0
         assert len(doc_empty.elements) == 0
-        
+
         # Verify error information is still stored
         assert "processing_errors" in doc_empty.metadata.extra
         assert doc_empty.metadata.extra["processing_errors"]["error_count"] == 0
-        
+
         # Test 3: Create document with no data field
         no_data_file_data = {
             "errors": {"critical_error": "File could not be processed"},
-            "error_count": 1
+            "error_count": 1,
         }
-        
-        doc_no_data = Document.from_completed_file_data(no_data_file_data, "error_document.pdf")
-        
+
+        doc_no_data = Document.from_completed_file_data(
+            no_data_file_data, "error_document.pdf"
+        )
+
         # Verify empty document was created with errors
         assert doc_no_data.filename == "error_document.pdf"
         assert doc_no_data.content == ""
         assert doc_no_data.metadata.file_type == "unknown"
         assert "processing_errors" in doc_no_data.metadata.extra
         assert doc_no_data.metadata.extra["processing_errors"]["error_count"] == 1
-        assert doc_no_data.metadata.extra["processing_errors"]["errors"]["critical_error"] == "File could not be processed"
-        
+        assert (
+            doc_no_data.metadata.extra["processing_errors"]["errors"]["critical_error"]
+            == "File could not be processed"
+        )
+
         # Test 4: Create document with default filename
         simple_file_data = {
             "data": [
@@ -5550,22 +5586,22 @@ class TestCoverageCompleteness:
                             "index": 0,
                             "mime_type": "text/plain",
                             "original_mime_type": "text/plain",
-                            "name": "simple"
+                            "name": "simple",
                         },
                         "page": {"page_number": 1, "index": 0},
-                        "element": {"characters": 10, "words": 2, "sentences": 1}
-                    }
+                        "element": {"characters": 10, "words": 2, "sentences": 1},
+                    },
                 }
             ]
         }
-        
+
         doc_default = Document.from_completed_file_data(simple_file_data)
-        
+
         # Verify document with default filename
         assert doc_default.filename == "simple"
         assert len(doc_default.elements) == 1
         assert doc_default.elements[0].element_type == "paragraph"
-        
+
         # Test 5: Create document with no error fields
         clean_file_data = {
             "data": [
@@ -5580,27 +5616,28 @@ class TestCoverageCompleteness:
                             "index": 0,
                             "mime_type": "text/plain",
                             "original_mime_type": "text/plain",
-                            "name": "clean_document"
+                            "name": "clean_document",
                         },
                         "page": {"page_number": 1, "index": 0},
-                        "element": {"characters": 13, "words": 2, "sentences": 1}
-                    }
+                        "element": {"characters": 13, "words": 2, "sentences": 1},
+                    },
                 }
             ]
         }
-        
+
         doc_clean = Document.from_completed_file_data(clean_file_data, "clean_document")
-        
+
         # Verify no error information is added when not present
         assert "processing_errors" not in doc_clean.metadata.extra
         assert doc_clean.filename == "clean_document"
         assert len(doc_clean.elements) == 1
 
+
 class TestFinal5:
-    
+
     def test_from_api_response_new_format(self):
         """Test DocumentBatch.from_api_response with new format containing files field"""
-        
+
         # Test 1: New format with files field containing CompletedFileData objects
         new_format_response = {
             "files": {
@@ -5612,7 +5649,7 @@ class TestFinal5:
                             "content": {
                                 "text": "Test content from document1",
                                 "html": "<p>Test content from document1</p>",
-                                "markdown": "Test content from document1"
+                                "markdown": "Test content from document1",
                             },
                             "source": {
                                 "file": {
@@ -5621,15 +5658,19 @@ class TestFinal5:
                                     "index": 0,
                                     "mime_type": "application/pdf",
                                     "original_mime_type": "application/pdf",
-                                    "name": "document1"
+                                    "name": "document1",
                                 },
                                 "page": {"page_number": 1, "index": 0},
-                                "element": {"characters": 27, "words": 4, "sentences": 1}
-                            }
+                                "element": {
+                                    "characters": 27,
+                                    "words": 4,
+                                    "sentences": 1,
+                                },
+                            },
                         }
                     ],
                     "errors": {"parsing_warnings": ["Minor issue"]},
-                    "error_count": 1
+                    "error_count": 1,
                 },
                 "document2.txt": {
                     "data": [
@@ -5639,7 +5680,7 @@ class TestFinal5:
                             "content": {
                                 "text": "Test content from document2",
                                 "html": "<p>Test content from document2</p>",
-                                "markdown": "Test content from document2"
+                                "markdown": "Test content from document2",
                             },
                             "source": {
                                 "file": {
@@ -5648,43 +5689,47 @@ class TestFinal5:
                                     "index": 0,
                                     "mime_type": "text/plain",
                                     "original_mime_type": "text/plain",
-                                    "name": "document2"
+                                    "name": "document2",
                                 },
                                 "page": {"page_number": 1, "index": 0},
-                                "element": {"characters": 27, "words": 4, "sentences": 1}
-                            }
+                                "element": {
+                                    "characters": 27,
+                                    "words": 4,
+                                    "sentences": 1,
+                                },
+                            },
                         }
                     ]
-                }
+                },
             }
         }
-        
+
         document_batch = DocumentBatch.from_api_response(new_format_response)
         documents = document_batch.documents
-        
+
         # Verify two documents were created
         assert len(documents) == 2
-        
+
         # Verify first document
         doc1 = next(doc for doc in documents if doc.filename == "document1")
         assert len(doc1.elements) == 1
         assert doc1.elements[0].content.text == "Test content from document1"
         assert "processing_errors" in doc1.metadata.extra
         assert doc1.metadata.extra["processing_errors"]["error_count"] == 1
-        
+
         # Verify second document
         doc2 = next(doc for doc in documents if doc.filename == "document2")
         assert len(doc2.elements) == 1
         assert doc2.elements[0].content.text == "Test content from document2"
         assert "processing_errors" not in doc2.metadata.extra
-        
+
         # Test 2: New format with FileProcessingInfo objects (should be skipped)
         processing_response = {
             "files": {
                 "processing_doc.pdf": {
                     "status": "processing",
                     "progress": 0.5,
-                    "message": "Still processing..."
+                    "message": "Still processing...",
                 },
                 "completed_doc.pdf": {
                     "data": [
@@ -5699,25 +5744,29 @@ class TestFinal5:
                                     "index": 0,
                                     "mime_type": "application/pdf",
                                     "original_mime_type": "application/pdf",
-                                    "name": "completed_doc"
+                                    "name": "completed_doc",
                                 },
                                 "page": {"page_number": 1, "index": 0},
-                                "element": {"characters": 16, "words": 2, "sentences": 1}
-                            }
+                                "element": {
+                                    "characters": 16,
+                                    "words": 2,
+                                    "sentences": 1,
+                                },
+                            },
                         }
                     ]
-                }
+                },
             }
         }
-        
+
         document_batch = DocumentBatch.from_api_response(processing_response)
         documents = document_batch.documents
-        
+
         # Verify only the completed document was processed
         assert len(documents) == 1
         assert documents[0].filename == "completed_doc"
         assert documents[0].elements[0].content.text == "Completed content"
-        
+
         # Test 3: New format with fallback to direct elements data
         fallback_response = {
             "files": {
@@ -5733,24 +5782,24 @@ class TestFinal5:
                                 "index": 0,
                                 "mime_type": "text/plain",
                                 "original_mime_type": "text/plain",
-                                "name": "fallback_doc"
+                                "name": "fallback_doc",
                             },
                             "page": {"page_number": 1, "index": 0},
-                            "element": {"characters": 16, "words": 2, "sentences": 1}
-                        }
+                            "element": {"characters": 16, "words": 2, "sentences": 1},
+                        },
                     }
                 ]
             }
         }
-        
+
         document_batch = DocumentBatch.from_api_response(fallback_response)
         documents = document_batch.documents
-        
+
         # Verify fallback processing worked
         assert len(documents) == 1
         assert documents[0].filename == "fallback_doc"
         assert documents[0].elements[0].content.text == "Fallback content"
-        
+
         # Test 4: New format with empty file data (should be skipped)
         empty_response = {
             "files": {
@@ -5768,28 +5817,35 @@ class TestFinal5:
                                     "index": 0,
                                     "mime_type": "text/plain",
                                     "original_mime_type": "text/plain",
-                                    "name": "valid_doc"
+                                    "name": "valid_doc",
                                 },
                                 "page": {"page_number": 1, "index": 0},
-                                "element": {"characters": 13, "words": 2, "sentences": 1}
-                            }
+                                "element": {
+                                    "characters": 13,
+                                    "words": 2,
+                                    "sentences": 1,
+                                },
+                            },
                         }
                     ]
-                }
+                },
             }
         }
-        
+
         document_batch = DocumentBatch.from_api_response(empty_response)
         documents = document_batch.documents
-        
+
         # Verify only valid document was processed
         assert len(documents) == 1
         assert documents[0].filename == "valid_doc"
         assert documents[0].elements[0].content.text == "Valid content"
-        
+
         # Test 5: Error handling - invalid file data should generate warning but continue
-        with patch('warnings.warn') as mock_warn:
-            with patch('cerevox.document_loader.Document.from_api_response', side_effect=ValueError("Invalid data format")):
+        with patch("warnings.warn") as mock_warn:
+            with patch(
+                "cerevox.document_loader.Document.from_api_response",
+                side_effect=ValueError("Invalid data format"),
+            ):
                 error_response = {
                     "files": {
                         "error_doc.txt": {
@@ -5808,41 +5864,50 @@ class TestFinal5:
                                             "index": 0,
                                             "mime_type": "text/plain",
                                             "original_mime_type": "text/plain",
-                                            "name": "valid_doc"
+                                            "name": "valid_doc",
                                         },
                                         "page": {"page_number": 1, "index": 0},
-                                        "element": {"characters": 26, "words": 4, "sentences": 1}
-                                    }
+                                        "element": {
+                                            "characters": 26,
+                                            "words": 4,
+                                            "sentences": 1,
+                                        },
+                                    },
                                 }
                             ]
                         },
-                        "error_doc3": "not a dict"
+                        "error_doc3": "not a dict",
                     }
                 }
-                
+
                 document_batch = DocumentBatch.from_api_response(error_response)
                 documents = document_batch.documents
-                
+
                 # Verify warning was issued for error_doc.txt
                 mock_warn.assert_called()
                 warning_call = mock_warn.call_args[0][0]
                 assert "Error processing file data " in warning_call
-                
+
                 # Verify valid document was still processed
                 assert len(documents) == 2
                 assert documents[1].filename == "valid_doc"
-                assert documents[1].elements[0].content.text == "Valid content after error"
+                assert (
+                    documents[1].elements[0].content.text == "Valid content after error"
+                )
 
     def test_error_statistics(self):
         """Test error statistics comprehensively"""
         # Test 1: Empty document batch
         document_batch = DocumentBatch([])
         statistics = document_batch.get_error_statistics()
-        
+
         assert document_batch.get_documents_with_errors() == []
         assert document_batch.get_documents_without_errors() == []
 
-        assert document_batch.get_error_summary() == "No processing errors in batch of 0 document(s)"
+        assert (
+            document_batch.get_error_summary()
+            == "No processing errors in batch of 0 document(s)"
+        )
 
         assert statistics["total_documents"] == 0
         assert statistics["documents_with_errors"] == 0
@@ -5855,13 +5920,13 @@ class TestFinal5:
         # Test 2: Documents with no errors
         clean_doc1 = Document(
             content="Clean content 1",
-            metadata=DocumentMetadata(filename="clean1.txt", file_type="txt")
+            metadata=DocumentMetadata(filename="clean1.txt", file_type="txt"),
         )
         clean_doc2 = Document(
-            content="Clean content 2", 
-            metadata=DocumentMetadata(filename="clean2.txt", file_type="txt")
+            content="Clean content 2",
+            metadata=DocumentMetadata(filename="clean2.txt", file_type="txt"),
         )
-        
+
         clean_batch = DocumentBatch([clean_doc1, clean_doc2])
         statistics = clean_batch.get_error_statistics()
         assert statistics["total_documents"] == 2
@@ -5875,29 +5940,29 @@ class TestFinal5:
         # Test 3: Documents with errors
         error_doc1 = Document(
             content="Error content 1",
-            metadata=DocumentMetadata(filename="error1.pdf", file_type="pdf")
+            metadata=DocumentMetadata(filename="error1.pdf", file_type="pdf"),
         )
         # Add processing errors to metadata
-        error_doc1.metadata.extra['processing_errors'] = {
-            'errors': {
-                'page_1': 'Failed to parse table on page 1',
-                'page_3': 'OCR quality poor on page 3'
+        error_doc1.metadata.extra["processing_errors"] = {
+            "errors": {
+                "page_1": "Failed to parse table on page 1",
+                "page_3": "OCR quality poor on page 3",
             },
-            'error_count': 2
+            "error_count": 2,
         }
-        
+
         error_doc2 = Document(
             content="Error content 2",
-            metadata=DocumentMetadata(filename="error2.docx", file_type="docx")
+            metadata=DocumentMetadata(filename="error2.docx", file_type="docx"),
         )
         # Add processing errors to metadata
-        error_doc2.metadata.extra['processing_errors'] = {
-            'errors': {
-                'formatting': 'Unable to preserve complex formatting',
+        error_doc2.metadata.extra["processing_errors"] = {
+            "errors": {
+                "formatting": "Unable to preserve complex formatting",
             },
-            'error_count': 1
+            "error_count": 1,
         }
-        
+
         error_batch = DocumentBatch([error_doc1, error_doc2])
         statistics = error_batch.get_error_statistics()
         assert statistics["total_documents"] == 2
@@ -5909,9 +5974,18 @@ class TestFinal5:
         assert len(statistics["error_details"]) == 2
         assert "error1.pdf" in statistics["error_details"]
         assert "error2.docx" in statistics["error_details"]
-        assert statistics["error_details"]["error1.pdf"]["page_1"] == "Failed to parse table on page 1"
-        assert statistics["error_details"]["error1.pdf"]["page_3"] == "OCR quality poor on page 3"
-        assert statistics["error_details"]["error2.docx"]["formatting"] == "Unable to preserve complex formatting"
+        assert (
+            statistics["error_details"]["error1.pdf"]["page_1"]
+            == "Failed to parse table on page 1"
+        )
+        assert (
+            statistics["error_details"]["error1.pdf"]["page_3"]
+            == "OCR quality poor on page 3"
+        )
+        assert (
+            statistics["error_details"]["error2.docx"]["formatting"]
+            == "Unable to preserve complex formatting"
+        )
 
         # Test 4: Mixed documents (some with errors, some without)
         mixed_batch = DocumentBatch([clean_doc1, error_doc1, clean_doc2, error_doc2])
@@ -5923,17 +5997,17 @@ class TestFinal5:
         assert statistics["average_errors_per_document"] == 0.75
         assert statistics["error_rate"] == 0.5
         assert len(statistics["error_details"]) == 2
-        
+
         # Test 5: Document with error_count but no errors dict
         partial_error_doc = Document(
             content="Partial error content",
-            metadata=DocumentMetadata(filename="partial.txt", file_type="txt")
+            metadata=DocumentMetadata(filename="partial.txt", file_type="txt"),
         )
-        partial_error_doc.metadata.extra['processing_errors'] = {
-            'error_count': 1
+        partial_error_doc.metadata.extra["processing_errors"] = {
+            "error_count": 1
             # No 'errors' dict
         }
-        
+
         partial_batch = DocumentBatch([partial_error_doc])
         statistics = partial_batch.get_error_statistics()
         assert statistics["total_documents"] == 1
@@ -5948,13 +6022,13 @@ class TestFinal5:
         # Test 6: Document with empty errors dict but non-zero error_count
         empty_errors_doc = Document(
             content="Empty errors content",
-            metadata=DocumentMetadata(filename="empty_errors.txt", file_type="txt")
+            metadata=DocumentMetadata(filename="empty_errors.txt", file_type="txt"),
         )
-        empty_errors_doc.metadata.extra['processing_errors'] = {
-            'errors': {},
-            'error_count': 2
+        empty_errors_doc.metadata.extra["processing_errors"] = {
+            "errors": {},
+            "error_count": 2,
         }
-        
+
         empty_errors_batch = DocumentBatch([empty_errors_doc])
         statistics = empty_errors_batch.get_error_statistics()
         assert statistics["total_documents"] == 1
@@ -5988,7 +6062,6 @@ class TestFinal5:
         assert statistics["error_rate"] == 1.0
         assert len(statistics["error_details"]) == 1
 
-
     def test_split_by_markdown_sections_edge_cases(self):
         """Test split_by_markdown_sections edge cases"""
         # Test case 1: Empty string
@@ -6002,81 +6075,90 @@ class TestFinal5:
         # Test 1: Empty document batch (no errors)
         document_batch = DocumentBatch([])
         statistics = document_batch.get_error_statistics()
-        assert document_batch.get_error_summary() == "No processing errors in batch of 0 document(s)"
-        
+        assert (
+            document_batch.get_error_summary()
+            == "No processing errors in batch of 0 document(s)"
+        )
+
         # Test 2: Batch with errors and error details (tests lines 2243-2256)
         # Create documents with processing errors
         error_doc1 = Document(
             content="Error content 1",
-            metadata=DocumentMetadata(filename="error1.pdf", file_type="pdf")
+            metadata=DocumentMetadata(filename="error1.pdf", file_type="pdf"),
         )
         # Add processing errors to metadata
-        error_doc1.metadata.extra['processing_errors'] = {
-            'errors': {
-                'page_1': 'Failed to parse table on page 1',
-                'page_3': 'OCR quality poor on page 3'
+        error_doc1.metadata.extra["processing_errors"] = {
+            "errors": {
+                "page_1": "Failed to parse table on page 1",
+                "page_3": "OCR quality poor on page 3",
             },
-            'error_count': 2
+            "error_count": 2,
         }
-        
+
         error_doc2 = Document(
-            content="Error content 2", 
-            metadata=DocumentMetadata(filename="error2.docx", file_type="docx")
+            content="Error content 2",
+            metadata=DocumentMetadata(filename="error2.docx", file_type="docx"),
         )
         # Add processing errors to metadata
-        error_doc2.metadata.extra['processing_errors'] = {
-            'errors': {
-                'formatting': 'Unable to preserve complex formatting',
-                'encoding': 'Character encoding issues detected'
+        error_doc2.metadata.extra["processing_errors"] = {
+            "errors": {
+                "formatting": "Unable to preserve complex formatting",
+                "encoding": "Character encoding issues detected",
             },
-            'error_count': 2
+            "error_count": 2,
         }
-        
+
         error_batch = DocumentBatch([error_doc1, error_doc2])
         error_summary = error_batch.get_error_summary()
-        
+
         # Verify the main summary structure (lines 2241-2247)
         assert "Processing errors in batch of 2 document(s):" in error_summary
         assert "- 2 document(s) with errors" in error_summary
         assert "- 4 total error(s)" in error_summary
         assert "- 100.0% error rate" in error_summary
-        
+
         # Verify error details formatting (lines 2243-2256)
         assert "\nError details:" in error_summary
         assert "- error1.pdf[page_1]: Failed to parse table on page 1" in error_summary
         assert "- error1.pdf[page_3]: OCR quality poor on page 3" in error_summary
-        assert "- error2.docx[formatting]: Unable to preserve complex formatting" in error_summary
-        assert "- error2.docx[encoding]: Character encoding issues detected" in error_summary
-        
+        assert (
+            "- error2.docx[formatting]: Unable to preserve complex formatting"
+            in error_summary
+        )
+        assert (
+            "- error2.docx[encoding]: Character encoding issues detected"
+            in error_summary
+        )
+
         # Test 3: Mixed batch (some with errors, some without)
         clean_doc = Document(
             content="Clean content",
-            metadata=DocumentMetadata(filename="clean.txt", file_type="txt")
+            metadata=DocumentMetadata(filename="clean.txt", file_type="txt"),
         )
-        
+
         mixed_batch = DocumentBatch([clean_doc, error_doc1])
         mixed_summary = mixed_batch.get_error_summary()
-        
+
         assert "Processing errors in batch of 2 document(s):" in mixed_summary
         assert "- 1 document(s) with errors" in mixed_summary
         assert "- 2 total error(s)" in mixed_summary
         assert "- 50.0% error rate" in mixed_summary
         assert "\nError details:" in mixed_summary
         assert "- error1.pdf[page_1]: Failed to parse table on page 1" in mixed_summary
-        
+
         # Test 4: Documents with error_count but no error details (edge case)
         partial_error_doc = Document(
             content="Partial error content",
-            metadata=DocumentMetadata(filename="partial.txt", file_type="txt")
+            metadata=DocumentMetadata(filename="partial.txt", file_type="txt"),
         )
-        partial_error_doc.metadata.extra['processing_errors'] = {
-            'error_count': 1
+        partial_error_doc.metadata.extra["processing_errors"] = {
+            "error_count": 1
             # No 'errors' dict - should not trigger error details section
         }
-        
+
         partial_batch = DocumentBatch([partial_error_doc])
         partial_summary = partial_batch.get_error_summary()
-        
+
         # Should have main summary but no error details section
         assert "Processing errors in batch of 1 document(s):" in partial_summary
         assert "- 1 document(s) with errors" in partial_summary

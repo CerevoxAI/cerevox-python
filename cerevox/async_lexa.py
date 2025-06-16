@@ -8,6 +8,9 @@ import os
 import re
 import time
 import warnings
+
+# Async Request Handling
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import (
     Any,
@@ -19,14 +22,13 @@ from typing import (
 )
 from urllib.parse import unquote, urlparse
 
-# Async Request Handling
-from concurrent.futures import ThreadPoolExecutor
 import aiofiles
 import aiohttp
 
 # Optional tqdm import for progress bars
 try:
     from tqdm import tqdm
+
     TQDM_AVAILABLE = True
 except ImportError:
     TQDM_AVAILABLE = False
@@ -294,31 +296,33 @@ class AsyncLexa:
 
     # Private Async Methods
 
-    def _create_progress_callback(self, show_progress: bool = False) -> Optional[Callable[[JobResponse], None]]:
+    def _create_progress_callback(
+        self, show_progress: bool = False
+    ) -> Optional[Callable[[JobResponse], None]]:
         """
         Create a progress callback function using tqdm if requested and available.
-        
+
         Args:
             show_progress: Whether to show progress bar
-            
+
         Returns:
             Progress callback function or None
         """
         if not show_progress:
             return None
-            
+
         if not TQDM_AVAILABLE:
             warnings.warn(
                 "tqdm is not available. Progress bar disabled. Install with: pip install tqdm",
                 ImportWarning,
             )
             return None
-            
+
         pbar = None
-        
+
         def progress_callback(status: JobResponse) -> None:
             nonlocal pbar
-            
+
             # Initialize progress bar on first call
             if pbar is None:
                 total = 100  # Progress is in percentage
@@ -326,33 +330,47 @@ class AsyncLexa:
                     total=total,
                     desc="Processing",
                     unit="%",
-                    bar_format="{l_bar}{bar}| {n:.0f}/{total:.0f}% [{elapsed}<{remaining}, {rate_fmt}]"
+                    bar_format="{l_bar}{bar}| {n:.0f}/{total:.0f}% [{elapsed}<{remaining}, {rate_fmt}]",
                 )
-                
+
             # Update progress bar
             if status.progress is not None:
                 # Update to current progress
                 pbar.n = status.progress
-                
+
                 # Update description with file/chunk info
                 desc_parts = ["Processing"]
-                
-                if status.total_files is not None and status.completed_files is not None:
-                    desc_parts.append(f"Files: {status.completed_files}/{status.total_files}")
-                    
-                if status.total_chunks is not None and status.completed_chunks is not None:
-                    desc_parts.append(f"Chunks: {status.completed_chunks}/{status.total_chunks}")
-                    
+
+                if (
+                    status.total_files is not None
+                    and status.completed_files is not None
+                ):
+                    desc_parts.append(
+                        f"Files: {status.completed_files}/{status.total_files}"
+                    )
+
+                if (
+                    status.total_chunks is not None
+                    and status.completed_chunks is not None
+                ):
+                    desc_parts.append(
+                        f"Chunks: {status.completed_chunks}/{status.total_chunks}"
+                    )
+
                 if status.failed_chunks and status.failed_chunks > 0:
                     desc_parts.append(f"Errors: {status.failed_chunks}")
-                    
+
                 pbar.set_description(" | ".join(desc_parts))
                 pbar.refresh()
-                
+
                 # Close progress bar when complete
-                if status.status in [JobStatus.COMPLETE, JobStatus.PARTIAL_SUCCESS, JobStatus.FAILED]:
+                if status.status in [
+                    JobStatus.COMPLETE,
+                    JobStatus.PARTIAL_SUCCESS,
+                    JobStatus.FAILED,
+                ]:
                     pbar.close()
-            
+
         return progress_callback
 
     async def _get_documents(
@@ -379,7 +397,7 @@ class AsyncLexa:
         # Create progress callback if show_progress is True and no callback provided
         if show_progress and progress_callback is None:
             progress_callback = self._create_progress_callback(show_progress)
-            
+
         status = await self._wait_for_completion(
             request_id, max_poll_time, poll_interval, progress_callback
         )
@@ -387,22 +405,22 @@ class AsyncLexa:
         # Handle the new response structure where results are in files field
         if status.files:
             # New format: files field contains CompletedFileData objects
-            all_elements = []
+            all_elements: List[Any] = []
             for filename, file_data in status.files.items():
                 # Check if this is CompletedFileData (has 'data' field)
-                if hasattr(file_data, 'data') and file_data.data:
+                if hasattr(file_data, "data") and file_data.data:
                     # Add all elements from this file
                     all_elements.extend(file_data.data)
-                elif isinstance(file_data, dict) and 'data' in file_data:
+                elif isinstance(file_data, dict) and "data" in file_data:
                     # Handle dict representation of CompletedFileData
-                    all_elements.extend(file_data['data'])
-                    
+                    all_elements.extend(file_data["data"])
+
             # If we have elements, create DocumentBatch from them
             if all_elements:
                 # Convert to the format expected by DocumentBatch.from_api_response
                 # The DocumentBatch expects either a list of elements or a dict with 'data' field
                 return DocumentBatch.from_api_response(all_elements)
-        
+
         # Fallback to old format for backward compatibility
         if status.result:
             return DocumentBatch.from_api_response(status.result)
@@ -930,7 +948,11 @@ class AsyncLexa:
         if not result.request_id:
             raise LexaError("Failed to get request ID from upload")
         return await self._get_documents(
-            result.request_id, max_poll_time, poll_interval, progress_callback, show_progress
+            result.request_id,
+            max_poll_time,
+            poll_interval,
+            progress_callback,
+            show_progress,
         )
 
     async def parse_urls(
@@ -960,7 +982,11 @@ class AsyncLexa:
         if not result.request_id:
             raise LexaError("Failed to get request ID from upload")
         return await self._get_documents(
-            result.request_id, max_poll_time, poll_interval, progress_callback, show_progress
+            result.request_id,
+            max_poll_time,
+            poll_interval,
+            progress_callback,
+            show_progress,
         )
 
     # Amazon S3 Integration (public)
@@ -1021,7 +1047,11 @@ class AsyncLexa:
         if not result.request_id:
             raise LexaError("Failed to get request ID from upload")
         return await self._get_documents(
-            result.request_id, max_poll_time, poll_interval, progress_callback, show_progress
+            result.request_id,
+            max_poll_time,
+            poll_interval,
+            progress_callback,
+            show_progress,
         )
 
     # Box Integration (public)
@@ -1064,7 +1094,11 @@ class AsyncLexa:
         if not result.request_id:
             raise LexaError("Failed to get request ID from upload")
         return await self._get_documents(
-            result.request_id, max_poll_time, poll_interval, progress_callback, show_progress
+            result.request_id,
+            max_poll_time,
+            poll_interval,
+            progress_callback,
+            show_progress,
         )
 
     # Dropbox Integration (public)
@@ -1107,7 +1141,11 @@ class AsyncLexa:
         if not result.request_id:
             raise LexaError("Failed to get request ID from upload")
         return await self._get_documents(
-            result.request_id, max_poll_time, poll_interval, progress_callback, show_progress
+            result.request_id,
+            max_poll_time,
+            poll_interval,
+            progress_callback,
+            show_progress,
         )
 
     # Microsoft SharePoint Integration (public)
@@ -1184,7 +1222,11 @@ class AsyncLexa:
         if not result.request_id:
             raise LexaError("Failed to get request ID from upload")
         return await self._get_documents(
-            result.request_id, max_poll_time, poll_interval, progress_callback, show_progress
+            result.request_id,
+            max_poll_time,
+            poll_interval,
+            progress_callback,
+            show_progress,
         )
 
     # Salesforce Integration (public)
@@ -1227,7 +1269,11 @@ class AsyncLexa:
         if not result.request_id:
             raise LexaError("Failed to get request ID from upload")
         return await self._get_documents(
-            result.request_id, max_poll_time, poll_interval, progress_callback, show_progress
+            result.request_id,
+            max_poll_time,
+            poll_interval,
+            progress_callback,
+            show_progress,
         )
 
     # Sendme Integration (public)
@@ -1259,5 +1305,9 @@ class AsyncLexa:
         if not result.request_id:
             raise LexaError("Failed to get request ID from upload")
         return await self._get_documents(
-            result.request_id, max_poll_time, poll_interval, progress_callback, show_progress
+            result.request_id,
+            max_poll_time,
+            poll_interval,
+            progress_callback,
+            show_progress,
         )
