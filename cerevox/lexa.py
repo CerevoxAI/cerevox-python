@@ -281,6 +281,10 @@ class Lexa:
 
     # Private methods
 
+    def _is_tqdm_available(self) -> bool:
+        """Check if tqdm is available"""
+        return TQDM_AVAILABLE and tqdm is not None
+
     def _create_progress_callback(
         self, show_progress: bool = False
     ) -> Optional[Callable[[JobResponse], None]]:
@@ -296,7 +300,7 @@ class Lexa:
         if not show_progress:
             return None
 
-        if not TQDM_AVAILABLE:
+        if not self._is_tqdm_available():
             warnings.warn(
                 "tqdm is not available. Progress bar disabled. Install with: pip install tqdm",
                 ImportWarning,

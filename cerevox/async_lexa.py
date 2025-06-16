@@ -296,6 +296,10 @@ class AsyncLexa:
 
     # Private Async Methods
 
+    def _is_tqdm_available(self) -> bool:
+        """Check if tqdm is available"""
+        return TQDM_AVAILABLE and tqdm is not None
+
     def _create_progress_callback(
         self, show_progress: bool = False
     ) -> Optional[Callable[[JobResponse], None]]:
@@ -311,7 +315,10 @@ class AsyncLexa:
         if not show_progress:
             return None
 
-        if not TQDM_AVAILABLE:
+        print(f"TQDM_AVAILABLE: {TQDM_AVAILABLE}")
+        print(f"self._is_tqdm_available(): {self._is_tqdm_available()}")
+
+        if not self._is_tqdm_available():
             warnings.warn(
                 "tqdm is not available. Progress bar disabled. Install with: pip install tqdm",
                 ImportWarning,

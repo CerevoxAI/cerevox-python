@@ -4246,46 +4246,6 @@ class TestFinalMissingLines:
 class TestLexaNewFormat:
     """Tests to cover the new format for Lexa"""
 
-    def test_new_import(self):
-        """Test tqdm import exception handling"""
-        import sys
-        from unittest.mock import patch
-
-        # Test successful import case - tqdm available
-        with patch.dict("sys.modules", {}, clear=False):
-            # Remove lexa from modules to force fresh import
-            if "cerevox.lexa" in sys.modules:
-                del sys.modules["cerevox.lexa"]
-
-            # Import the module fresh
-            import cerevox.lexa
-
-            # Verify that TQDM_AVAILABLE is True when import succeeds
-            assert cerevox.lexa.TQDM_AVAILABLE is True
-
-        # Test ImportError case - cause tqdm import to fail
-        with patch.dict("sys.modules", {}, clear=False):
-            # Remove both tqdm and lexa from modules
-            modules_to_remove = ["tqdm", "cerevox.lexa"]
-            for module in modules_to_remove:
-                if module in sys.modules:
-                    del sys.modules[module]
-
-            # Mock tqdm import to raise ImportError
-            original_import = __builtins__["__import__"]
-
-            def mock_import(name, *args, **kwargs):
-                if name == "tqdm":
-                    raise ImportError("No module named 'tqdm'")
-                return original_import(name, *args, **kwargs)
-
-            with patch("builtins.__import__", side_effect=mock_import):
-                # Import the module fresh
-                import cerevox.lexa
-
-                # Verify that TQDM_AVAILABLE is False when ImportError occurs
-                assert cerevox.lexa.TQDM_AVAILABLE is False
-
     def test_create_progress_callback(self):
         """Test create_progress_callback comprehensive functionality"""
         import warnings
@@ -4316,24 +4276,24 @@ class TestLexaNewFormat:
 
         assert callable(progress_callback)
 
-    @patch("cerevox.lexa.TQDM_AVAILABLE", False)
     def test_create_progress_callback_tqdm_not_available(self):
         """Test create_progress_callback when tqdm is not available"""
         import warnings
 
         client = Lexa(api_key="test-key")
 
-        with patch("warnings.warn") as mock_warn:
-            progress_callback = client._create_progress_callback(show_progress=True)
+        with patch.object(client, "_is_tqdm_available", return_value=False):
+            with patch("warnings.warn") as mock_warn:
+                progress_callback = client._create_progress_callback(show_progress=True)
 
-            # Should return None when tqdm is not available
-            assert progress_callback is None
+                # Should return None when tqdm is not available
+                assert progress_callback is None
 
-            # Should warn about tqdm not being available
-            mock_warn.assert_called_once_with(
-                "tqdm is not available. Progress bar disabled. Install with: pip install tqdm",
-                ImportWarning,
-            )
+                # Should warn about tqdm not being available
+                mock_warn.assert_called_once_with(
+                    "tqdm is not available. Progress bar disabled. Install with: pip install tqdm",
+                    ImportWarning,
+                )
 
     @patch("cerevox.lexa.TQDM_AVAILABLE", True)
     def test_create_progress_callback_functionality(self):
@@ -4520,3 +4480,56 @@ class TestLexaNewFormat:
             assert mock_tqdm_class.call_count == 2
             assert mock_tqdm_instance1.n == 30
             assert mock_tqdm_instance2.n == 30
+
+    def test_new_import(self):
+        """Test tqdm import exception handling"""
+        import sys
+        from unittest.mock import patch
+
+        # Save the original module state for restoration
+        original_lexa = sys.modules.get("cerevox.lexa")
+
+        try:
+            # Test successful import case - tqdm available
+            with patch.dict("sys.modules", {}, clear=False):
+                # Remove lexa from modules to force fresh import
+                if "cerevox.lexa" in sys.modules:
+                    del sys.modules["cerevox.lexa"]
+
+                # Import the module fresh
+                import cerevox.lexa
+
+                # Verify that TQDM_AVAILABLE is True when import succeeds
+                assert cerevox.lexa.TQDM_AVAILABLE is True
+
+            # Test ImportError case - cause tqdm import to fail
+            with patch.dict("sys.modules", {}, clear=False):
+                # Remove both tqdm and lexa from modules
+                modules_to_remove = ["tqdm", "cerevox.lexa"]
+                for module in modules_to_remove:
+                    if module in sys.modules:
+                        del sys.modules[module]
+
+                # Mock tqdm import to raise ImportError
+                original_import = __builtins__["__import__"]
+
+                def mock_import(name, *args, **kwargs):
+                    if name == "tqdm":
+                        raise ImportError("No module named 'tqdm'")
+                    return original_import(name, *args, **kwargs)
+
+                with patch("builtins.__import__", side_effect=mock_import):
+                    # Import the module fresh
+                    import cerevox.lexa
+
+                    # Verify that TQDM_AVAILABLE is False when ImportError occurs
+                    assert cerevox.lexa.TQDM_AVAILABLE is False
+        finally:
+            # Restore the original module state
+            if "cerevox.lexa" in sys.modules:
+                del sys.modules["cerevox.lexa"]
+            if original_lexa is not None:
+                sys.modules["cerevox.lexa"] = original_lexa
+            else:
+                # Force a clean reimport of the module in its normal state
+                import cerevox.lexa

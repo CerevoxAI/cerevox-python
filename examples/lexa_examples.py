@@ -7,7 +7,7 @@ This example demonstrates the complete functionality of the Cerevox Lexa Python 
 📚 BASIC PARSING:
 - Parse local files (single and multiple)
 - Parse files from URLs
-- Different processing modes (DEFAULT, FAST, DETAILED)
+- Different processing modes (DEFAULT, ADVANCED)
 - Progress callbacks and timeout handling
 
 ☁️ CLOUD STORAGE INTEGRATIONS:
@@ -97,7 +97,7 @@ def demonstrate_basic_parsing(client):
 
         # Example 3: Parse with different modes
         print("\n🔍 Example 3: Different Processing Modes")
-        for mode in [ProcessingMode.DEFAULT, ProcessingMode.FAST]:
+        for mode in [ProcessingMode.DEFAULT, ProcessingMode.ADVANCED]:
             print(f"   Testing mode: {mode.value}")
             documents = client.parse(str(test_file1), mode=mode)
             print(f"   ✅ Mode {mode.value}: {len(documents)} document(s)")
@@ -623,7 +623,7 @@ def demonstrate_advanced_features(client):
         file_path = str(advanced_file1)
 
         # Test different modes
-        modes_to_test = [ProcessingMode.DEFAULT, ProcessingMode.FAST]
+        modes_to_test = [ProcessingMode.DEFAULT, ProcessingMode.ADVANCED]
         results = {}
 
         for mode in modes_to_test:
@@ -783,8 +783,7 @@ def demonstrate_best_practices(client):
         print("\n4️⃣ Processing Mode Selection")
         print("   💡 Choose processing modes based on your needs")
         print("      - DEFAULT: Balanced speed and accuracy")
-        print("      - FAST: Quick processing for simple documents")
-        print("      - DETAILED: Thorough analysis for complex documents")
+        print("      - ADVANCED: Thorough analysis for complex documents")
 
         # Best Practice 5: Resource management
         print("\n5️⃣ Resource Management")
@@ -796,7 +795,7 @@ def demonstrate_best_practices(client):
         file_size = batch_files[0].stat().st_size
         print(f"   Example file size: {file_size} bytes")
         if file_size < 1024 * 1024:  # Less than 1MB
-            print("   📝 Recommendation: Use FAST mode for small text files")
+            print("   📝 Recommendation: Use DEFAULT mode for small text files")
         elif file_size < 10 * 1024 * 1024:  # Less than 10MB
             print("   📝 Recommendation: Use DEFAULT mode with 60s timeout")
         else:

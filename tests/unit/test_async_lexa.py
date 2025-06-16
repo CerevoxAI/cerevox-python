@@ -21,6 +21,7 @@ import pytest
 import pytest_asyncio
 from pydantic_core import ValidationError
 
+import cerevox.async_lexa
 from cerevox.async_lexa import AsyncLexa
 from cerevox.exceptions import (
     LexaAuthError,
@@ -4550,258 +4551,278 @@ class TestFinal100PercentCoverageCompletion:
 
 class TestAsyncLexaNewFormat:
 
-    def test_new_import(self):
-        """Test new import"""
-        import importlib
-
-        # Test successful import case - mock tqdm to be available
-        mock_tqdm = Mock()
-        with patch.dict("sys.modules", {"tqdm": mock_tqdm}):
-            # Remove the module from cache to force reimport
-            if "cerevox.async_lexa" in sys.modules:
-                del sys.modules["cerevox.async_lexa"]
-
-            # Import the module fresh
-            import cerevox.async_lexa
-
-            # Verify that TQDM_AVAILABLE is True when import succeeds
-            assert cerevox.async_lexa.TQDM_AVAILABLE is True
-
-        # Test ImportError case - cause tqdm import to fail
-        with patch.dict("sys.modules", {}, clear=False):
-            # Remove both tqdm and async_lexa from modules
-            modules_to_remove = ["tqdm", "cerevox.async_lexa"]
-            for module in modules_to_remove:
-                if module in sys.modules:
-                    del sys.modules[module]
-
-            # Mock tqdm import to raise ImportError
-            original_import = __builtins__["__import__"]
-
-            def mock_import(name, *args, **kwargs):
-                if name == "tqdm":
-                    raise ImportError("No module named 'tqdm'")
-                return original_import(name, *args, **kwargs)
-
-            with patch("builtins.__import__", side_effect=mock_import):
-                # Import the module fresh
-                import cerevox.async_lexa
-
-                # Verify that TQDM_AVAILABLE is False when ImportError occurs
-                assert cerevox.async_lexa.TQDM_AVAILABLE is False
-
-    def test_create_progress_callback(self):
+    @pytest.mark.asyncio
+    async def test_create_progress_callback(self):
         """Test create_progress_callback comprehensive functionality"""
-        client = AsyncLexa(api_key="test-key")
-
-        # Test show_progress=False returns None
-        progress_callback = client._create_progress_callback(show_progress=False)
-        assert progress_callback is None
-
-        # Test show_progress=True returns callback when tqdm is available
-        progress_callback = client._create_progress_callback(show_progress=True)
-        assert progress_callback is not None
-        assert callable(progress_callback)
-
-    @patch("cerevox.async_lexa.TQDM_AVAILABLE", False)
-    def test_create_progress_callback_tqdm_not_available(self):
-        """Test create_progress_callback when tqdm is not available"""
-        client = AsyncLexa(api_key="test-key")
-
-        with patch("warnings.warn") as mock_warn:
-            progress_callback = client._create_progress_callback(show_progress=True)
-
-            # Should return None when tqdm is not available
+        async with AsyncLexa(api_key="test-key") as client:
+            # Test show_progress=False returns None
+            progress_callback = client._create_progress_callback(show_progress=False)
             assert progress_callback is None
 
-            # Should warn about tqdm not being available
-            mock_warn.assert_called_once_with(
-                "tqdm is not available. Progress bar disabled. Install with: pip install tqdm",
-                ImportWarning,
-            )
-
-    @patch("cerevox.async_lexa.TQDM_AVAILABLE", True)
-    def test_create_progress_callback_functionality(self):
-        """Test the actual progress callback functionality"""
-        client = AsyncLexa(api_key="test-key")
-
-        # Mock tqdm
-        mock_tqdm_instance = Mock()
-        mock_tqdm_class = Mock(return_value=mock_tqdm_instance)
-
-        with patch("cerevox.async_lexa.tqdm", mock_tqdm_class):
+            # Test show_progress=True returns callback when tqdm is available
             progress_callback = client._create_progress_callback(show_progress=True)
             assert progress_callback is not None
+            assert callable(progress_callback)
 
-            # Test initial call - should create progress bar
-            status = JobResponse(
-                request_id="test-123",
-                status=JobStatus.PROCESSING,
-                progress=25,
-                total_files=10,
-                completed_files=3,
-                total_chunks=100,
-                completed_chunks=25,
-                failed_chunks=0,
-            )
+    @pytest.mark.asyncio
+    async def test_create_progress_callback_tqdm_not_available(self):
+        """Test create_progress_callback when tqdm is not available"""
 
-            progress_callback(status)
+        async with AsyncLexa(api_key="test-key") as client:
+            # Patch the _is_tqdm_available method to return False
+            with patch.object(client, "_is_tqdm_available", return_value=False):
+                with patch("warnings.warn") as mock_warn:
+                    progress_callback = client._create_progress_callback(
+                        show_progress=True
+                    )
 
-            # Verify tqdm was initialized
-            mock_tqdm_class.assert_called_once_with(
-                total=100,
-                desc="Processing",
-                unit="%",
-                bar_format="{l_bar}{bar}| {n:.0f}/{total:.0f}% [{elapsed}<{remaining}, {rate_fmt}]",
-            )
+                    # Should return None when tqdm is not available
+                    assert progress_callback is None
 
-            # Verify progress was set
-            assert mock_tqdm_instance.n == 25
+                    # Should warn about tqdm not being available
+                    mock_warn.assert_called_once_with(
+                        "tqdm is not available. Progress bar disabled. Install with: pip install tqdm",
+                        ImportWarning,
+                    )
 
-            # Verify description was updated
-            expected_desc = "Processing | Files: 3/10 | Chunks: 25/100"
-            mock_tqdm_instance.set_description.assert_called_with(expected_desc)
-            mock_tqdm_instance.refresh.assert_called()
+    @pytest.mark.asyncio
+    async def test_create_progress_callback_functionality(self):
+        """Test the actual progress callback functionality"""
+        async with AsyncLexa(api_key="test-key") as client:
+            # Mock tqdm
+            mock_tqdm_instance = Mock()
+            mock_tqdm_class = Mock(return_value=mock_tqdm_instance)
 
-    @patch("cerevox.async_lexa.TQDM_AVAILABLE", True)
-    def test_create_progress_callback_with_failed_chunks(self):
-        """Test progress callback with failed chunks"""
-        client = AsyncLexa(api_key="test-key")
-
-        mock_tqdm_instance = Mock()
-        mock_tqdm_class = Mock(return_value=mock_tqdm_instance)
-
-        with patch("cerevox.async_lexa.tqdm", mock_tqdm_class):
-            progress_callback = client._create_progress_callback(show_progress=True)
-
-            # Test with failed chunks
-            status = JobResponse(
-                request_id="test-123",
-                status=JobStatus.PROCESSING,
-                progress=50,
-                total_files=5,
-                completed_files=2,
-                total_chunks=50,
-                completed_chunks=25,
-                failed_chunks=3,
-            )
-
-            progress_callback(status)
-
-            # Verify description includes error count
-            expected_desc = "Processing | Files: 2/5 | Chunks: 25/50 | Errors: 3"
-            mock_tqdm_instance.set_description.assert_called_with(expected_desc)
-
-    @patch("cerevox.async_lexa.TQDM_AVAILABLE", True)
-    def test_create_progress_callback_completion_statuses(self):
-        """Test progress callback with completion statuses"""
-        client = AsyncLexa(api_key="test-key")
-
-        mock_tqdm_instance = Mock()
-        mock_tqdm_class = Mock(return_value=mock_tqdm_instance)
-
-        completion_statuses = [
-            JobStatus.COMPLETE,
-            JobStatus.PARTIAL_SUCCESS,
-            JobStatus.FAILED,
-        ]
-
-        for status_type in completion_statuses:
             with patch("cerevox.async_lexa.tqdm", mock_tqdm_class):
                 progress_callback = client._create_progress_callback(show_progress=True)
+                assert progress_callback is not None
 
+                # Test initial call - should create progress bar
                 status = JobResponse(
                     request_id="test-123",
-                    status=status_type,
-                    progress=100,
-                    total_files=1,
-                    completed_files=1,
-                    total_chunks=10,
-                    completed_chunks=10,
+                    status=JobStatus.PROCESSING,
+                    progress=25,
+                    total_files=10,
+                    completed_files=3,
+                    total_chunks=100,
+                    completed_chunks=25,
                     failed_chunks=0,
                 )
 
                 progress_callback(status)
 
-                # Verify progress bar was closed on completion
-                mock_tqdm_instance.close.assert_called()
+                # Verify tqdm was initialized
+                mock_tqdm_class.assert_called_once_with(
+                    total=100,
+                    desc="Processing",
+                    unit="%",
+                    bar_format="{l_bar}{bar}| {n:.0f}/{total:.0f}% [{elapsed}<{remaining}, {rate_fmt}]",
+                )
+
+                # Verify progress was set
+                assert mock_tqdm_instance.n == 25
+
+                # Verify description was updated
+                expected_desc = "Processing | Files: 3/10 | Chunks: 25/100"
+                mock_tqdm_instance.set_description.assert_called_with(expected_desc)
+                mock_tqdm_instance.refresh.assert_called()
 
     @patch("cerevox.async_lexa.TQDM_AVAILABLE", True)
-    def test_create_progress_callback_minimal_status(self):
+    @pytest.mark.asyncio
+    async def test_create_progress_callback_with_failed_chunks(self):
+        """Test progress callback with failed chunks"""
+        async with AsyncLexa(api_key="test-key") as client:
+            mock_tqdm_instance = Mock()
+            mock_tqdm_class = Mock(return_value=mock_tqdm_instance)
+
+            with patch("cerevox.async_lexa.tqdm", mock_tqdm_class):
+                progress_callback = client._create_progress_callback(show_progress=True)
+
+                # Test with failed chunks
+                status = JobResponse(
+                    request_id="test-123",
+                    status=JobStatus.PROCESSING,
+                    progress=50,
+                    total_files=5,
+                    completed_files=2,
+                    total_chunks=50,
+                    completed_chunks=25,
+                    failed_chunks=3,
+                )
+
+                progress_callback(status)
+
+                # Verify description includes error count
+                expected_desc = "Processing | Files: 2/5 | Chunks: 25/50 | Errors: 3"
+                mock_tqdm_instance.set_description.assert_called_with(expected_desc)
+
+    @patch("cerevox.async_lexa.TQDM_AVAILABLE", True)
+    @pytest.mark.asyncio
+    async def test_create_progress_callback_completion_statuses(self):
+        """Test progress callback with completion statuses"""
+        async with AsyncLexa(api_key="test-key") as client:
+            mock_tqdm_instance = Mock()
+            mock_tqdm_class = Mock(return_value=mock_tqdm_instance)
+
+            completion_statuses = [
+                JobStatus.COMPLETE,
+                JobStatus.PARTIAL_SUCCESS,
+                JobStatus.FAILED,
+            ]
+
+            for status_type in completion_statuses:
+                with patch("cerevox.async_lexa.tqdm", mock_tqdm_class):
+                    progress_callback = client._create_progress_callback(
+                        show_progress=True
+                    )
+
+                    status = JobResponse(
+                        request_id="test-123",
+                        status=status_type,
+                        progress=100,
+                        total_files=1,
+                        completed_files=1,
+                        total_chunks=10,
+                        completed_chunks=10,
+                        failed_chunks=0,
+                    )
+
+                    progress_callback(status)
+
+                    # Verify progress bar was closed on completion
+                    mock_tqdm_instance.close.assert_called()
+
+    @patch("cerevox.async_lexa.TQDM_AVAILABLE", True)
+    @pytest.mark.asyncio
+    async def test_create_progress_callback_minimal_status(self):
         """Test progress callback with minimal status information"""
-        client = AsyncLexa(api_key="test-key")
+        async with AsyncLexa(api_key="test-key") as client:
+            mock_tqdm_instance = Mock()
+            mock_tqdm_class = Mock(return_value=mock_tqdm_instance)
 
-        mock_tqdm_instance = Mock()
-        mock_tqdm_class = Mock(return_value=mock_tqdm_instance)
+            with patch("cerevox.async_lexa.tqdm", mock_tqdm_class):
+                progress_callback = client._create_progress_callback(show_progress=True)
 
-        with patch("cerevox.async_lexa.tqdm", mock_tqdm_class):
-            progress_callback = client._create_progress_callback(show_progress=True)
+                # Test with only progress information
+                status = JobResponse(
+                    request_id="test-123", status=JobStatus.PROCESSING, progress=30
+                )
 
-            # Test with only progress information
-            status = JobResponse(
-                request_id="test-123", status=JobStatus.PROCESSING, progress=30
-            )
+                progress_callback(status)
 
-            progress_callback(status)
-
-            # Should still work with minimal info
-            assert mock_tqdm_instance.n == 30
-            mock_tqdm_instance.set_description.assert_called_with("Processing")
+                # Should still work with minimal info
+                assert mock_tqdm_instance.n == 30
+                mock_tqdm_instance.set_description.assert_called_with("Processing")
 
     @patch("cerevox.async_lexa.TQDM_AVAILABLE", True)
-    def test_create_progress_callback_closure_state(self):
+    @pytest.mark.asyncio
+    async def test_create_progress_callback_closure_state(self):
         """Test that progress callback maintains closure state correctly"""
-        client = AsyncLexa(api_key="test-key")
+        async with AsyncLexa(api_key="test-key") as client:
+            mock_tqdm_instance = Mock()
+            mock_tqdm_class = Mock(return_value=mock_tqdm_instance)
 
-        mock_tqdm_instance = Mock()
-        mock_tqdm_class = Mock(return_value=mock_tqdm_instance)
+            with patch("cerevox.async_lexa.tqdm", mock_tqdm_class):
+                progress_callback = client._create_progress_callback(show_progress=True)
 
-        with patch("cerevox.async_lexa.tqdm", mock_tqdm_class):
-            progress_callback = client._create_progress_callback(show_progress=True)
+                # First call should initialize tqdm
+                status1 = JobResponse(
+                    request_id="test-123", status=JobStatus.PROCESSING, progress=25
+                )
+                progress_callback(status1)
 
-            # First call should initialize tqdm
-            status1 = JobResponse(
-                request_id="test-123", status=JobStatus.PROCESSING, progress=25
-            )
-            progress_callback(status1)
+                # Verify tqdm was created
+                assert mock_tqdm_class.call_count == 1
 
-            # Verify tqdm was created
-            assert mock_tqdm_class.call_count == 1
+                # Second call should reuse the same tqdm instance
+                status2 = JobResponse(
+                    request_id="test-123", status=JobStatus.PROCESSING, progress=50
+                )
+                progress_callback(status2)
 
-            # Second call should reuse the same tqdm instance
-            status2 = JobResponse(
-                request_id="test-123", status=JobStatus.PROCESSING, progress=50
-            )
-            progress_callback(status2)
-
-            # Should not create another tqdm instance
-            assert mock_tqdm_class.call_count == 1
-            # Should update progress to new value
-            assert mock_tqdm_instance.n == 50
+                # Should not create another tqdm instance
+                assert mock_tqdm_class.call_count == 1
+                # Should update progress to new value
+                assert mock_tqdm_instance.n == 50
 
     @patch("cerevox.async_lexa.TQDM_AVAILABLE", True)
-    def test_create_progress_callback_multiple_instances(self):
+    @pytest.mark.asyncio
+    async def test_create_progress_callback_multiple_instances(self):
         """Test that different callback instances are independent"""
-        client = AsyncLexa(api_key="test-key")
-
-        mock_tqdm_instance1 = Mock()
-        mock_tqdm_instance2 = Mock()
-        mock_tqdm_class = Mock(side_effect=[mock_tqdm_instance1, mock_tqdm_instance2])
-
-        with patch("cerevox.async_lexa.tqdm", mock_tqdm_class):
-            # Create two separate progress callbacks
-            callback1 = client._create_progress_callback(show_progress=True)
-            callback2 = client._create_progress_callback(show_progress=True)
-
-            # Use both callbacks
-            status = JobResponse(
-                request_id="test-123", status=JobStatus.PROCESSING, progress=30
+        async with AsyncLexa(api_key="test-key") as client:
+            mock_tqdm_instance1 = Mock()
+            mock_tqdm_instance2 = Mock()
+            mock_tqdm_class = Mock(
+                side_effect=[mock_tqdm_instance1, mock_tqdm_instance2]
             )
 
-            callback1(status)
-            callback2(status)
+            with patch("cerevox.async_lexa.tqdm", mock_tqdm_class):
+                # Create two separate progress callbacks
+                callback1 = client._create_progress_callback(show_progress=True)
+                callback2 = client._create_progress_callback(show_progress=True)
 
-            # Both should create their own tqdm instances
-            assert mock_tqdm_class.call_count == 2
-            assert mock_tqdm_instance1.n == 30
-            assert mock_tqdm_instance2.n == 30
+                # Use both callbacks
+                status = JobResponse(
+                    request_id="test-123", status=JobStatus.PROCESSING, progress=30
+                )
+
+                callback1(status)
+                callback2(status)
+
+                # Both should create their own tqdm instances
+                assert mock_tqdm_class.call_count == 2
+                assert mock_tqdm_instance1.n == 30
+                assert mock_tqdm_instance2.n == 30
+
+    def test_new_import(self):
+        """Test new import"""
+        import importlib
+
+        # Save the original module state for restoration
+        original_async_lexa = sys.modules.get("cerevox.async_lexa")
+
+        try:
+            # Test successful import case - mock tqdm to be available
+            mock_tqdm = Mock()
+            with patch.dict("sys.modules", {"tqdm": mock_tqdm}):
+                # Remove the module from cache to force reimport
+                if "cerevox.async_lexa" in sys.modules:
+                    del sys.modules["cerevox.async_lexa"]
+
+                # Import the module fresh
+                import cerevox.async_lexa
+
+                # Verify that TQDM_AVAILABLE is True when import succeeds
+                assert cerevox.async_lexa.TQDM_AVAILABLE is True
+
+            # Test ImportError case - cause tqdm import to fail
+            with patch.dict("sys.modules", {}, clear=False):
+                # Remove both tqdm and async_lexa from modules
+                modules_to_remove = ["tqdm", "cerevox.async_lexa"]
+                for module in modules_to_remove:
+                    if module in sys.modules:
+                        del sys.modules[module]
+
+                # Mock tqdm import to raise ImportError
+                original_import = __builtins__["__import__"]
+
+                def mock_import(name, *args, **kwargs):
+                    if name == "tqdm":
+                        raise ImportError("No module named 'tqdm'")
+                    return original_import(name, *args, **kwargs)
+
+                with patch("builtins.__import__", side_effect=mock_import):
+                    # Import the module fresh
+                    import cerevox.async_lexa
+
+                    # Verify that TQDM_AVAILABLE is False when ImportError occurs
+                    assert cerevox.async_lexa.TQDM_AVAILABLE is False
+        finally:
+            # Restore the original module state
+            if "cerevox.async_lexa" in sys.modules:
+                del sys.modules["cerevox.async_lexa"]
+            if original_async_lexa is not None:
+                sys.modules["cerevox.async_lexa"] = original_async_lexa
+            else:
+                # Force a clean reimport of the module in its normal state
+                import cerevox.async_lexa

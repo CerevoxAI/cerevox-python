@@ -14,7 +14,7 @@
 <p align="center">
   <a href="https://github.com/cerevoxAI/cerevox-python/actions"><img src="https://img.shields.io/github/actions/workflow/status/CerevoxAI/cerevox-python/ci.yml" alt="CI Status"></a>
   <a href="https://codecov.io/gh/CerevoxAI/cerevox-python"><img src="https://codecov.io/gh/CerevoxAI/cerevox-python/branch/main/graph/badge.svg" alt="Code Coverage"></a>
-  <a href="https://qlty.sh/gh/CerevoxAI/projects/cerevox-python"><img src="https://qlty.sh/badges/8be43bff-101e-4701-a522-84b27c9e0f9b/maintainability.svg" alt="Maintainability"></a>
+  <a href="https://github.com/cerevoxAI/cerevox-python"><img src="https://qlty.sh/badges/8be43bff-101e-4701-a522-84b27c9e0f9b/maintainability.svg" alt="Maintainability"></a>
   <a href="https://pypi.org/project/cerevox/"><img src="https://img.shields.io/pypi/v/cerevox?color=blue" alt="PyPI version"></a>
   <a href="https://pypi.org/project/cerevox/"><img src="https://img.shields.io/pypi/pyversions/cerevox" alt="Python versions"></a>
   <a href="https://github.com/cerevoxAI/cerevox-python/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License"></a>
