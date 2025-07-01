@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.1.3] - 2025-01-03
+## [0.1.3] - 2025-07-01
 
 ### Added
 - New `BasicFileInfo` model for handling simplified file information during early processing stages
