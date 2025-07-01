@@ -84,7 +84,7 @@ class SourceInfo(BaseModel):
 class ContentInfo(BaseModel):
     """Content extracted from document"""
 
-    html: str = Field(..., description="Content formatted as html")
+    html: Optional[str] = Field(None, description="Content formatted as html")
     markdown: str = Field(..., description="Content formatted as markdown")
     text: str = Field(..., description="Plain text content")
 

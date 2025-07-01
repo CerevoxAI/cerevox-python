@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.4] - 2025-07-01
+
+### Fixed
+- Fixed Pydantic validation error in `ContentInfo` model when API responses contain content without HTML field
+- Made `html` field optional in `ContentInfo` to handle variable API response formats
+- Improved robustness of document parsing when HTML content is not available
+
 ## [0.1.3] - 2025-07-01
 
 ### Added
@@ -86,7 +93,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - pydantic >= 2.0.0
 - beautifulsoup4 >= 4.11.0
 
-[Unreleased]: https://github.com/CerevoxAI/cerevox-python/compare/v0.1.3...HEAD
+[Unreleased]: https://github.com/CerevoxAI/cerevox-python/compare/v0.1.4...HEAD
+[0.1.4]: https://github.com/CerevoxAI/cerevox-python/compare/v0.1.3...v0.1.4
 [0.1.3]: https://github.com/CerevoxAI/cerevox-python/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/CerevoxAI/cerevox-python/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/CerevoxAI/cerevox-python/compare/v0.1.0...v0.1.1

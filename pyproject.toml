@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "cerevox"
-version = "0.1.3"
+version = "0.1.4"
 authors = [
     {name = "Cerevox", email = "support@cerevox.ai"},
     {name = "Muaz Siddiqui", email = "muaz@cerevox.ai"}
