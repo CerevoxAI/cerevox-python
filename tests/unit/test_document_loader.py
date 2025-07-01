@@ -6233,7 +6233,7 @@ class TestFinal5:
         assert doc_element.source.element.sentences == 1
 
         # Verify document metadata
-        assert document.metadata.filename == "document"
+        assert document.metadata.filename == "test_document.pdf"
         assert document.metadata.total_pages == 1
         assert document.metadata.total_elements == 1
 

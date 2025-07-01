@@ -759,7 +759,7 @@ class Document:
 
     @classmethod
     def _from_elements_list(
-        cls, elements_data: List[Dict[str, Any]], filename: str = "document"
+        cls, elements_data: List[Any], filename: str = "document"
     ) -> "Document":
         """Parse the actual API response"""
         if not elements_data:
@@ -774,19 +774,42 @@ class Document:
         # Extract metadata from first element with validation
         try:
             first_element = elements_data[0]
-            source_info = first_element.get("source", {})
-            file_info = source_info.get("file", {})
 
-            # Handle both 'extension' and 'extenstion' (typo in API response)
-            file_extension = file_info.get("extension")
-            metadata = DocumentMetadata(
-                filename=file_info.get("name", filename),
-                file_type=file_extension.lstrip(".") if file_extension else "unknown",
-                file_id=str(file_info.get("id", "")),
-                mime_type=file_info.get("mime_type"),
-                original_mime_type=file_info.get("original_mime_type"),
-                total_elements=len(elements_data),
-            )
+            # Handle both ContentElement objects and dictionary format
+            if (
+                not isinstance(first_element, dict)
+                and hasattr(first_element, "content")
+                and hasattr(first_element, "element_type")
+            ):
+                # This is a ContentElement object from Pydantic models
+                file_extension = first_element.source.file.extension
+                metadata = DocumentMetadata(
+                    filename=first_element.source.file.name or filename,
+                    file_type=(
+                        file_extension.lstrip(".") if file_extension else "unknown"
+                    ),
+                    file_id=str(first_element.source.file.id or ""),
+                    mime_type=first_element.source.file.mime_type,
+                    original_mime_type=first_element.source.file.original_mime_type,
+                    total_elements=len(elements_data),
+                )
+            else:
+                # This is a dictionary format - original code path
+                source_info = first_element.get("source", {})
+                file_info = source_info.get("file", {})
+
+                # Handle both 'extension' and 'extenstion' (typo in API response)
+                file_extension = file_info.get("extension")
+                metadata = DocumentMetadata(
+                    filename=file_info.get("name", filename),
+                    file_type=(
+                        file_extension.lstrip(".") if file_extension else "unknown"
+                    ),
+                    file_id=str(file_info.get("id", "")),
+                    mime_type=file_info.get("mime_type"),
+                    original_mime_type=file_info.get("original_mime_type"),
+                    total_elements=len(elements_data),
+                )
         except (AttributeError, KeyError, IndexError, TypeError) as e:
             warnings.warn(
                 f"Error extracting metadata from API response: {str(e)}. Using defaults.",

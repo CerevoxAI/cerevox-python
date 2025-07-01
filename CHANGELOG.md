@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.6] - 2025-07-01
+
+### Enhanced
+- **Complete ContentElement Support**: Enhanced `_from_elements_list` method to fully handle both Pydantic ContentElement objects and dictionary formats in all processing paths
+- **Metadata Extraction**: Added dual-format support for metadata extraction from first element, handling both ContentElement object properties and dictionary key access
+- **Type Safety**: Updated type annotations from `List[Dict[str, Any]]` to `List[Any]` to accurately reflect support for mixed input types
+- **Mixed Format Processing**: Added capability to process lists containing both ContentElement objects and dictionary elements simultaneously
+
+### Fixed
+- Resolved "ContentElement object has no attribute 'get'" error in metadata extraction phase (line 791)
+- Fixed type annotation mismatch in `_from_elements_list` method parameter
+- Improved error handling to gracefully handle both object attribute access and dictionary key access patterns
+- Enhanced robustness when processing mixed content types in the same elements list
+
+### Improved
+- **Backward Compatibility**: Maintained full backward compatibility with existing dictionary-based API responses
+- **Error Resilience**: Enhanced exception handling to cover both AttributeError (for objects) and KeyError (for dictionaries)
+- **Code Documentation**: Added comprehensive inline comments explaining dual-format handling approach
+- **Production Readiness**: Ensured all calling functions (`from_api_response`, `from_completed_file_data`, `DocumentBatch.from_api_response`) work seamlessly with ContentElement objects
+
 ## [0.1.5] - 2025-07-01
 
 ### Fixed
@@ -112,7 +132,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - pydantic >= 2.0.0
 - beautifulsoup4 >= 4.11.0
 
-[Unreleased]: https://github.com/CerevoxAI/cerevox-python/compare/v0.1.5...HEAD
+[Unreleased]: https://github.com/CerevoxAI/cerevox-python/compare/v0.1.6...HEAD
+[0.1.6]: https://github.com/CerevoxAI/cerevox-python/compare/v0.1.5...v0.1.6
 [0.1.5]: https://github.com/CerevoxAI/cerevox-python/compare/v0.1.4...v0.1.5
 [0.1.4]: https://github.com/CerevoxAI/cerevox-python/compare/v0.1.3...v0.1.4
 [0.1.3]: https://github.com/CerevoxAI/cerevox-python/compare/v0.1.2...v0.1.3
