@@ -117,6 +117,14 @@ class FileProcessingInfo(BaseModel):
     )
 
 
+class BasicFileInfo(BaseModel):
+    """Basic file information during early processing stages"""
+
+    name: str = Field(..., description="Name of the file")
+    filepath: Optional[str] = Field(None, description="Full path to the file")
+    status: str = Field(..., description="Status of this file processing")
+
+
 class CompletedFileData(BaseModel):
     """Data structure for completed file processing"""
 
@@ -243,9 +251,9 @@ class JobResponse(BaseModel):
     )
 
     # Detailed file information
-    files: Optional[Dict[str, Union[FileProcessingInfo, CompletedFileData]]] = Field(
-        None, description="Per-file processing information or completed data"
-    )
+    files: Optional[
+        Dict[str, Union[BasicFileInfo, FileProcessingInfo, CompletedFileData]]
+    ] = Field(None, description="Per-file processing information or completed data")
 
     # Error handling
     errors: Optional[Dict[str, Union[str, Dict[str, str]]]] = Field(
