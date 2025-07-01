@@ -7,10 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.3] - 2025-01-03
+
 ### Added
-- Initial open-source release preparation
-- Professional packaging structure with pyproject.toml
-- Comprehensive documentation and examples
+- New `BasicFileInfo` model for handling simplified file information during early processing stages
+
+### Fixed
+- Pydantic validation error in `JobResponse` model when files are in early processing stages
+- Updated `JobResponse.files` field to support `BasicFileInfo`, `FileProcessingInfo`, and `CompletedFileData` types
 
 ## [0.1.2] - 2025-06-16
 
@@ -82,7 +86,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - pydantic >= 2.0.0
 - beautifulsoup4 >= 4.11.0
 
-[Unreleased]: https://github.com/CerevoxAI/cerevox-python/compare/v0.1.2...HEAD
+[Unreleased]: https://github.com/CerevoxAI/cerevox-python/compare/v0.1.3...HEAD
+[0.1.3]: https://github.com/CerevoxAI/cerevox-python/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/CerevoxAI/cerevox-python/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/CerevoxAI/cerevox-python/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/CerevoxAI/cerevox-python/releases/tag/v0.1.0 
