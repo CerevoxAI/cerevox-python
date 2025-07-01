@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.5] - 2025-07-01
+
+### Fixed
+- Fixed critical bug in document parsing where ContentElement objects (Pydantic models) were incorrectly handled as dictionaries
+- Resolved "ContentElement object has no attribute 'get'" warnings during benchmark execution
+- Improved type detection in `_from_elements_list` method to properly distinguish between Pydantic models and dictionary formats
+- Enhanced error handling for malformed elements during document processing
+
+### Added
+- Comprehensive test coverage for ContentElement object handling in document parsing
+- Enhanced test `test_from_elements_list_content_element` covering both Pydantic ContentElement objects and dictionary formats
+- Test coverage for mixed element processing scenarios (ContentElement + dictionary format)
+- Robust type checking for dual-format element processing
+
+### Testing
+- Improved test coverage for `_from_elements_list` method in document_loader.py (lines 803-831)
+- Added validation tests for ContentElement source data extraction including file info, page info, and element statistics
+- Enhanced coverage of dual-format element processing (Pydantic models vs dictionary format)
+
 ## [0.1.4] - 2025-07-01
 
 ### Fixed
@@ -93,7 +112,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - pydantic >= 2.0.0
 - beautifulsoup4 >= 4.11.0
 
-[Unreleased]: https://github.com/CerevoxAI/cerevox-python/compare/v0.1.4...HEAD
+[Unreleased]: https://github.com/CerevoxAI/cerevox-python/compare/v0.1.5...HEAD
+[0.1.5]: https://github.com/CerevoxAI/cerevox-python/compare/v0.1.4...v0.1.5
 [0.1.4]: https://github.com/CerevoxAI/cerevox-python/compare/v0.1.3...v0.1.4
 [0.1.3]: https://github.com/CerevoxAI/cerevox-python/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/CerevoxAI/cerevox-python/compare/v0.1.1...v0.1.2

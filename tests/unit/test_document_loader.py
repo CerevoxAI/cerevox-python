@@ -6164,3 +6164,147 @@ class TestFinal5:
         assert "- 1 document(s) with errors" in partial_summary
         assert "- 1 total error(s)" in partial_summary
         assert "\nError details:" not in partial_summary  # No error details
+
+    def test_from_elements_list_content_element(self):
+        """Test Document.from_elements_list with ContentElement objects"""
+        # Test 1: Single element with comprehensive data to cover lines 803-831
+        from cerevox.models import (
+            ContentElement,
+            ContentInfo,
+            ElementSourceInfo,
+            FileSourceInfo,
+            PageSourceInfo,
+            SourceInfo,
+        )
+
+        element = ContentElement(
+            content=ContentInfo(
+                text="Test content for paragraph element",
+                markdown="**Test content** for paragraph element",
+                html="<p><strong>Test content</strong> for paragraph element</p>",
+            ),
+            element_type="paragraph",
+            id="elem1",
+            source=SourceInfo(
+                file=FileSourceInfo(
+                    extension="pdf",
+                    id="file123",
+                    index=0,
+                    mime_type="application/pdf",
+                    original_mime_type="application/pdf",
+                    name="test_document.pdf",
+                ),
+                page=PageSourceInfo(page_number=1, index=0),
+                element=ElementSourceInfo(characters=35, words=6, sentences=1),
+            ),
+        )
+
+        document = Document._from_elements_list([element])
+
+        # Verify the document was created properly
+        assert len(document.elements) == 1
+        doc_element = document.elements[0]
+
+        # Verify content was extracted properly (lines 804-810)
+        assert (
+            doc_element.content.html
+            == "<p><strong>Test content</strong> for paragraph element</p>"
+        )
+        assert doc_element.content.markdown == "**Test content** for paragraph element"
+        assert doc_element.content.text == "Test content for paragraph element"
+
+        # Verify element metadata was extracted (lines 811-812)
+        assert doc_element.element_type == "paragraph"
+        assert doc_element.id == "elem1"
+
+        # Verify source data was extracted properly (lines 813-830)
+        assert doc_element.source.file.extension == "pdf"
+        assert doc_element.source.file.id == "file123"
+        assert doc_element.source.file.index == 0
+        assert doc_element.source.file.mime_type == "application/pdf"
+        assert doc_element.source.file.original_mime_type == "application/pdf"
+        assert doc_element.source.file.name == "test_document.pdf"
+
+        assert doc_element.source.page.page_number == 1
+        assert doc_element.source.page.index == 0
+
+        assert doc_element.source.element.characters == 35
+        assert doc_element.source.element.words == 6
+        assert doc_element.source.element.sentences == 1
+
+        # Verify document metadata
+        assert document.metadata.filename == "document"
+        assert document.metadata.total_pages == 1
+        assert document.metadata.total_elements == 1
+
+        # Test 2: Multiple ContentElement objects
+        element2 = ContentElement(
+            content=ContentInfo(
+                text="Second element content",
+                markdown="Second element content",
+                html="<p>Second element content</p>",
+            ),
+            element_type="paragraph",
+            id="elem2",
+            source=SourceInfo(
+                file=FileSourceInfo(
+                    extension="docx",
+                    id="file456",
+                    index=1,
+                    mime_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                    original_mime_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                    name="test_document.docx",
+                ),
+                page=PageSourceInfo(page_number=2, index=1),
+                element=ElementSourceInfo(characters=22, words=3, sentences=1),
+            ),
+        )
+
+        document_multi = Document._from_elements_list([element, element2])
+
+        # Verify both elements were processed
+        assert len(document_multi.elements) == 2
+        assert document_multi.metadata.total_pages == 2  # Max page number
+        assert document_multi.metadata.total_elements == 2
+
+        # Verify second element was processed correctly
+        elem2 = document_multi.elements[1]
+        assert elem2.content.text == "Second element content"
+        assert elem2.element_type == "paragraph"
+        assert elem2.id == "elem2"
+        assert elem2.source.file.extension == "docx"
+        assert elem2.source.page.page_number == 2
+
+        # Test 3: Mixed ContentElement and dictionary format (edge case)
+        dict_element = {
+            "content": {
+                "text": "Dictionary format content",
+                "markdown": "Dictionary format content",
+                "html": "<p>Dictionary format content</p>",
+            },
+            "element_type": "paragraph",
+            "id": "dict_elem",
+            "source": {
+                "file": {
+                    "extension": "txt",
+                    "id": "file789",
+                    "index": 0,
+                    "mime_type": "text/plain",
+                    "original_mime_type": "text/plain",
+                    "name": "test.txt",
+                },
+                "page": {"page_number": 1, "index": 0},
+                "element": {"characters": 25, "words": 3, "sentences": 1},
+            },
+        }
+
+        # This should test both code paths in the same call
+        document_mixed = Document._from_elements_list([element, dict_element])
+
+        assert len(document_mixed.elements) == 2
+        # First element should be from ContentElement object
+        assert document_mixed.elements[0].id == "elem1"
+        assert document_mixed.elements[0].source.file.extension == "pdf"
+        # Second element should be from dictionary
+        assert document_mixed.elements[1].id == "dict_elem"
+        assert document_mixed.elements[1].source.file.extension == "txt"

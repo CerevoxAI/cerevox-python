@@ -800,8 +800,46 @@ class Document:
 
         for i, element_data in enumerate(elements_data):
             try:
-                # Parse content with validation - handle new ContentElement structure
-                content_dict = element_data.get("content", {})
+                # Handle both ContentElement objects and dictionary format
+                if (
+                    not isinstance(element_data, dict)
+                    and hasattr(element_data, "content")
+                    and hasattr(element_data, "element_type")
+                ):
+                    # This is a ContentElement object from Pydantic models
+                    content_dict = {
+                        "html": element_data.content.html,
+                        "markdown": element_data.content.markdown,
+                        "text": element_data.content.text,
+                    }
+                    element_type = element_data.element_type
+                    element_id = element_data.id
+                    source_data = {
+                        "file": {
+                            "extension": element_data.source.file.extension,
+                            "id": element_data.source.file.id,
+                            "index": element_data.source.file.index,
+                            "mime_type": element_data.source.file.mime_type,
+                            "original_mime_type": element_data.source.file.original_mime_type,
+                            "name": element_data.source.file.name,
+                        },
+                        "page": {
+                            "page_number": element_data.source.page.page_number,
+                            "index": element_data.source.page.index,
+                        },
+                        "element": {
+                            "characters": element_data.source.element.characters,
+                            "words": element_data.source.element.words,
+                            "sentences": element_data.source.element.sentences,
+                        },
+                    }
+                else:
+                    # This is a dictionary format - original code path
+                    content_dict = element_data.get("content", {})
+                    element_type = element_data.get("element_type", "unknown")
+                    element_id = element_data.get("id", str(uuid.uuid4()))
+                    source_data = element_data.get("source", {})
+
                 if not content_dict:
                     warnings.warn(f"Element has no content. Skipping.", UserWarning)
                     continue
@@ -813,7 +851,7 @@ class Document:
                 )
 
                 # Parse source info with validation
-                source = element_data.get("source", {})
+                source = source_data if isinstance(source_data, dict) else {}
                 file_source = source.get("file", {})
                 page_source = source.get("page", {})
                 element_stats_raw = source.get("element", {})
@@ -863,8 +901,8 @@ class Document:
                 # Create DocumentElement
                 element = DocumentElement(
                     content=element_content,
-                    element_type=element_data.get("element_type", "unknown"),
-                    id=element_data.get("id", str(uuid.uuid4())),
+                    element_type=element_type,
+                    id=element_id,
                     source=source_info_obj,
                 )
 
