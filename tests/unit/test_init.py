@@ -181,6 +181,9 @@ class TestAllExports:
             # Core clients
             "Lexa",
             "AsyncLexa",
+            # Account management clients
+            "Account",
+            "AsyncAccount",
             # Document processing
             "Document",
             "DocumentBatch",
@@ -198,6 +201,18 @@ class TestAllExports:
             "FileInfo",
             "BucketListResponse",
             "FolderListResponse",
+            # Account models
+            "AccountInfo",
+            "AccountPlan",
+            "CreatedResponse",
+            "DeletedResponse",
+            "MessageResponse",
+            "TokenResponse",
+            "UpdatedResponse",
+            "User",
+            "UserCreate",
+            "UserUpdate",
+            "UsageMetrics",
             # Exceptions
             "LexaError",
             "LexaAuthError",
@@ -231,7 +246,7 @@ class TestAllExports:
         import cerevox
 
         # Count expected items based on the actual __all__ list in __init__.py
-        expected_count = 27  # Based on the actual __all__ list in the file
+        expected_count = 40  # Based on the actual __all__ list in the file
         actual_count = len(cerevox.__all__)
 
         assert actual_count == expected_count, (
@@ -494,6 +509,9 @@ class TestCompleteImportCoverage:
             # Core clients
             "Lexa",
             "AsyncLexa",
+            # Account management clients
+            "Account",
+            "AsyncAccount",
             # Document processing
             "Document",
             "DocumentBatch",
@@ -511,13 +529,25 @@ class TestCompleteImportCoverage:
             "FileInfo",
             "BucketListResponse",
             "FolderListResponse",
+            # Account models
+            "AccountInfo",
+            "AccountPlan",
+            "CreatedResponse",
+            "DeletedResponse",
+            "MessageResponse",
+            "TokenResponse",
+            "UpdatedResponse",
+            "User",
+            "UserCreate",
+            "UserUpdate",
+            "UsageMetrics",
             # Exceptions
             "LexaError",
             "LexaAuthError",
             "LexaRateLimitError",
             "LexaTimeoutError",
             "LexaJobFailedError",
-            # Version and info
+            # Version info
             "__version__",
             "__title__",
             "__description__",

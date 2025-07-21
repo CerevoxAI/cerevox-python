@@ -2,6 +2,11 @@
 Cerevox - The Data Layer
 """
 
+# Account management clients
+from .account import Account
+from .async_account import AsyncAccount
+
+# Document parsing clients
 from .async_lexa import AsyncLexa
 
 # Document processing
@@ -24,19 +29,28 @@ from .exceptions import (
     LexaRateLimitError,
     LexaTimeoutError,
 )
-
-# Core clients
 from .lexa import Lexa
 
 # Models and types
 from .models import (
+    AccountInfo,
+    AccountPlan,
     BucketListResponse,
+    CreatedResponse,
+    DeletedResponse,
     FileInfo,
     FolderListResponse,
     IngestionResult,
     JobResponse,
     JobStatus,
+    MessageResponse,
     ProcessingMode,
+    TokenResponse,
+    UpdatedResponse,
+    UsageMetrics,
+    User,
+    UserCreate,
+    UserUpdate,
 )
 
 # Version info
@@ -53,6 +67,9 @@ __all__ = [
     # Core clients
     "Lexa",
     "AsyncLexa",
+    # Account management clients
+    "Account",
+    "AsyncAccount",
     # Document processing
     "Document",
     "DocumentBatch",
@@ -70,6 +87,18 @@ __all__ = [
     "FileInfo",
     "BucketListResponse",
     "FolderListResponse",
+    # Account models
+    "AccountInfo",
+    "AccountPlan",
+    "CreatedResponse",
+    "DeletedResponse",
+    "MessageResponse",
+    "TokenResponse",
+    "UpdatedResponse",
+    "User",
+    "UserCreate",
+    "UserUpdate",
+    "UsageMetrics",
     # Exceptions
     "LexaError",
     "LexaAuthError",

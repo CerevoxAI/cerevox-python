@@ -294,3 +294,145 @@ class SiteListResponse(BaseModel):
     sites: List[SiteInfo] = Field(..., description="List of available sites")
 
     model_config = ConfigDict(populate_by_name=True)
+
+
+# Account Client Models
+class TokenResponse(BaseModel):
+    """Response from authentication endpoints"""
+
+    access_token: str = Field(..., description="JWT access token")
+    expires_in: int = Field(..., description="Token expiration time in seconds")
+    refresh_token: str = Field(
+        ..., description="Refresh token for getting new access tokens"
+    )
+    token_type: str = Field(..., description="Token type (typically 'Bearer')")
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class TokenRefreshRequest(BaseModel):
+    """Request for refreshing access token"""
+
+    refresh_token: str = Field(..., description="Refresh token")
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class AccountInfo(BaseModel):
+    """Account information"""
+
+    account_id: str = Field(..., description="Unique account identifier")
+    account_name: str = Field(..., description="Account display name")
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class AccountPlan(BaseModel):
+    """Account plan and limits information"""
+
+    plan: str = Field(..., description="Plan name")
+    base: int = Field(..., description="Base limit")
+    bytes: int = Field(..., description="Storage limit in bytes")
+    messages: Optional[int] = Field(None, description="Message limit")
+    message_rate: Optional[int] = Field(None, description="Messages per interval")
+    message_interval: Optional[int] = Field(None, description="Rate limit interval")
+    bytes_overage: Optional[int] = Field(None, description="Overage bytes used")
+    status: str = Field(..., description="Plan status")
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class UsageMetrics(BaseModel):
+    """Account usage metrics"""
+
+    files: Dict[str, Any] = Field(..., description="File usage statistics")
+    pages: Dict[str, Any] = Field(..., description="Page usage statistics")
+    advanced_pages: Dict[str, Any] = Field(..., description="Advanced processing pages")
+    storage: Dict[str, Any] = Field(..., description="Storage usage statistics")
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class UserCreate(BaseModel):
+    """Request for creating a new user"""
+
+    email: str = Field(..., description="User email address")
+    name: str = Field(..., description="User display name")
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class UserUpdate(BaseModel):
+    """Request for updating user information"""
+
+    name: str = Field(..., description="Updated user display name")
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class UserDelete(BaseModel):
+    """Request for deleting a user"""
+
+    email: str = Field(..., description="Email confirmation for deletion")
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class User(BaseModel):
+    """User information"""
+
+    user_id: str = Field(..., description="Unique user identifier")
+    email: str = Field(..., description="User email address")
+    name: str = Field(..., description="User display name")
+    firstname: Optional[str] = Field(None, description="User first name")
+    lastname: Optional[str] = Field(None, description="User last name")
+    account_id: str = Field(..., description="Associated account ID")
+    isadmin: bool = Field(..., description="Admin privileges flag")
+    isbanned: bool = Field(..., description="Account banned flag")
+    lastlogin: Optional[str] = Field(None, description="Last login timestamp")
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class GenericResponse(BaseModel):
+    """Generic status response"""
+
+    status: str = Field(..., description="Operation status")
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class MessageResponse(BaseModel):
+    """Response with message and status"""
+
+    message: str = Field(..., description="Response message")
+    status: str = Field(..., description="Operation status")
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class CreatedResponse(BaseModel):
+    """Response for creation operations"""
+
+    created: bool = Field(..., description="Creation success flag")
+    status: str = Field(..., description="Operation status")
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class UpdatedResponse(BaseModel):
+    """Response for update operations"""
+
+    updated: bool = Field(..., description="Update success flag")
+    status: str = Field(..., description="Operation status")
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class DeletedResponse(BaseModel):
+    """Response for deletion operations"""
+
+    deleted: bool = Field(..., description="Deletion success flag")
+    status: str = Field(..., description="Operation status")
+
+    model_config = ConfigDict(populate_by_name=True)

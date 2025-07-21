@@ -236,6 +236,24 @@ class LexaServerError(LexaError):
         return True  # Server errors are typically retryable
 
 
+class AccountError(LexaError):
+    """Account management error"""
+
+    pass
+
+
+class UserManagementError(AccountError):
+    """User management error"""
+
+    pass
+
+
+class InsufficientPermissionsError(AccountError):
+    """Admin permissions required error"""
+
+    pass
+
+
 def create_error_from_response(
     status_code: int,
     response_data: Optional[Dict[str, Any]],
