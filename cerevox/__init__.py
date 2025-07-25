@@ -5,8 +5,7 @@ Cerevox - The Data Layer
 # Account management clients
 from .account import Account
 from .async_account import AsyncAccount
-
-# Document parsing clients
+from .async_hippo import AsyncHippo
 from .async_lexa import AsyncLexa
 
 # Document processing
@@ -29,6 +28,11 @@ from .exceptions import (
     LexaRateLimitError,
     LexaTimeoutError,
 )
+
+# RAG clients
+from .hippo import Hippo
+
+# Document parsing clients
 from .lexa import Lexa
 
 # Models and types
@@ -64,12 +68,15 @@ __license__ = "MIT"
 
 
 __all__ = [
-    # Core clients
-    "Lexa",
-    "AsyncLexa",
     # Account management clients
     "Account",
     "AsyncAccount",
+    # Document parsing clients
+    "Lexa",
+    "AsyncLexa",
+    # RAG clients
+    "Hippo",
+    "AsyncHippo",
     # Document processing
     "Document",
     "DocumentBatch",

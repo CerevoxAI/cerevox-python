@@ -631,6 +631,7 @@ class TestAsyncAccountSessionManagement:
 
         await client.close_session()
 
+
 class TestAsyncAccountFullCoverage:
 
     @pytest.mark.asyncio
@@ -649,8 +650,8 @@ class TestAsyncAccountFullCoverage:
             await client.start_session()
             # Should raise LexaValidationError with error data
             with pytest.raises(LexaValidationError) as exc_info:
-                    await client._request("GET", "/test")
-                
+                await client._request("GET", "/test")
+
             # Verify the error contains the expected data structure
             error = exc_info.value
             assert error.status_code == 400
@@ -665,17 +666,20 @@ class TestAsyncAccountFullCoverage:
         with aioresponses() as m:
             m.post(
                 "https://dev.cerevox.ai/v1/users",
-                payload={"error": "Invalid API key", "message": "Authentication failed"},
-                status=401
+                payload={
+                    "error": "Invalid API key",
+                    "message": "Authentication failed",
+                },
+                status=401,
             )
-            
+
             client = AsyncAccount(api_key="test-key")
             await client.start_session()
-            # This should trigger the LexaAuthError with 401 status, which will hit line 357 
+            # This should trigger the LexaAuthError with 401 status, which will hit line 357
             # (the raise statement that re-raises when status_code != 403)
             with pytest.raises(LexaAuthError) as exc_info:
                 await client.create_user("test@example.com", "Test User")
-            
+
             # Verify it's the original LexaAuthError being re-raised
             error = exc_info.value
             assert error.status_code == 401
@@ -689,13 +693,16 @@ class TestAsyncAccountFullCoverage:
         with aioresponses() as m:
             m.get(
                 "https://dev.cerevox.ai/v1/users/user-456",
-                payload={"error": "Invalid API key", "message": "Authentication failed"},
-                status=401
+                payload={
+                    "error": "Invalid API key",
+                    "message": "Authentication failed",
+                },
+                status=401,
             )
-            
+
             client = AsyncAccount(api_key="test-key")
             await client.start_session()
-            # This should trigger the LexaAuthError with 401 status, which will hit line 357 
+            # This should trigger the LexaAuthError with 401 status, which will hit line 357
             # (the raise statement that re-raises when status_code != 403)
             with pytest.raises(LexaAuthError) as exc_info:
                 await client.get_user_by_id("user-456")
@@ -713,34 +720,37 @@ class TestAsyncAccountFullCoverage:
         with aioresponses() as m:
             m.put(
                 "https://dev.cerevox.ai/v1/users/user-456",
-                payload={"error": "Invalid API key", "message": "Authentication failed"},
-                status=401
+                payload={
+                    "error": "Invalid API key",
+                    "message": "Authentication failed",
+                },
+                status=401,
             )
-            
+
             client = AsyncAccount(api_key="test-key")
             await client.start_session()
             with pytest.raises(LexaAuthError) as exc_info:
                 await client.update_user_by_id("user-456", "New Name")
-            
+
                 # Verify it's the original LexaAuthError being re-raised
                 error = exc_info.value
                 assert error.status_code == 401
                 assert "Invalid API key" in error.message
-            
+
             await client.close_session()
 
             # Trigger 403 Forbidden
             m.put(
                 "https://dev.cerevox.ai/v1/users/user-456",
                 payload={"error": "Forbidden", "message": "Authentication failed"},
-                status=403
+                status=403,
             )
-            
+
             client = AsyncAccount(api_key="test-key")
             await client.start_session()
             with pytest.raises(InsufficientPermissionsError) as exc_info:
                 await client.update_user_by_id("user-456", "New Name")
-            
+
                 # Verify it's the original InsufficientPermissionsError being raised
                 error = exc_info.value
                 assert error.status_code == 403
@@ -754,34 +764,37 @@ class TestAsyncAccountFullCoverage:
         with aioresponses() as m:
             m.delete(
                 "https://dev.cerevox.ai/v1/users/user-456",
-                payload={"error": "Invalid API key", "message": "Authentication failed"},
-                status=401
+                payload={
+                    "error": "Invalid API key",
+                    "message": "Authentication failed",
+                },
+                status=401,
             )
-            
+
             client = AsyncAccount(api_key="test-key")
             await client.start_session()
             with pytest.raises(LexaAuthError) as exc_info:
                 await client.delete_user_by_id("user-456", "confirm@example.com")
-            
+
                 # Verify it's the original LexaAuthError being re-raised
                 error = exc_info.value
                 assert error.status_code == 401
                 assert "Invalid API key" in error.message
 
             await client.close_session()
-            
+
             # Trigger 403 Forbidden
             m.delete(
                 "https://dev.cerevox.ai/v1/users/user-456",
                 payload={"error": "Forbidden", "message": "Authentication failed"},
-                status=403
+                status=403,
             )
 
             client = AsyncAccount(api_key="test-key")
             await client.start_session()
             with pytest.raises(InsufficientPermissionsError) as exc_info:
                 await client.delete_user_by_id("user-456", "confirm@example.com")
-            
+
                 # Verify it's the original InsufficientPermissionsError being raised
                 error = exc_info.value
                 assert error.status_code == 403

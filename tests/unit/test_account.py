@@ -581,12 +581,13 @@ class TestAccountRequestHelpers:
         # Should not raise an error
         client.close()
 
+
 class TestAccountFullCoverage:
 
     def test_extra_kwargs(self):
         """Test that extra kwargs are applied to session for backward compatibility"""
         client = Account(api_key="test-key", verify=False, stream=True, trust_env=False)
-        
+
         # Verify that the extra kwargs were applied to the session
         assert client.session.verify is False
         assert client.session.stream is True
@@ -605,11 +606,11 @@ class TestAccountFullCoverage:
         )
 
         client = Account(api_key="test-key")
-        
+
         # Should raise LexaValidationError with error data from lines 199-200
         with pytest.raises(LexaValidationError) as exc_info:
             client._request("GET", "/test")
-        
+
         # Verify the error contains the expected data structure from lines 199-200
         error = exc_info.value
         assert error.status_code == 400
@@ -623,25 +624,22 @@ class TestAccountFullCoverage:
         responses.add(
             responses.POST,
             "https://dev.cerevox.ai/v1/users",
-            json={
-                "error": "Invalid API key",
-                "message": "Authentication failed"
-            },
-            status=401
+            json={"error": "Invalid API key", "message": "Authentication failed"},
+            status=401,
         )
-        
+
         client = Account(api_key="test-key")
-        
-        # This should trigger the LexaAuthError with 401 status, which will hit line 357 
+
+        # This should trigger the LexaAuthError with 401 status, which will hit line 357
         # (the raise statement that re-raises when status_code != 403)
         with pytest.raises(LexaAuthError) as exc_info:
             client.create_user("test@example.com", "Test User")
-        
+
         # Verify it's the original LexaAuthError being re-raised
         error = exc_info.value
         assert error.status_code == 401
         assert "Invalid API key" in error.message
-    
+
     @responses.activate
     def test_trigger_raise_in_get_user_by_id(self):
         """Test that get_user_by_id re-raises LexaAuthError when status code is not 403 (line 357)"""
@@ -649,20 +647,17 @@ class TestAccountFullCoverage:
         responses.add(
             responses.GET,
             "https://dev.cerevox.ai/v1/users/user-456",
-            json={
-                "error": "Invalid API key",
-                "message": "Authentication failed"
-            },
-            status=401
+            json={"error": "Invalid API key", "message": "Authentication failed"},
+            status=401,
         )
-        
+
         client = Account(api_key="test-key")
-        
-        # This should trigger the LexaAuthError with 401 status, which will hit line 357 
+
+        # This should trigger the LexaAuthError with 401 status, which will hit line 357
         # (the raise statement that re-raises when status_code != 403)
         with pytest.raises(LexaAuthError) as exc_info:
             client.get_user_by_id("user-456")
-        
+
         # Verify it's the original LexaAuthError being re-raised
         error = exc_info.value
         assert error.status_code == 401
@@ -675,17 +670,14 @@ class TestAccountFullCoverage:
         responses.add(
             responses.PUT,
             "https://dev.cerevox.ai/v1/users/user-456",
-            json={
-                "error": "Invalid API key",
-                "message": "Authentication failed"
-               },
-            status=401
+            json={"error": "Invalid API key", "message": "Authentication failed"},
+            status=401,
         )
-        
+
         client = Account(api_key="test-key")
         with pytest.raises(LexaAuthError) as exc_info:
             client.update_user_by_id("user-456", "New Name")
-        
+
         # Verify it's the original LexaAuthError being re-raised
         error = exc_info.value
         assert error.status_code == 401
@@ -695,17 +687,14 @@ class TestAccountFullCoverage:
         responses.add(
             responses.PUT,
             "https://dev.cerevox.ai/v1/users/user-456",
-            json={
-                "error": "Forbidden",
-                "message": "Authentication failed"
-            },
-            status=403
+            json={"error": "Forbidden", "message": "Authentication failed"},
+            status=403,
         )
-        
+
         client = Account(api_key="test-key")
         with pytest.raises(InsufficientPermissionsError) as exc_info:
             client.update_user_by_id("user-456", "New Name")
-        
+
         # Verify it's the original InsufficientPermissionsError being re-raised
         error = exc_info.value
 
@@ -716,37 +705,31 @@ class TestAccountFullCoverage:
         responses.add(
             responses.DELETE,
             "https://dev.cerevox.ai/v1/users/user-456",
-            json={
-                "error": "Invalid API key",
-                "message": "Authentication failed"
-            },
-            status=401
+            json={"error": "Invalid API key", "message": "Authentication failed"},
+            status=401,
         )
-        
+
         client = Account(api_key="test-key")
         with pytest.raises(LexaAuthError) as exc_info:
             client.delete_user_by_id("user-456", "confirm@example.com")
-        
+
             # Verify it's the original LexaAuthError being re-raised
             error = exc_info.value
             assert error.status_code == 401
             assert "Invalid API key" in error.message
-        
+
         # Trigger 403 Forbidden
         responses.add(
             responses.DELETE,
             "https://dev.cerevox.ai/v1/users/user-456",
-            json={
-                "error": "Forbidden",
-                "message": "Authentication failed"
-            },
-            status=403
+            json={"error": "Forbidden", "message": "Authentication failed"},
+            status=403,
         )
 
         client = Account(api_key="test-key")
         with pytest.raises(InsufficientPermissionsError) as exc_info:
             client.delete_user_by_id("user-456", "confirm@example.com")
-        
+
             # Verify it's the original InsufficientPermissionsError being re-raised
             error = exc_info.value
             assert error.status_code == 403

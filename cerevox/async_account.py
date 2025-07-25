@@ -46,10 +46,8 @@ class AsyncAccount:
     supporting user authentication, account management, and user administration.
 
     Example:
-        >>> async with AsyncAccount(api_key="your-api-key") as client:
-        ...     # Authenticate with email/password
-        ...     tokens = await client.login("user@example.com", "password")
-        ...     print(tokens.access_token)
+        >>> async with AsyncAccount(email="user@example.com", api_key="password") as client:
+        ...     # Client automatically authenticates during context entry
         ...     # Get account information
         ...     account = await client.get_account_info()
         ...     print(account.account_name)
@@ -63,7 +61,8 @@ class AsyncAccount:
     def __init__(
         self,
         *,
-        api_key: Optional[str] = None,
+        email: str,
+        api_key: str,
         base_url: str = "https://dev.cerevox.ai/v1",
         max_retries: int = 3,
         timeout: float = 30.0,
@@ -73,18 +72,17 @@ class AsyncAccount:
         Initialize the AsyncAccount client
 
         Args:
-            api_key: Your Cerevox API key. If not provided, will try CEREVOX_API_KEY
+            email: User email address for authentication
+            api_key: User password for authentication
             base_url: Base URL for the Cerevox Account API
             timeout: Request timeout in seconds
             max_retries: Maximum number of retry attempts for failed requests
             **kwargs: Additional aiohttp ClientSession arguments
         """
+        self.email = email
         self.api_key = api_key or os.getenv("CEREVOX_API_KEY")
-        if not self.api_key:
-            raise ValueError(
-                "API key is required. Provide it via "
-                + "api_key parameter or CEREVOX_API_KEY environment variable."
-            )
+        if not self.email or not self.api_key:
+            raise ValueError("Both email and api_key are required for authentication")
 
         # Validate base_url format
         if not base_url or not isinstance(base_url, str):
@@ -108,7 +106,6 @@ class AsyncAccount:
         self.session_kwargs = {
             "timeout": self.timeout,
             "headers": {
-                "Authorization": f"Bearer {self.api_key}",
                 "User-Agent": "cerevox-python-async/0.1.6",
                 "Content-Type": "application/json",
             },
@@ -120,6 +117,8 @@ class AsyncAccount:
     async def __aenter__(self) -> "AsyncAccount":
         """Async context manager entry"""
         await self.start_session()
+        # Automatically authenticate using email and password
+        await self.login(self.email, self.api_key)
         return self
 
     async def __aexit__(
@@ -249,13 +248,21 @@ class AsyncAccount:
         credentials = f"{email}:{password}"
         encoded_credentials = base64.b64encode(credentials.encode()).decode()
 
-        headers = {
-            "Authorization": f"Basic {encoded_credentials}",
-            "Content-Type": "application/json",
-        }
+        self.session_kwargs["headers"]["Authorization"] = f"Basic {encoded_credentials}"
 
-        response_data = await self._request("POST", "/token/login", headers=headers)
-        return TokenResponse(**response_data)
+        response_data = await self._request("POST", "/token/login", json_data={})
+
+        token_response = TokenResponse(**response_data)
+
+        await self.close_session()
+
+        self.session_kwargs["headers"][
+            "Authorization"
+        ] = f"Bearer {token_response.access_token}"
+
+        await self.start_session()
+
+        return token_response
 
     async def refresh_token(self, refresh_token: str) -> TokenResponse:
         """
@@ -271,7 +278,17 @@ class AsyncAccount:
         response_data = await self._request(
             "POST", "/token/refresh", json_data=request.model_dump()
         )
-        return TokenResponse(**response_data)
+        token_response = TokenResponse(**response_data)
+
+        await self.close_session()
+
+        self.session_kwargs["headers"][
+            "Authorization"
+        ] = f"Bearer {token_response.access_token}"
+
+        await self.start_session()
+
+        return token_response
 
     async def revoke_token(self) -> MessageResponse:
         """
@@ -306,7 +323,7 @@ class AsyncAccount:
             AccountPlan with plan details and limits
         """
         response_data = await self._request("GET", f"/accounts/{account_id}/plan")
-        return AccountPlan(**response_data)
+        return AccountPlan(**response_data["plan"])
 
     async def get_account_usage(self, account_id: str) -> UsageMetrics:
         """
