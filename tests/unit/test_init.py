@@ -63,6 +63,30 @@ class TestCoreImports:
 
         assert AsyncLexa is not None
 
+    def test_account_import(self):
+        """Test that Account client can be imported."""
+        from cerevox import Account
+
+        assert Account is not None
+
+    def test_async_account_import(self):
+        """Test that AsyncAccount client can be imported."""
+        from cerevox import AsyncAccount
+
+        assert AsyncAccount is not None
+
+    def test_hippo_import(self):
+        """Test that Hippo client can be imported."""
+        from cerevox import Hippo
+
+        assert Hippo is not None
+
+    def test_async_hippo_import(self):
+        """Test that AsyncHippo client can be imported."""
+        from cerevox import AsyncHippo
+
+        assert AsyncHippo is not None
+
 
 class TestDocumentProcessingImports:
     """Test document processing related imports."""
@@ -184,6 +208,9 @@ class TestAllExports:
             # Account management clients
             "Account",
             "AsyncAccount",
+            # RAG clients
+            "Hippo",
+            "AsyncHippo",
             # Document processing
             "Document",
             "DocumentBatch",
@@ -246,7 +273,7 @@ class TestAllExports:
         import cerevox
 
         # Count expected items based on the actual __all__ list in __init__.py
-        expected_count = 40  # Based on the actual __all__ list in the file
+        expected_count = 42  # Based on the actual __all__ list in the file (added Hippo + AsyncHippo)
         actual_count = len(cerevox.__all__)
 
         assert actual_count == expected_count, (
@@ -512,6 +539,9 @@ class TestCompleteImportCoverage:
             # Account management clients
             "Account",
             "AsyncAccount",
+            # RAG clients
+            "Hippo",
+            "AsyncHippo",
             # Document processing
             "Document",
             "DocumentBatch",

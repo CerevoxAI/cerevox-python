@@ -61,8 +61,8 @@ class AsyncAccount:
     def __init__(
         self,
         *,
-        email: str,
-        api_key: str,
+        email: Optional[str] = None,
+        api_key: Optional[str] = None,
         base_url: str = "https://dev.cerevox.ai/v1",
         max_retries: int = 3,
         timeout: float = 30.0,
@@ -230,7 +230,9 @@ class AsyncAccount:
 
     # Authentication Methods
 
-    async def login(self, email: str, password: str) -> TokenResponse:
+    async def login(
+        self, email: Optional[str] = None, password: Optional[str] = None
+    ) -> TokenResponse:
         """
         Authenticate with email and password to get access tokens
 
@@ -248,9 +250,11 @@ class AsyncAccount:
         credentials = f"{email}:{password}"
         encoded_credentials = base64.b64encode(credentials.encode()).decode()
 
-        self.session_kwargs["headers"]["Authorization"] = f"Basic {encoded_credentials}"
+        headers = {"Authorization": f"Basic {encoded_credentials}"}
 
-        response_data = await self._request("POST", "/token/login", json_data={})
+        response_data = await self._request(
+            "POST", "/token/login", json_data={}, headers=headers
+        )
 
         token_response = TokenResponse(**response_data)
 

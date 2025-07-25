@@ -18,9 +18,25 @@ from .exceptions import (
     create_error_from_response,
 )
 from .models import (
+    AskItem,
+    AsksListResponse,
+    AskSubmitRequest,
+    ChatCreate,
+    ChatCreatedResponse,
+    ChatItem,
+    ChatsListResponse,
+    DeletedResponse,
+    FileItem,
+    FilesListResponse,
+    FileUploadResponse,
+    FolderCreate,
+    FolderCreatedResponse,
+    FolderItem,
+    FoldersListResponse,
     MessageResponse,
     TokenRefreshRequest,
     TokenResponse,
+    UpdatedResponse,
 )
 
 HTTP = "http://"
@@ -55,8 +71,8 @@ class Hippo:
     def __init__(
         self,
         *,
-        email: str,
-        api_key: str,
+        email: Optional[str] = None,
+        api_key: Optional[str] = None,
         base_url: str = "https://dev.cerevox.ai/v1",
         max_retries: int = 3,
         session_kwargs: Optional[Dict[str, Any]] = None,
@@ -232,9 +248,9 @@ class Hippo:
         credentials = f"{email}:{password}"
         encoded_credentials = base64.b64encode(credentials.encode()).decode()
 
-        self.session.headers.update({"Authorization": f"Basic {encoded_credentials}"})
+        headers = {"Authorization": f"Basic {encoded_credentials}"}
 
-        response_data = self._request("POST", "/token/login")
+        response_data = self._request("POST", "/token/login", headers=headers)
 
         token_response = TokenResponse(**response_data)
 
@@ -291,7 +307,7 @@ class Hippo:
 
     # Folder Management Methods
 
-    def create_folder(self, folder_id: str, folder_name: str) -> Dict[str, Any]:
+    def create_folder(self, folder_id: str, folder_name: str) -> FolderCreatedResponse:
         """
         Create a new folder for document organization
 
@@ -300,12 +316,15 @@ class Hippo:
             folder_name: Display name for the folder
 
         Returns:
-            Dict containing creation confirmation with folder_id and folder_name
+            FolderCreatedResponse containing creation confirmation
         """
-        data = {"folder_id": folder_id, "folder_name": folder_name}
-        return self._request("POST", "/folders", json_data=data)
+        request = FolderCreate(folder_id=folder_id, folder_name=folder_name)
+        response_data = self._request(
+            "POST", "/folders", json_data=request.model_dump()
+        )
+        return FolderCreatedResponse(**response_data)
 
-    def get_folders(self, search_name: Optional[str] = None) -> List[Dict[str, Any]]:
+    def get_folders(self, search_name: Optional[str] = None) -> List[FolderItem]:
         """
         List all folders, optionally filtered by name
 
@@ -313,16 +332,17 @@ class Hippo:
             search_name: Optional substring to filter folder names
 
         Returns:
-            List of folder dictionaries with folder_id and folder_name
+            List of FolderItem objects
         """
         params = {}
         if search_name:
             params["search_name"] = search_name
 
         response_data = self._request("GET", "/folders", params=params)
-        return response_data.get("folders", [])
+        folders_response = FoldersListResponse(**response_data)
+        return folders_response.folders
 
-    def get_folder_by_id(self, folder_id: str) -> Dict[str, Any]:
+    def get_folder_by_id(self, folder_id: str) -> FolderItem:
         """
         Get folder information including status and size
 
@@ -330,11 +350,12 @@ class Hippo:
             folder_id: Folder ID to retrieve
 
         Returns:
-            Dict containing folder info, status, currentSize, historicalSize
+            FolderItem containing folder info, status, currentSize, historicalSize
         """
-        return self._request("GET", f"/folders/{folder_id}")
+        response_data = self._request("GET", f"/folders/{folder_id}")
+        return FolderItem(**response_data)
 
-    def update_folder(self, folder_id: str, folder_name: str) -> Dict[str, Any]:
+    def update_folder(self, folder_id: str, folder_name: str) -> UpdatedResponse:
         """
         Update folder name
 
@@ -343,12 +364,13 @@ class Hippo:
             folder_name: New folder name
 
         Returns:
-            Dict containing update confirmation
+            UpdatedResponse containing update confirmation
         """
         data = {"folder_name": folder_name}
-        return self._request("PUT", f"/folders/{folder_id}", json_data=data)
+        response_data = self._request("PUT", f"/folders/{folder_id}", json_data=data)
+        return UpdatedResponse(**response_data)
 
-    def delete_folder(self, folder_id: str) -> Dict[str, Any]:
+    def delete_folder(self, folder_id: str) -> DeletedResponse:
         """
         Delete a folder and all its contents
 
@@ -356,13 +378,14 @@ class Hippo:
             folder_id: Folder ID to delete
 
         Returns:
-            Dict containing deletion confirmation
+            DeletedResponse containing deletion confirmation
         """
-        return self._request("DELETE", f"/folders/{folder_id}")
+        response_data = self._request("DELETE", f"/folders/{folder_id}")
+        return DeletedResponse(**response_data)
 
     # File Management Methods
 
-    def upload_file(self, folder_id: str, file_path: str) -> Dict[str, Any]:
+    def upload_file(self, folder_id: str, file_path: str) -> FileUploadResponse:
         """
         Upload a file to a folder
 
@@ -371,7 +394,7 @@ class Hippo:
             file_path: Path to the file to upload
 
         Returns:
-            Dict containing upload confirmation and file info
+            FileUploadResponse containing upload confirmation and file info
         """
         import os
 
@@ -380,17 +403,22 @@ class Hippo:
             files = {"file": (filename, file)}
             # For file uploads, we need to remove Content-Type header to let requests set it
             headers = {
-                k: v
+                k: (
+                    v
+                    if isinstance(v, str)
+                    else v.decode("utf-8") if isinstance(v, bytes) else str(v)
+                )
                 for k, v in self.session.headers.items()
                 if k.lower() != "content-type"
             }
-            return self._request(
+            response_data = self._request(
                 "POST", f"/folders/{folder_id}/files", files=files, headers=headers
             )
+            return FileUploadResponse(**response_data)
 
     def upload_file_from_url(
         self, folder_id: str, files: List[Dict[str, str]]
-    ) -> Dict[str, Any]:
+    ) -> FileUploadResponse:
         """
         Upload files from URLs to a folder
 
@@ -399,14 +427,17 @@ class Hippo:
             files: List of file dictionaries with url and optional filename
 
         Returns:
-            Dict containing upload confirmation and file info
+            FileUploadResponse containing upload confirmation and file info
         """
         data = {"files": files}
-        return self._request("POST", f"/folders/{folder_id}/files/url", json_data=data)
+        response_data = self._request(
+            "POST", f"/folders/{folder_id}/files/url", json_data=data
+        )
+        return FileUploadResponse(**response_data)
 
     def get_files(
         self, folder_id: str, search_name: Optional[str] = None
-    ) -> List[Dict[str, Any]]:
+    ) -> List[FileItem]:
         """
         List files in a folder, optionally filtered by name
 
@@ -415,7 +446,7 @@ class Hippo:
             search_name: Optional substring to filter file names
 
         Returns:
-            List of file dictionaries with file info
+            List of FileItem objects with file info
         """
         params = {}
         if search_name:
@@ -424,9 +455,10 @@ class Hippo:
         response_data = self._request(
             "GET", f"/folders/{folder_id}/files", params=params
         )
-        return response_data.get("files", [])
+        files_response = FilesListResponse(**response_data)
+        return files_response.files
 
-    def get_file_by_id(self, folder_id: str, file_id: str) -> Dict[str, Any]:
+    def get_file_by_id(self, folder_id: str, file_id: str) -> FileItem:
         """
         Get file information
 
@@ -435,11 +467,12 @@ class Hippo:
             file_id: File ID to retrieve
 
         Returns:
-            Dict containing file info
+            FileItem containing file info
         """
-        return self._request("GET", f"/folders/{folder_id}/files/{file_id}")
+        response_data = self._request("GET", f"/folders/{folder_id}/files/{file_id}")
+        return FileItem(**response_data)
 
-    def delete_file_by_id(self, folder_id: str, file_id: str) -> Dict[str, Any]:
+    def delete_file_by_id(self, folder_id: str, file_id: str) -> DeletedResponse:
         """
         Delete a specific file
 
@@ -448,11 +481,12 @@ class Hippo:
             file_id: File ID to delete
 
         Returns:
-            Dict containing deletion confirmation
+            DeletedResponse containing deletion confirmation
         """
-        return self._request("DELETE", f"/folders/{folder_id}/files/{file_id}")
+        response_data = self._request("DELETE", f"/folders/{folder_id}/files/{file_id}")
+        return DeletedResponse(**response_data)
 
-    def delete_all_files(self, folder_id: str) -> Dict[str, Any]:
+    def delete_all_files(self, folder_id: str) -> DeletedResponse:
         """
         Delete all files in a folder
 
@@ -460,13 +494,14 @@ class Hippo:
             folder_id: Folder ID to delete all files from
 
         Returns:
-            Dict containing deletion confirmation
+            DeletedResponse containing deletion confirmation
         """
-        return self._request("DELETE", f"/folders/{folder_id}/files")
+        response_data = self._request("DELETE", f"/folders/{folder_id}/files")
+        return DeletedResponse(**response_data)
 
     # Chat Management Methods
 
-    def create_chat(self, folder_id: str, openai_key: str) -> Dict[str, Any]:
+    def create_chat(self, folder_id: str, openai_key: str) -> ChatCreatedResponse:
         """
         Create a new chat session for a folder
 
@@ -475,12 +510,13 @@ class Hippo:
             openai_key: OpenAI API key for chat functionality
 
         Returns:
-            Dict containing creation confirmation with chat_id
+            ChatCreatedResponse containing creation confirmation with chat_id
         """
-        data = {"folder_id": folder_id, "openai_key": openai_key}
-        return self._request("POST", "/chats", json_data=data)
+        request = ChatCreate(folder_id=folder_id, openai_key=openai_key)
+        response_data = self._request("POST", "/chats", json_data=request.model_dump())
+        return ChatCreatedResponse(**response_data)
 
-    def get_chats(self, folder_id: Optional[str] = None) -> List[Dict[str, Any]]:
+    def get_chats(self, folder_id: Optional[str] = None) -> List[ChatItem]:
         """
         List chats, optionally filtered by folder
 
@@ -488,16 +524,17 @@ class Hippo:
             folder_id: Optional folder ID to filter chats
 
         Returns:
-            List of chat dictionaries with chat info
+            List of ChatItem objects with chat info
         """
         params = {}
         if folder_id:
             params["folder_id"] = folder_id
 
         response_data = self._request("GET", "/chats", params=params)
-        return response_data.get("chats", [])
+        chats_response = ChatsListResponse(**response_data)
+        return chats_response.chats
 
-    def get_chat_by_id(self, chat_id: str) -> Dict[str, Any]:
+    def get_chat_by_id(self, chat_id: str) -> ChatItem:
         """
         Get chat information
 
@@ -505,11 +542,12 @@ class Hippo:
             chat_id: Chat ID to retrieve
 
         Returns:
-            Dict containing chat info
+            ChatItem containing chat info
         """
-        return self._request("GET", f"/chats/{chat_id}")
+        response_data = self._request("GET", f"/chats/{chat_id}")
+        return ChatItem(**response_data)
 
-    def update_chat(self, chat_id: str, chat_name: str) -> Dict[str, Any]:
+    def update_chat(self, chat_id: str, chat_name: str) -> UpdatedResponse:
         """
         Update chat name
 
@@ -518,12 +556,13 @@ class Hippo:
             chat_name: New chat name
 
         Returns:
-            Dict containing update confirmation
+            UpdatedResponse containing update confirmation
         """
         data = {"chat_name": chat_name}
-        return self._request("PUT", f"/chats/{chat_id}", json_data=data)
+        response_data = self._request("PUT", f"/chats/{chat_id}", json_data=data)
+        return UpdatedResponse(**response_data)
 
-    def delete_chat(self, chat_id: str) -> Dict[str, Any]:
+    def delete_chat(self, chat_id: str) -> DeletedResponse:
         """
         Delete a chat and all its asks
 
@@ -531,33 +570,46 @@ class Hippo:
             chat_id: Chat ID to delete
 
         Returns:
-            Dict containing deletion confirmation
+            DeletedResponse containing deletion confirmation
         """
-        return self._request("DELETE", f"/chats/{chat_id}")
+        response_data = self._request("DELETE", f"/chats/{chat_id}")
+        return DeletedResponse(**response_data)
 
     # Ask Management Methods (Core RAG Functionality)
 
     def submit_ask(
-        self, chat_id: str, query: str, file_sources: Optional[List[str]] = None
-    ) -> Dict[str, Any]:
+        self,
+        chat_id: str,
+        query: str,
+        is_qna: bool = True,
+        citation_style: Optional[str] = None,
+        file_sources: Optional[List[str]] = None,
+    ) -> AskItem:
         """
         Submit a question to get RAG response
 
         Args:
             chat_id: Chat ID to submit question to
             query: Question/query to ask
+            is_qna: If True, returns final answer + sources. If False, returns sources only.
+            citation_style: Optional citation style for sources
             file_sources: Optional list of specific files to query against
 
         Returns:
-            Dict containing ask response with answer and sources
+            AskItem containing ask response with answer and sources
         """
-        data = {"query": query}
-        if file_sources:
-            data["file_sources"] = file_sources
+        request = AskSubmitRequest(
+            query=query,
+            is_qna=is_qna,
+            citation_style=citation_style,
+            file_sources=file_sources,
+        )
+        response_data = self._request(
+            "POST", f"/chats/{chat_id}/asks", json_data=request.model_dump()
+        )
+        return AskItem(**response_data)
 
-        return self._request("POST", f"/chats/{chat_id}/asks", json_data=data)
-
-    def get_asks(self, chat_id: str, msg_maxlen: int = 120) -> List[Dict[str, Any]]:
+    def get_asks(self, chat_id: str, msg_maxlen: int = 120) -> List[AskItem]:
         """
         List all asks in a chat with truncated content
 
@@ -566,11 +618,12 @@ class Hippo:
             msg_maxlen: Maximum length of truncated query and response content
 
         Returns:
-            List of ask dictionaries with truncated content
+            List of AskItem objects with truncated content
         """
         params = {"msg_maxlen": msg_maxlen}
         response_data = self._request("GET", f"/chats/{chat_id}/asks", params=params)
-        return response_data.get("asks", [])
+        asks_response = AsksListResponse(**response_data)
+        return asks_response.asks
 
     def get_ask_by_index(
         self,
@@ -578,7 +631,7 @@ class Hippo:
         ask_index: int,
         show_files: bool = False,
         show_source: bool = False,
-    ) -> Dict[str, Any]:
+    ) -> AskItem:
         """
         Get specific ask with full content and optional metadata
 
@@ -589,7 +642,7 @@ class Hippo:
             show_source: Whether to include source data for response
 
         Returns:
-            Dict containing full ask info with optional files and source data
+            AskItem containing full ask info with optional files and source data
         """
         params = {}
         if show_files:
@@ -597,9 +650,12 @@ class Hippo:
         if show_source:
             params["show_source"] = "true"
 
-        return self._request("GET", f"/chats/{chat_id}/asks/{ask_index}", params=params)
+        response_data = self._request(
+            "GET", f"/chats/{chat_id}/asks/{ask_index}", params=params
+        )
+        return AskItem(**response_data)
 
-    def delete_ask_by_index(self, chat_id: str, ask_index: int) -> Dict[str, Any]:
+    def delete_ask_by_index(self, chat_id: str, ask_index: int) -> DeletedResponse:
         """
         Delete a specific ask by index
 
@@ -608,9 +664,10 @@ class Hippo:
             ask_index: Index of the ask to delete
 
         Returns:
-            Dict containing deletion confirmation
+            DeletedResponse containing deletion confirmation
         """
-        return self._request("DELETE", f"/chats/{chat_id}/asks/{ask_index}")
+        response_data = self._request("DELETE", f"/chats/{chat_id}/asks/{ask_index}")
+        return DeletedResponse(**response_data)
 
     # Convenience Methods
 

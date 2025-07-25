@@ -39,66 +39,112 @@ from cerevox.models import (
 class TestAsyncAccountInitialization:
     """Test AsyncAccount client initialization"""
 
-    def test_init_with_api_key(self):
-        """Test initialization with API key parameter"""
-        client = AsyncAccount(api_key="test-api-key")
+    def test_init_with_email_and_api_key(self):
+        """Test initialization with email and API key parameters"""
+        client = AsyncAccount(email="test@example.com", api_key="test-api-key")
+        assert client.email == "test@example.com"
         assert client.api_key == "test-api-key"
         assert client.base_url == "https://dev.cerevox.ai/v1"
         assert client.timeout.total == 30.0
         assert client.max_retries == 3
-        assert "Authorization" in client.session_kwargs["headers"]
-        assert (
-            client.session_kwargs["headers"]["Authorization"] == "Bearer test-api-key"
-        )
+
+    def test_init_without_email_or_api_key(self):
+        """Test initialization without email or API key raises error"""
+        with patch.dict(os.environ, {}, clear=True):
+            with pytest.raises(
+                ValueError,
+                match="Both email and api_key are required for authentication",
+            ):
+                AsyncAccount()
+
+            with pytest.raises(
+                ValueError,
+                match="Both email and api_key are required for authentication",
+            ):
+                AsyncAccount(email="test@example.com")
+
+            with pytest.raises(
+                ValueError,
+                match="Both email and api_key are required for authentication",
+            ):
+                AsyncAccount(api_key="test-key")
 
     def test_init_with_env_var(self):
         """Test initialization with environment variable"""
         with patch.dict(os.environ, {"CEREVOX_API_KEY": "env-api-key"}):
-            client = AsyncAccount()
+            client = AsyncAccount(email="test@example.com", api_key=None)
             assert client.api_key == "env-api-key"
-
-    def test_init_without_api_key(self):
-        """Test initialization without API key raises error"""
-        with patch.dict(os.environ, {}, clear=True):
-            with pytest.raises(ValueError, match="API key is required"):
-                AsyncAccount()
 
     def test_init_with_custom_base_url(self):
         """Test initialization with custom base URL"""
-        client = AsyncAccount(api_key="test-key", base_url="https://custom.api.com")
+        client = AsyncAccount(
+            email="test@example.com",
+            api_key="test-key",
+            base_url="https://custom.api.com",
+        )
         assert client.base_url == "https://custom.api.com"
 
     def test_init_invalid_base_url(self):
         """Test initialization with invalid base URL"""
         with pytest.raises(ValueError, match="base_url must start with"):
-            AsyncAccount(api_key="test-key", base_url="invalid-url")
+            AsyncAccount(
+                email="test@example.com", api_key="test-key", base_url="invalid-url"
+            )
 
     def test_init_empty_base_url(self):
         """Test initialization with empty base URL"""
         with pytest.raises(ValueError, match="base_url must be a non-empty string"):
-            AsyncAccount(api_key="test-key", base_url="")
+            AsyncAccount(email="test@example.com", api_key="test-key", base_url="")
 
     def test_init_invalid_max_retries(self):
         """Test initialization with invalid max_retries"""
         with pytest.raises(TypeError, match="max_retries must be an integer"):
-            AsyncAccount(api_key="test-key", max_retries="invalid")
+            AsyncAccount(
+                email="test@example.com", api_key="test-key", max_retries="invalid"
+            )
 
         with pytest.raises(
             ValueError, match="max_retries must be a non-negative integer"
         ):
-            AsyncAccount(api_key="test-key", max_retries=-1)
+            AsyncAccount(email="test@example.com", api_key="test-key", max_retries=-1)
 
     @pytest.mark.asyncio
     async def test_context_manager(self):
         """Test async context manager functionality"""
-        async with AsyncAccount(api_key="test-key") as client:
-            assert client.api_key == "test-key"
-            assert client.session is not None
+        with aioresponses() as m:
+            # Mock the initialization login call
+            m.post(
+                "https://dev.cerevox.ai/v1/token/login",
+                payload={
+                    "access_token": "init_token",
+                    "expires_in": 3600,
+                    "refresh_token": "init_refresh",
+                    "token_type": "Bearer",
+                },
+                status=200,
+            )
+            # Mock the login call
+            m.post(
+                "https://dev.cerevox.ai/v1/token/login",
+                payload={
+                    "access_token": "access_123",
+                    "expires_in": 3600,
+                    "refresh_token": "refresh_456",
+                    "token_type": "Bearer",
+                },
+                status=200,
+            )
+
+            async with AsyncAccount(
+                email="test@example.com", api_key="test-key"
+            ) as client:
+                assert client.api_key == "test-key"
+                assert client.session is not None
 
     @pytest.mark.asyncio
     async def test_session_lifecycle(self):
         """Test session start and close lifecycle"""
-        client = AsyncAccount(api_key="test-key")
+        client = AsyncAccount(email="test@example.com", api_key="test-key")
 
         # Session should be None initially
         assert client.session is None
@@ -117,6 +163,17 @@ class TestAsyncAccountAuthentication:
     async def test_login_success(self):
         """Test successful login"""
         with aioresponses() as m:
+            # Mock the initialization login call
+            m.post(
+                "https://dev.cerevox.ai/v1/token/login",
+                payload={
+                    "access_token": "init_token",
+                    "expires_in": 3600,
+                    "refresh_token": "init_refresh",
+                    "token_type": "Bearer",
+                },
+                status=200,
+            )
             m.post(
                 "https://dev.cerevox.ai/v1/token/login",
                 payload={
@@ -129,7 +186,9 @@ class TestAsyncAccountAuthentication:
                 headers={"x-request-id": "req-123"},
             )
 
-            async with AsyncAccount(api_key="test-key") as client:
+            async with AsyncAccount(
+                email="test@example.com", api_key="test-key"
+            ) as client:
                 result = await client.login("user@example.com", "password123")
 
                 assert isinstance(result, TokenResponse)
@@ -142,6 +201,19 @@ class TestAsyncAccountAuthentication:
     async def test_login_failure(self):
         """Test login failure"""
         with aioresponses() as m:
+            # Mock the initialization login call
+            m.post(
+                "https://dev.cerevox.ai/v1/token/login",
+                payload={
+                    "access_token": "init_token",
+                    "expires_in": 3600,
+                    "refresh_token": "init_refresh",
+                    "token_type": "Bearer",
+                },
+                status=200,
+            )
+
+            # Mock the failing login call
             m.post(
                 "https://dev.cerevox.ai/v1/token/login",
                 payload={"error": "Invalid credentials"},
@@ -149,14 +221,27 @@ class TestAsyncAccountAuthentication:
                 headers={"x-request-id": "req-123"},
             )
 
-            async with AsyncAccount(api_key="test-key") as client:
+            async with AsyncAccount(
+                email="test@example.com", api_key="test-key"
+            ) as client:
                 with pytest.raises(LexaAuthError):
-                    await client.login("user@example.com", "wrong-password")
+                    await client.login("test@example.com", "wrong-password")
 
     @pytest.mark.asyncio
     async def test_refresh_token_success(self):
         """Test successful token refresh"""
         with aioresponses() as m:
+            # Mock the initialization login call
+            m.post(
+                "https://dev.cerevox.ai/v1/token/login",
+                payload={
+                    "access_token": "init_token",
+                    "expires_in": 3600,
+                    "refresh_token": "init_refresh",
+                    "token_type": "Bearer",
+                },
+                status=200,
+            )
             m.post(
                 "https://dev.cerevox.ai/v1/token/refresh",
                 payload={
@@ -168,7 +253,9 @@ class TestAsyncAccountAuthentication:
                 status=200,
             )
 
-            async with AsyncAccount(api_key="test-key") as client:
+            async with AsyncAccount(
+                email="test@example.com", api_key="test-key"
+            ) as client:
                 result = await client.refresh_token("refresh_456")
 
                 assert isinstance(result, TokenResponse)
@@ -178,13 +265,26 @@ class TestAsyncAccountAuthentication:
     async def test_revoke_token_success(self):
         """Test successful token revocation"""
         with aioresponses() as m:
+            # Mock the initialization login call
+            m.post(
+                "https://dev.cerevox.ai/v1/token/login",
+                payload={
+                    "access_token": "init_token",
+                    "expires_in": 3600,
+                    "refresh_token": "init_refresh",
+                    "token_type": "Bearer",
+                },
+                status=200,
+            )
             m.post(
                 "https://dev.cerevox.ai/v1/token/revoke",
                 payload={"message": "Token revoked successfully", "status": "success"},
                 status=200,
             )
 
-            async with AsyncAccount(api_key="test-key") as client:
+            async with AsyncAccount(
+                email="test@example.com", api_key="test-key"
+            ) as client:
                 result = await client.revoke_token()
 
                 assert isinstance(result, MessageResponse)
@@ -199,6 +299,17 @@ class TestAsyncAccountManagement:
     async def test_get_account_info_success(self):
         """Test successful account info retrieval"""
         with aioresponses() as m:
+            # Mock the initialization login call
+            m.post(
+                "https://dev.cerevox.ai/v1/token/login",
+                payload={
+                    "access_token": "init_token",
+                    "expires_in": 3600,
+                    "refresh_token": "init_refresh",
+                    "token_type": "Bearer",
+                },
+                status=200,
+            )
             m.get(
                 "https://dev.cerevox.ai/v1/accounts/my",
                 payload={
@@ -208,7 +319,9 @@ class TestAsyncAccountManagement:
                 status=200,
             )
 
-            async with AsyncAccount(api_key="test-key") as client:
+            async with AsyncAccount(
+                email="test@example.com", api_key="test-key"
+            ) as client:
                 result = await client.get_account_info()
 
                 assert isinstance(result, AccountInfo)
@@ -219,19 +332,34 @@ class TestAsyncAccountManagement:
     async def test_get_account_plan_success(self):
         """Test successful account plan retrieval"""
         with aioresponses() as m:
+            # Mock the initialization login call
+            m.post(
+                "https://dev.cerevox.ai/v1/token/login",
+                payload={
+                    "access_token": "init_token",
+                    "expires_in": 3600,
+                    "refresh_token": "init_refresh",
+                    "token_type": "Bearer",
+                },
+                status=200,
+            )
             m.get(
                 "https://dev.cerevox.ai/v1/accounts/acc-123/plan",
                 payload={
-                    "plan": "professional",
-                    "base": 1000,
-                    "bytes": 1073741824,
-                    "messages": 10000,
-                    "status": "active",
+                    "plan": {
+                        "plan": "professional",
+                        "base": 1000,
+                        "bytes": 1073741824,
+                        "messages": 10000,
+                        "status": "active",
+                    }
                 },
                 status=200,
             )
 
-            async with AsyncAccount(api_key="test-key") as client:
+            async with AsyncAccount(
+                email="test@example.com", api_key="test-key"
+            ) as client:
                 result = await client.get_account_plan("acc-123")
 
                 assert isinstance(result, AccountPlan)
@@ -244,6 +372,17 @@ class TestAsyncAccountManagement:
     async def test_get_account_usage_success(self):
         """Test successful account usage retrieval"""
         with aioresponses() as m:
+            # Mock the initialization login call
+            m.post(
+                "https://dev.cerevox.ai/v1/token/login",
+                payload={
+                    "access_token": "init_token",
+                    "expires_in": 3600,
+                    "refresh_token": "init_refresh",
+                    "token_type": "Bearer",
+                },
+                status=200,
+            )
             m.get(
                 "https://dev.cerevox.ai/v1/accounts/acc-123/usage",
                 payload={
@@ -255,7 +394,9 @@ class TestAsyncAccountManagement:
                 status=200,
             )
 
-            async with AsyncAccount(api_key="test-key") as client:
+            async with AsyncAccount(
+                email="test@example.com", api_key="test-key"
+            ) as client:
                 result = await client.get_account_usage("acc-123")
 
                 assert isinstance(result, UsageMetrics)
@@ -271,13 +412,26 @@ class TestAsyncUserManagement:
     async def test_create_user_success(self):
         """Test successful user creation"""
         with aioresponses() as m:
+            # Mock the initialization login call
+            m.post(
+                "https://dev.cerevox.ai/v1/token/login",
+                payload={
+                    "access_token": "init_token",
+                    "expires_in": 3600,
+                    "refresh_token": "init_refresh",
+                    "token_type": "Bearer",
+                },
+                status=200,
+            )
             m.post(
                 "https://dev.cerevox.ai/v1/users",
                 payload={"created": True, "status": "success"},
                 status=201,
             )
 
-            async with AsyncAccount(api_key="test-key") as client:
+            async with AsyncAccount(
+                email="test@example.com", api_key="test-key"
+            ) as client:
                 result = await client.create_user("new@example.com", "New User")
 
                 assert isinstance(result, CreatedResponse)
@@ -288,13 +442,26 @@ class TestAsyncUserManagement:
     async def test_create_user_insufficient_permissions(self):
         """Test user creation with insufficient permissions"""
         with aioresponses() as m:
+            # Mock the initialization login call
+            m.post(
+                "https://dev.cerevox.ai/v1/token/login",
+                payload={
+                    "access_token": "init_token",
+                    "expires_in": 3600,
+                    "refresh_token": "init_refresh",
+                    "token_type": "Bearer",
+                },
+                status=200,
+            )
             m.post(
                 "https://dev.cerevox.ai/v1/users",
                 payload={"error": "Forbidden"},
                 status=403,
             )
 
-            async with AsyncAccount(api_key="test-key") as client:
+            async with AsyncAccount(
+                email="test@example.com", api_key="test-key"
+            ) as client:
                 with pytest.raises(InsufficientPermissionsError):
                     await client.create_user("new@example.com", "New User")
 
@@ -321,13 +488,26 @@ class TestAsyncUserManagement:
         ]
 
         with aioresponses() as m:
+            # Mock the initialization login call
+            m.post(
+                "https://dev.cerevox.ai/v1/token/login",
+                payload={
+                    "access_token": "init_token",
+                    "expires_in": 3600,
+                    "refresh_token": "init_refresh",
+                    "token_type": "Bearer",
+                },
+                status=200,
+            )
             m.get(
                 "https://dev.cerevox.ai/v1/users",
                 payload=user_data,
                 status=200,
             )
 
-            async with AsyncAccount(api_key="test-key") as client:
+            async with AsyncAccount(
+                email="test@example.com", api_key="test-key"
+            ) as client:
                 result = await client.get_users()
 
                 assert isinstance(result, list)
@@ -340,6 +520,17 @@ class TestAsyncUserManagement:
     async def test_get_users_wrapped_response(self):
         """Test users retrieval with wrapped response"""
         with aioresponses() as m:
+            # Mock the initialization login call
+            m.post(
+                "https://dev.cerevox.ai/v1/token/login",
+                payload={
+                    "access_token": "init_token",
+                    "expires_in": 3600,
+                    "refresh_token": "init_refresh",
+                    "token_type": "Bearer",
+                },
+                status=200,
+            )
             m.get(
                 "https://dev.cerevox.ai/v1/users",
                 payload={
@@ -357,7 +548,9 @@ class TestAsyncUserManagement:
                 status=200,
             )
 
-            async with AsyncAccount(api_key="test-key") as client:
+            async with AsyncAccount(
+                email="test@example.com", api_key="test-key"
+            ) as client:
                 result = await client.get_users()
 
                 assert isinstance(result, list)
@@ -368,6 +561,17 @@ class TestAsyncUserManagement:
     async def test_get_user_me_success(self):
         """Test successful current user retrieval"""
         with aioresponses() as m:
+            # Mock the initialization login call
+            m.post(
+                "https://dev.cerevox.ai/v1/token/login",
+                payload={
+                    "access_token": "init_token",
+                    "expires_in": 3600,
+                    "refresh_token": "init_refresh",
+                    "token_type": "Bearer",
+                },
+                status=200,
+            )
             m.get(
                 "https://dev.cerevox.ai/v1/users/me",
                 payload={
@@ -381,7 +585,9 @@ class TestAsyncUserManagement:
                 status=200,
             )
 
-            async with AsyncAccount(api_key="test-key") as client:
+            async with AsyncAccount(
+                email="test@example.com", api_key="test-key"
+            ) as client:
                 result = await client.get_user_me()
 
                 assert isinstance(result, User)
@@ -393,13 +599,26 @@ class TestAsyncUserManagement:
     async def test_update_user_me_success(self):
         """Test successful current user update"""
         with aioresponses() as m:
+            # Mock the initialization login call
+            m.post(
+                "https://dev.cerevox.ai/v1/token/login",
+                payload={
+                    "access_token": "init_token",
+                    "expires_in": 3600,
+                    "refresh_token": "init_refresh",
+                    "token_type": "Bearer",
+                },
+                status=200,
+            )
             m.put(
                 "https://dev.cerevox.ai/v1/users/me",
                 payload={"updated": True, "status": "success"},
                 status=200,
             )
 
-            async with AsyncAccount(api_key="test-key") as client:
+            async with AsyncAccount(
+                email="test@example.com", api_key="test-key"
+            ) as client:
                 result = await client.update_user_me("Updated Name")
 
                 assert isinstance(result, UpdatedResponse)
@@ -410,6 +629,17 @@ class TestAsyncUserManagement:
     async def test_get_user_by_id_success(self):
         """Test successful user retrieval by ID"""
         with aioresponses() as m:
+            # Mock the initialization login call
+            m.post(
+                "https://dev.cerevox.ai/v1/token/login",
+                payload={
+                    "access_token": "init_token",
+                    "expires_in": 3600,
+                    "refresh_token": "init_refresh",
+                    "token_type": "Bearer",
+                },
+                status=200,
+            )
             m.get(
                 "https://dev.cerevox.ai/v1/users/user-456",
                 payload={
@@ -423,7 +653,9 @@ class TestAsyncUserManagement:
                 status=200,
             )
 
-            async with AsyncAccount(api_key="test-key") as client:
+            async with AsyncAccount(
+                email="test@example.com", api_key="test-key"
+            ) as client:
                 result = await client.get_user_by_id("user-456")
 
                 assert isinstance(result, User)
@@ -434,13 +666,26 @@ class TestAsyncUserManagement:
     async def test_get_user_by_id_insufficient_permissions(self):
         """Test user retrieval by ID with insufficient permissions"""
         with aioresponses() as m:
+            # Mock the initialization login call
+            m.post(
+                "https://dev.cerevox.ai/v1/token/login",
+                payload={
+                    "access_token": "init_token",
+                    "expires_in": 3600,
+                    "refresh_token": "init_refresh",
+                    "token_type": "Bearer",
+                },
+                status=200,
+            )
             m.get(
                 "https://dev.cerevox.ai/v1/users/user-456",
                 payload={"error": "Forbidden"},
                 status=403,
             )
 
-            async with AsyncAccount(api_key="test-key") as client:
+            async with AsyncAccount(
+                email="test@example.com", api_key="test-key"
+            ) as client:
                 with pytest.raises(InsufficientPermissionsError):
                     await client.get_user_by_id("user-456")
 
@@ -448,13 +693,26 @@ class TestAsyncUserManagement:
     async def test_update_user_by_id_success(self):
         """Test successful user update by ID"""
         with aioresponses() as m:
+            # Mock the initialization login call
+            m.post(
+                "https://dev.cerevox.ai/v1/token/login",
+                payload={
+                    "access_token": "init_token",
+                    "expires_in": 3600,
+                    "refresh_token": "init_refresh",
+                    "token_type": "Bearer",
+                },
+                status=200,
+            )
             m.put(
                 "https://dev.cerevox.ai/v1/users/user-456",
                 payload={"updated": True, "status": "success"},
                 status=200,
             )
 
-            async with AsyncAccount(api_key="test-key") as client:
+            async with AsyncAccount(
+                email="test@example.com", api_key="test-key"
+            ) as client:
                 result = await client.update_user_by_id("user-456", "New Name")
 
                 assert isinstance(result, UpdatedResponse)
@@ -464,13 +722,26 @@ class TestAsyncUserManagement:
     async def test_delete_user_by_id_success(self):
         """Test successful user deletion by ID"""
         with aioresponses() as m:
+            # Mock the initialization login call
+            m.post(
+                "https://dev.cerevox.ai/v1/token/login",
+                payload={
+                    "access_token": "init_token",
+                    "expires_in": 3600,
+                    "refresh_token": "init_refresh",
+                    "token_type": "Bearer",
+                },
+                status=200,
+            )
             m.delete(
                 "https://dev.cerevox.ai/v1/users/user-456",
                 payload={"deleted": True, "status": "success"},
                 status=200,
             )
 
-            async with AsyncAccount(api_key="test-key") as client:
+            async with AsyncAccount(
+                email="test@example.com", api_key="test-key"
+            ) as client:
                 result = await client.delete_user_by_id(
                     "user-456", "confirm@example.com"
                 )
@@ -486,12 +757,25 @@ class TestAsyncAccountErrorHandling:
     async def test_request_timeout(self):
         """Test request timeout handling"""
         with aioresponses() as m:
+            # Mock the initialization login call
+            m.post(
+                "https://dev.cerevox.ai/v1/token/login",
+                payload={
+                    "access_token": "init_token",
+                    "expires_in": 3600,
+                    "refresh_token": "init_refresh",
+                    "token_type": "Bearer",
+                },
+                status=200,
+            )
             m.get(
                 "https://dev.cerevox.ai/v1/accounts/my",
                 exception=asyncio.TimeoutError(),
             )
 
-            async with AsyncAccount(api_key="test-key") as client:
+            async with AsyncAccount(
+                email="test@example.com", api_key="test-key"
+            ) as client:
                 with pytest.raises(LexaTimeoutError):
                     await client.get_account_info()
 
@@ -499,12 +783,25 @@ class TestAsyncAccountErrorHandling:
     async def test_client_error(self):
         """Test aiohttp client error handling"""
         with aioresponses() as m:
+            # Mock the initialization login call
+            m.post(
+                "https://dev.cerevox.ai/v1/token/login",
+                payload={
+                    "access_token": "init_token",
+                    "expires_in": 3600,
+                    "refresh_token": "init_refresh",
+                    "token_type": "Bearer",
+                },
+                status=200,
+            )
             m.get(
                 "https://dev.cerevox.ai/v1/accounts/my",
                 exception=aiohttp.ClientError("Connection failed"),
             )
 
-            async with AsyncAccount(api_key="test-key") as client:
+            async with AsyncAccount(
+                email="test@example.com", api_key="test-key"
+            ) as client:
                 with pytest.raises(LexaError):
                     await client.get_account_info()
 
@@ -512,6 +809,17 @@ class TestAsyncAccountErrorHandling:
     async def test_rate_limit_error(self):
         """Test rate limit error handling"""
         with aioresponses() as m:
+            # Mock the initialization login call
+            m.post(
+                "https://dev.cerevox.ai/v1/token/login",
+                payload={
+                    "access_token": "init_token",
+                    "expires_in": 3600,
+                    "refresh_token": "init_refresh",
+                    "token_type": "Bearer",
+                },
+                status=200,
+            )
             m.get(
                 "https://dev.cerevox.ai/v1/accounts/my",
                 payload={"error": "Rate limit exceeded", "retry_after": 60},
@@ -519,7 +827,9 @@ class TestAsyncAccountErrorHandling:
                 headers={"x-request-id": "req-123"},
             )
 
-            async with AsyncAccount(api_key="test-key") as client:
+            async with AsyncAccount(
+                email="test@example.com", api_key="test-key"
+            ) as client:
                 with pytest.raises(LexaRateLimitError) as exc_info:
                     await client.get_account_info()
 
@@ -529,6 +839,17 @@ class TestAsyncAccountErrorHandling:
     async def test_validation_error(self):
         """Test validation error handling"""
         with aioresponses() as m:
+            # Mock the initialization login call
+            m.post(
+                "https://dev.cerevox.ai/v1/token/login",
+                payload={
+                    "access_token": "init_token",
+                    "expires_in": 3600,
+                    "refresh_token": "init_refresh",
+                    "token_type": "Bearer",
+                },
+                status=200,
+            )
             m.post(
                 "https://dev.cerevox.ai/v1/users",
                 payload={
@@ -538,7 +859,9 @@ class TestAsyncAccountErrorHandling:
                 status=400,
             )
 
-            async with AsyncAccount(api_key="test-key") as client:
+            async with AsyncAccount(
+                email="test@example.com", api_key="test-key"
+            ) as client:
                 with pytest.raises(LexaValidationError) as exc_info:
                     await client.create_user("invalid-email", "Test User")
 
@@ -548,6 +871,17 @@ class TestAsyncAccountErrorHandling:
     async def test_non_json_response(self):
         """Test handling of non-JSON responses"""
         with aioresponses() as m:
+            # Mock the initialization login call
+            m.post(
+                "https://dev.cerevox.ai/v1/token/login",
+                payload={
+                    "access_token": "init_token",
+                    "expires_in": 3600,
+                    "refresh_token": "init_refresh",
+                    "token_type": "Bearer",
+                },
+                status=200,
+            )
             m.get(
                 "https://dev.cerevox.ai/v1/users/me",  # Use an endpoint that doesn't parse to a specific model
                 body="Server maintenance",
@@ -555,7 +889,9 @@ class TestAsyncAccountErrorHandling:
                 content_type="text/plain",
             )
 
-            async with AsyncAccount(api_key="test-key") as client:
+            async with AsyncAccount(
+                email="test@example.com", api_key="test-key"
+            ) as client:
                 # Use the _request method directly to test non-JSON handling
                 result = await client._request("GET", "/users/me")
                 # Should return basic success response for non-JSON 200 responses
@@ -565,6 +901,17 @@ class TestAsyncAccountErrorHandling:
     async def test_failed_request_id_extraction(self):
         """Test handling when request ID extraction fails"""
         with aioresponses() as m:
+            # Mock the initialization login call
+            m.post(
+                "https://dev.cerevox.ai/v1/token/login",
+                payload={
+                    "access_token": "init_token",
+                    "expires_in": 3600,
+                    "refresh_token": "init_refresh",
+                    "token_type": "Bearer",
+                },
+                status=200,
+            )
             m.get(
                 "https://dev.cerevox.ai/v1/accounts/my",
                 payload={"error": "Server error"},
@@ -572,7 +919,9 @@ class TestAsyncAccountErrorHandling:
                 # No x-request-id header
             )
 
-            async with AsyncAccount(api_key="test-key") as client:
+            async with AsyncAccount(
+                email="test@example.com", api_key="test-key"
+            ) as client:
                 with pytest.raises(LexaError) as exc_info:
                     await client.get_account_info()
 
@@ -586,13 +935,24 @@ class TestAsyncAccountErrorHandling:
     async def test_auto_session_start(self):
         """Test automatic session start when making requests"""
         with aioresponses() as m:
+            # Mock the initialization login call
+            m.post(
+                "https://dev.cerevox.ai/v1/token/login",
+                payload={
+                    "access_token": "init_token",
+                    "expires_in": 3600,
+                    "refresh_token": "init_refresh",
+                    "token_type": "Bearer",
+                },
+                status=200,
+            )
             m.get(
                 "https://dev.cerevox.ai/v1/accounts/my",
                 payload={"account_id": "acc-123", "account_name": "Test"},
                 status=200,
             )
 
-            client = AsyncAccount(api_key="test-key")
+            client = AsyncAccount(email="test@example.com", api_key="test-key")
             # Don't use context manager to test auto-start
             assert client.session is None
 
@@ -609,7 +969,7 @@ class TestAsyncAccountSessionManagement:
     @pytest.mark.asyncio
     async def test_close_session_when_none(self):
         """Test closing session when it's None"""
-        client = AsyncAccount(api_key="test-key")
+        client = AsyncAccount(email="test@example.com", api_key="test-key")
         assert client.session is None
         # Should not raise an error
         await client.close_session()
@@ -618,7 +978,7 @@ class TestAsyncAccountSessionManagement:
     @pytest.mark.asyncio
     async def test_multiple_session_starts(self):
         """Test multiple session start calls"""
-        client = AsyncAccount(api_key="test-key")
+        client = AsyncAccount(email="test@example.com", api_key="test-key")
 
         await client.start_session()
         session1 = client.session
@@ -638,6 +998,17 @@ class TestAsyncAccountFullCoverage:
     async def test_bad_json_response(self):
         """Test that bad JSON response is handled"""
         with aioresponses() as m:
+            # Mock the initialization login call
+            m.post(
+                "https://dev.cerevox.ai/v1/token/login",
+                payload={
+                    "access_token": "init_token",
+                    "expires_in": 3600,
+                    "refresh_token": "init_refresh",
+                    "token_type": "Bearer",
+                },
+                status=200,
+            )
             # Mock a response with error status and non-JSON content
             m.get(
                 "https://dev.cerevox.ai/v1/test",
@@ -646,7 +1017,7 @@ class TestAsyncAccountFullCoverage:
                 content_type="text/plain",
             )
 
-            client = AsyncAccount(api_key="test-key")
+            client = AsyncAccount(email="test@example.com", api_key="test-key")
             await client.start_session()
             # Should raise LexaValidationError with error data
             with pytest.raises(LexaValidationError) as exc_info:
@@ -664,6 +1035,17 @@ class TestAsyncAccountFullCoverage:
         """Test that create_user re-raises LexaAuthError when status code is not 403 (line 357)"""
         # Mock a 401 Unauthorized response to trigger LexaAuthError (not 403)
         with aioresponses() as m:
+            # Mock the initialization login call
+            m.post(
+                "https://dev.cerevox.ai/v1/token/login",
+                payload={
+                    "access_token": "init_token",
+                    "expires_in": 3600,
+                    "refresh_token": "init_refresh",
+                    "token_type": "Bearer",
+                },
+                status=200,
+            )
             m.post(
                 "https://dev.cerevox.ai/v1/users",
                 payload={
@@ -673,7 +1055,7 @@ class TestAsyncAccountFullCoverage:
                 status=401,
             )
 
-            client = AsyncAccount(api_key="test-key")
+            client = AsyncAccount(email="test@example.com", api_key="test-key")
             await client.start_session()
             # This should trigger the LexaAuthError with 401 status, which will hit line 357
             # (the raise statement that re-raises when status_code != 403)
@@ -691,6 +1073,17 @@ class TestAsyncAccountFullCoverage:
         """Test that get_user_by_id re-raises LexaAuthError when status code is not 403 (line 357)"""
         # Mock a 401 Unauthorized response to trigger LexaAuthError (not 403)
         with aioresponses() as m:
+            # Mock the initialization login call
+            m.post(
+                "https://dev.cerevox.ai/v1/token/login",
+                payload={
+                    "access_token": "init_token",
+                    "expires_in": 3600,
+                    "refresh_token": "init_refresh",
+                    "token_type": "Bearer",
+                },
+                status=200,
+            )
             m.get(
                 "https://dev.cerevox.ai/v1/users/user-456",
                 payload={
@@ -700,7 +1093,7 @@ class TestAsyncAccountFullCoverage:
                 status=401,
             )
 
-            client = AsyncAccount(api_key="test-key")
+            client = AsyncAccount(email="test@example.com", api_key="test-key")
             await client.start_session()
             # This should trigger the LexaAuthError with 401 status, which will hit line 357
             # (the raise statement that re-raises when status_code != 403)
@@ -718,6 +1111,17 @@ class TestAsyncAccountFullCoverage:
         """Test that update_user_by_id re-raises LexaAuthError when status code is not 403 (line 357)"""
         # Mock a 401 Unauthorized response to trigger LexaAuthError (not 403)
         with aioresponses() as m:
+            # Mock the initialization login call
+            m.post(
+                "https://dev.cerevox.ai/v1/token/login",
+                payload={
+                    "access_token": "init_token",
+                    "expires_in": 3600,
+                    "refresh_token": "init_refresh",
+                    "token_type": "Bearer",
+                },
+                status=200,
+            )
             m.put(
                 "https://dev.cerevox.ai/v1/users/user-456",
                 payload={
@@ -727,7 +1131,7 @@ class TestAsyncAccountFullCoverage:
                 status=401,
             )
 
-            client = AsyncAccount(api_key="test-key")
+            client = AsyncAccount(email="test@example.com", api_key="test-key")
             await client.start_session()
             with pytest.raises(LexaAuthError) as exc_info:
                 await client.update_user_by_id("user-456", "New Name")
@@ -746,7 +1150,7 @@ class TestAsyncAccountFullCoverage:
                 status=403,
             )
 
-            client = AsyncAccount(api_key="test-key")
+            client = AsyncAccount(email="test@example.com", api_key="test-key")
             await client.start_session()
             with pytest.raises(InsufficientPermissionsError) as exc_info:
                 await client.update_user_by_id("user-456", "New Name")
@@ -762,6 +1166,17 @@ class TestAsyncAccountFullCoverage:
         """Test that delete_user_by_id re-raises LexaAuthError when status code is not 403 (line 357)"""
         # Mock a 401 Unauthorized response to trigger LexaAuthError (not 403)
         with aioresponses() as m:
+            # Mock the initialization login call
+            m.post(
+                "https://dev.cerevox.ai/v1/token/login",
+                payload={
+                    "access_token": "init_token",
+                    "expires_in": 3600,
+                    "refresh_token": "init_refresh",
+                    "token_type": "Bearer",
+                },
+                status=200,
+            )
             m.delete(
                 "https://dev.cerevox.ai/v1/users/user-456",
                 payload={
@@ -771,7 +1186,7 @@ class TestAsyncAccountFullCoverage:
                 status=401,
             )
 
-            client = AsyncAccount(api_key="test-key")
+            client = AsyncAccount(email="test@example.com", api_key="test-key")
             await client.start_session()
             with pytest.raises(LexaAuthError) as exc_info:
                 await client.delete_user_by_id("user-456", "confirm@example.com")
@@ -790,7 +1205,7 @@ class TestAsyncAccountFullCoverage:
                 status=403,
             )
 
-            client = AsyncAccount(api_key="test-key")
+            client = AsyncAccount(email="test@example.com", api_key="test-key")
             await client.start_session()
             with pytest.raises(InsufficientPermissionsError) as exc_info:
                 await client.delete_user_by_id("user-456", "confirm@example.com")

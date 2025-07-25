@@ -10,6 +10,7 @@ import os
 from unittest.mock import Mock, patch
 
 import pytest
+import requests
 import responses
 from requests.exceptions import ConnectionError, RequestException, Timeout
 
@@ -40,53 +41,89 @@ from cerevox.models import (
 class TestAccountInitialization:
     """Test Account client initialization"""
 
-    def test_init_with_api_key(self):
-        """Test initialization with API key parameter"""
-        client = Account(api_key="test-api-key")
-        assert client.api_key == "test-api-key"
-        assert client.base_url == "https://dev.cerevox.ai/v1"
-        assert client.timeout == 30.0
-        assert client.max_retries == 3
-        assert "Authorization" in client.session.headers
-        assert client.session.headers["Authorization"] == "Bearer test-api-key"
+    def test_init_with_email_and_api_key(self):
+        """Test initialization with email and API key parameters"""
+        with patch.object(Account, "login") as mock_login:
+            mock_login.return_value = None
+            client = Account(email="test@example.com", api_key="test-api-key")
+            assert client.email == "test@example.com"
+            assert client.api_key == "test-api-key"
+            assert client.base_url == "https://dev.cerevox.ai/v1"
+            assert client.timeout == 30.0
+            assert client.max_retries == 3
+            mock_login.assert_called_once_with("test@example.com", "test-api-key")
 
     def test_init_with_env_var(self):
         """Test initialization with environment variable"""
         with patch.dict(os.environ, {"CEREVOX_API_KEY": "env-api-key"}):
-            client = Account()
-            assert client.api_key == "env-api-key"
+            with patch.object(Account, "login") as mock_login:
+                mock_login.return_value = None
+                client = Account(email="test@example.com", api_key=None)
+                assert client.api_key == "env-api-key"
+                mock_login.assert_called_once_with("test@example.com", "env-api-key")
 
-    def test_init_without_api_key(self):
-        """Test initialization without API key raises error"""
+    def test_init_without_email_or_api_key(self):
+        """Test initialization without email or API key raises error"""
         with patch.dict(os.environ, {}, clear=True):
-            with pytest.raises(ValueError, match="API key is required"):
+            with pytest.raises(
+                ValueError,
+                match="Both email and api_key are required for authentication",
+            ):
                 Account()
+
+            with pytest.raises(
+                ValueError,
+                match="Both email and api_key are required for authentication",
+            ):
+                Account(email="test@example.com")
+
+            with pytest.raises(
+                ValueError,
+                match="Both email and api_key are required for authentication",
+            ):
+                Account(api_key="test-key")
 
     def test_init_with_custom_base_url(self):
         """Test initialization with custom base URL"""
-        client = Account(api_key="test-key", base_url="https://custom.api.com")
-        assert client.base_url == "https://custom.api.com"
+        with patch.object(Account, "login") as mock_login:
+            mock_login.return_value = None
+            client = Account(
+                email="test@example.com",
+                api_key="test-key",
+                base_url="https://custom.api.com",
+            )
+            assert client.base_url == "https://custom.api.com"
 
     def test_init_invalid_base_url(self):
         """Test initialization with invalid base URL"""
         with pytest.raises(ValueError, match="base_url must start with"):
-            Account(api_key="test-key", base_url="invalid-url")
+            Account(
+                email="test@example.com", api_key="test-key", base_url="invalid-url"
+            )
 
     def test_init_empty_base_url(self):
         """Test initialization with empty base URL"""
         with pytest.raises(ValueError, match="base_url must be a non-empty string"):
-            Account(api_key="test-key", base_url="")
+            Account(email="test@example.com", api_key="test-key", base_url="")
 
     def test_init_with_session_kwargs(self):
         """Test initialization with session kwargs"""
-        client = Account(api_key="test-key", session_kwargs={"verify": False})
-        assert not client.session.verify
+        with patch.object(Account, "login") as mock_login:
+            mock_login.return_value = None
+            client = Account(
+                email="test@example.com",
+                api_key="test-key",
+                session_kwargs={"verify": False},
+            )
+            assert not client.session.verify
 
     def test_context_manager(self):
         """Test context manager functionality"""
-        with Account(api_key="test-key") as client:
-            assert client.api_key == "test-key"
-            assert hasattr(client, "session")
+        with patch.object(Account, "login") as mock_login:
+            mock_login.return_value = None
+            with Account(email="test@example.com", api_key="test-key") as client:
+                assert client.api_key == "test-key"
+                assert hasattr(client, "session")
 
 
 class TestAccountAuthentication:
@@ -108,8 +145,12 @@ class TestAccountAuthentication:
             headers={"x-request-id": "req-123"},
         )
 
-        client = Account(api_key="test-key")
-        result = client.login("user@example.com", "password123")
+        with patch.object(Account, "__init__", return_value=None):
+            client = Account.__new__(Account)
+            client.session = requests.Session()
+            client.base_url = "https://dev.cerevox.ai/v1"
+            client.timeout = 30.0
+            result = client.login("user@example.com", "password123")
 
         assert isinstance(result, TokenResponse)
         assert result.access_token == "access_123"
@@ -133,9 +174,13 @@ class TestAccountAuthentication:
             headers={"x-request-id": "req-123"},
         )
 
-        client = Account(api_key="test-key")
-        with pytest.raises(LexaAuthError):
-            client.login("user@example.com", "wrong-password")
+        with patch.object(Account, "__init__", return_value=None):
+            client = Account.__new__(Account)
+            client.session = requests.Session()
+            client.base_url = "https://dev.cerevox.ai/v1"
+            client.timeout = 30.0
+            with pytest.raises(LexaAuthError):
+                client.login("user@example.com", "wrong-password")
 
     @responses.activate
     def test_refresh_token_success(self):
@@ -152,8 +197,12 @@ class TestAccountAuthentication:
             status=200,
         )
 
-        client = Account(api_key="test-key")
-        result = client.refresh_token("refresh_456")
+        with patch.object(Account, "__init__", return_value=None):
+            client = Account.__new__(Account)
+            client.session = requests.Session()
+            client.base_url = "https://dev.cerevox.ai/v1"
+            client.timeout = 30.0
+            result = client.refresh_token("refresh_456")
 
         assert isinstance(result, TokenResponse)
         assert result.access_token == "new_access_123"
@@ -168,8 +217,12 @@ class TestAccountAuthentication:
             status=200,
         )
 
-        client = Account(api_key="test-key")
-        result = client.revoke_token()
+        with patch.object(Account, "__init__", return_value=None):
+            client = Account.__new__(Account)
+            client.session = requests.Session()
+            client.base_url = "https://dev.cerevox.ai/v1"
+            client.timeout = 30.0
+            result = client.revoke_token()
 
         assert isinstance(result, MessageResponse)
         assert result.message == "Token revoked successfully"
@@ -192,8 +245,12 @@ class TestAccountManagement:
             status=200,
         )
 
-        client = Account(api_key="test-key")
-        result = client.get_account_info()
+        with patch.object(Account, "__init__", return_value=None):
+            client = Account.__new__(Account)
+            client.session = requests.Session()
+            client.base_url = "https://dev.cerevox.ai/v1"
+            client.timeout = 30.0
+            result = client.get_account_info()
 
         assert isinstance(result, AccountInfo)
         assert result.account_id == "acc-123"
@@ -206,17 +263,23 @@ class TestAccountManagement:
             responses.GET,
             "https://dev.cerevox.ai/v1/accounts/acc-123/plan",
             json={
-                "plan": "professional",
-                "base": 1000,
-                "bytes": 1073741824,
-                "messages": 10000,
-                "status": "active",
+                "plan": {
+                    "plan": "professional",
+                    "base": 1000,
+                    "bytes": 1073741824,
+                    "messages": 10000,
+                    "status": "active",
+                }
             },
             status=200,
         )
 
-        client = Account(api_key="test-key")
-        result = client.get_account_plan("acc-123")
+        with patch.object(Account, "__init__", return_value=None):
+            client = Account.__new__(Account)
+            client.session = requests.Session()
+            client.base_url = "https://dev.cerevox.ai/v1"
+            client.timeout = 30.0
+            result = client.get_account_plan("acc-123")
 
         assert isinstance(result, AccountPlan)
         assert result.plan == "professional"
@@ -239,8 +302,12 @@ class TestAccountManagement:
             status=200,
         )
 
-        client = Account(api_key="test-key")
-        result = client.get_account_usage("acc-123")
+        with patch.object(Account, "__init__", return_value=None):
+            client = Account.__new__(Account)
+            client.session = requests.Session()
+            client.base_url = "https://dev.cerevox.ai/v1"
+            client.timeout = 30.0
+            result = client.get_account_usage("acc-123")
 
         assert isinstance(result, UsageMetrics)
         assert result.files["processed"] == 50
@@ -261,7 +328,11 @@ class TestUserManagement:
             status=201,
         )
 
-        client = Account(api_key="test-key")
+        with patch.object(Account, "__init__", return_value=None):
+            client = Account.__new__(Account)
+            client.session = requests.Session()
+            client.base_url = "https://dev.cerevox.ai/v1"
+            client.timeout = 30.0
         result = client.create_user("new@example.com", "New User")
 
         assert isinstance(result, CreatedResponse)
@@ -278,7 +349,11 @@ class TestUserManagement:
             status=403,
         )
 
-        client = Account(api_key="test-key")
+        with patch.object(Account, "__init__", return_value=None):
+            client = Account.__new__(Account)
+            client.session = requests.Session()
+            client.base_url = "https://dev.cerevox.ai/v1"
+            client.timeout = 30.0
         with pytest.raises(InsufficientPermissionsError):
             client.create_user("new@example.com", "New User")
 
@@ -311,7 +386,11 @@ class TestUserManagement:
             status=200,
         )
 
-        client = Account(api_key="test-key")
+        with patch.object(Account, "__init__", return_value=None):
+            client = Account.__new__(Account)
+            client.session = requests.Session()
+            client.base_url = "https://dev.cerevox.ai/v1"
+            client.timeout = 30.0
         result = client.get_users()
 
         assert isinstance(result, list)
@@ -341,7 +420,11 @@ class TestUserManagement:
             status=200,
         )
 
-        client = Account(api_key="test-key")
+        with patch.object(Account, "__init__", return_value=None):
+            client = Account.__new__(Account)
+            client.session = requests.Session()
+            client.base_url = "https://dev.cerevox.ai/v1"
+            client.timeout = 30.0
         result = client.get_users()
 
         assert isinstance(result, list)
@@ -365,7 +448,11 @@ class TestUserManagement:
             status=200,
         )
 
-        client = Account(api_key="test-key")
+        with patch.object(Account, "__init__", return_value=None):
+            client = Account.__new__(Account)
+            client.session = requests.Session()
+            client.base_url = "https://dev.cerevox.ai/v1"
+            client.timeout = 30.0
         result = client.get_user_me()
 
         assert isinstance(result, User)
@@ -383,7 +470,11 @@ class TestUserManagement:
             status=200,
         )
 
-        client = Account(api_key="test-key")
+        with patch.object(Account, "__init__", return_value=None):
+            client = Account.__new__(Account)
+            client.session = requests.Session()
+            client.base_url = "https://dev.cerevox.ai/v1"
+            client.timeout = 30.0
         result = client.update_user_me("Updated Name")
 
         assert isinstance(result, UpdatedResponse)
@@ -407,7 +498,11 @@ class TestUserManagement:
             status=200,
         )
 
-        client = Account(api_key="test-key")
+        with patch.object(Account, "__init__", return_value=None):
+            client = Account.__new__(Account)
+            client.session = requests.Session()
+            client.base_url = "https://dev.cerevox.ai/v1"
+            client.timeout = 30.0
         result = client.get_user_by_id("user-456")
 
         assert isinstance(result, User)
@@ -424,7 +519,11 @@ class TestUserManagement:
             status=403,
         )
 
-        client = Account(api_key="test-key")
+        with patch.object(Account, "__init__", return_value=None):
+            client = Account.__new__(Account)
+            client.session = requests.Session()
+            client.base_url = "https://dev.cerevox.ai/v1"
+            client.timeout = 30.0
         with pytest.raises(InsufficientPermissionsError):
             client.get_user_by_id("user-456")
 
@@ -438,7 +537,11 @@ class TestUserManagement:
             status=200,
         )
 
-        client = Account(api_key="test-key")
+        with patch.object(Account, "__init__", return_value=None):
+            client = Account.__new__(Account)
+            client.session = requests.Session()
+            client.base_url = "https://dev.cerevox.ai/v1"
+            client.timeout = 30.0
         result = client.update_user_by_id("user-456", "New Name")
 
         assert isinstance(result, UpdatedResponse)
@@ -454,7 +557,11 @@ class TestUserManagement:
             status=200,
         )
 
-        client = Account(api_key="test-key")
+        with patch.object(Account, "__init__", return_value=None):
+            client = Account.__new__(Account)
+            client.session = requests.Session()
+            client.base_url = "https://dev.cerevox.ai/v1"
+            client.timeout = 30.0
         result = client.delete_user_by_id("user-456", "confirm@example.com")
 
         assert isinstance(result, DeletedResponse)
@@ -473,7 +580,11 @@ class TestAccountErrorHandling:
             body=Timeout(),
         )
 
-        client = Account(api_key="test-key")
+        with patch.object(Account, "__init__", return_value=None):
+            client = Account.__new__(Account)
+            client.session = requests.Session()
+            client.base_url = "https://dev.cerevox.ai/v1"
+            client.timeout = 30.0
         with pytest.raises(LexaTimeoutError):
             client.get_account_info()
 
@@ -486,7 +597,11 @@ class TestAccountErrorHandling:
             body=ConnectionError(),
         )
 
-        client = Account(api_key="test-key")
+        with patch.object(Account, "__init__", return_value=None):
+            client = Account.__new__(Account)
+            client.session = requests.Session()
+            client.base_url = "https://dev.cerevox.ai/v1"
+            client.timeout = 30.0
         with pytest.raises(LexaError):
             client.get_account_info()
 
@@ -501,7 +616,11 @@ class TestAccountErrorHandling:
             headers={"x-request-id": "req-123"},
         )
 
-        client = Account(api_key="test-key")
+        with patch.object(Account, "__init__", return_value=None):
+            client = Account.__new__(Account)
+            client.session = requests.Session()
+            client.base_url = "https://dev.cerevox.ai/v1"
+            client.timeout = 30.0
         with pytest.raises(LexaRateLimitError) as exc_info:
             client.get_account_info()
 
@@ -520,7 +639,11 @@ class TestAccountErrorHandling:
             status=400,
         )
 
-        client = Account(api_key="test-key")
+        with patch.object(Account, "__init__", return_value=None):
+            client = Account.__new__(Account)
+            client.session = requests.Session()
+            client.base_url = "https://dev.cerevox.ai/v1"
+            client.timeout = 30.0
         with pytest.raises(LexaValidationError) as exc_info:
             client.create_user("invalid-email", "Test User")
 
@@ -537,7 +660,11 @@ class TestAccountErrorHandling:
             content_type="text/plain",
         )
 
-        client = Account(api_key="test-key")
+        with patch.object(Account, "__init__", return_value=None):
+            client = Account.__new__(Account)
+            client.session = requests.Session()
+            client.base_url = "https://dev.cerevox.ai/v1"
+            client.timeout = 30.0
         # Use the _request method directly to test non-JSON handling
         result = client._request("GET", "/users/me")
         # Should return basic success response for non-JSON 200 responses
@@ -554,7 +681,11 @@ class TestAccountErrorHandling:
             # No x-request-id header
         )
 
-        client = Account(api_key="test-key")
+        with patch.object(Account, "__init__", return_value=None):
+            client = Account.__new__(Account)
+            client.session = requests.Session()
+            client.base_url = "https://dev.cerevox.ai/v1"
+            client.timeout = 30.0
         with pytest.raises(LexaError) as exc_info:
             client.get_account_info()
 
@@ -567,31 +698,47 @@ class TestAccountRequestHelpers:
 
     def test_close_session(self):
         """Test session closing"""
-        client = Account(api_key="test-key")
-        original_close = Mock()
-        client.session.close = original_close
+        with patch.object(Account, "__init__", return_value=None):
+            client = Account.__new__(Account)
+            client.session = requests.Session()
+            client.base_url = "https://dev.cerevox.ai/v1"
+            client.timeout = 30.0
+            original_close = Mock()
+            client.session.close = original_close
 
-        client.close()
-        original_close.assert_called_once()
+            client.close()
+            original_close.assert_called_once()
 
     def test_close_session_without_session(self):
         """Test closing when session doesn't exist"""
-        client = Account(api_key="test-key")
-        del client.session  # Remove session
-        # Should not raise an error
-        client.close()
+        with patch.object(Account, "__init__", return_value=None):
+            client = Account.__new__(Account)
+            client.session = requests.Session()
+            client.base_url = "https://dev.cerevox.ai/v1"
+            client.timeout = 30.0
+            del client.session  # Remove session
+            # Should not raise an error
+            client.close()
 
 
 class TestAccountFullCoverage:
 
     def test_extra_kwargs(self):
         """Test that extra kwargs are applied to session for backward compatibility"""
-        client = Account(api_key="test-key", verify=False, stream=True, trust_env=False)
+        with patch.object(Account, "login") as mock_login:
+            mock_login.return_value = None
+            client = Account(
+                email="test@example.com",
+                api_key="test-key",
+                verify=False,
+                stream=True,
+                trust_env=False,
+            )
 
-        # Verify that the extra kwargs were applied to the session
-        assert client.session.verify is False
-        assert client.session.stream is True
-        assert client.session.trust_env is False
+            # Verify that the extra kwargs were applied to the session
+            assert client.session.verify is False
+            assert client.session.stream is True
+            assert client.session.trust_env is False
 
     @responses.activate
     def test_bad_json_response(self):
@@ -605,7 +752,11 @@ class TestAccountFullCoverage:
             content_type="text/plain",
         )
 
-        client = Account(api_key="test-key")
+        with patch.object(Account, "__init__", return_value=None):
+            client = Account.__new__(Account)
+            client.session = requests.Session()
+            client.base_url = "https://dev.cerevox.ai/v1"
+            client.timeout = 30.0
 
         # Should raise LexaValidationError with error data from lines 199-200
         with pytest.raises(LexaValidationError) as exc_info:
@@ -628,7 +779,11 @@ class TestAccountFullCoverage:
             status=401,
         )
 
-        client = Account(api_key="test-key")
+        with patch.object(Account, "__init__", return_value=None):
+            client = Account.__new__(Account)
+            client.session = requests.Session()
+            client.base_url = "https://dev.cerevox.ai/v1"
+            client.timeout = 30.0
 
         # This should trigger the LexaAuthError with 401 status, which will hit line 357
         # (the raise statement that re-raises when status_code != 403)
@@ -651,7 +806,11 @@ class TestAccountFullCoverage:
             status=401,
         )
 
-        client = Account(api_key="test-key")
+        with patch.object(Account, "__init__", return_value=None):
+            client = Account.__new__(Account)
+            client.session = requests.Session()
+            client.base_url = "https://dev.cerevox.ai/v1"
+            client.timeout = 30.0
 
         # This should trigger the LexaAuthError with 401 status, which will hit line 357
         # (the raise statement that re-raises when status_code != 403)
@@ -674,7 +833,11 @@ class TestAccountFullCoverage:
             status=401,
         )
 
-        client = Account(api_key="test-key")
+        with patch.object(Account, "__init__", return_value=None):
+            client = Account.__new__(Account)
+            client.session = requests.Session()
+            client.base_url = "https://dev.cerevox.ai/v1"
+            client.timeout = 30.0
         with pytest.raises(LexaAuthError) as exc_info:
             client.update_user_by_id("user-456", "New Name")
 
@@ -691,7 +854,11 @@ class TestAccountFullCoverage:
             status=403,
         )
 
-        client = Account(api_key="test-key")
+        with patch.object(Account, "__init__", return_value=None):
+            client = Account.__new__(Account)
+            client.session = requests.Session()
+            client.base_url = "https://dev.cerevox.ai/v1"
+            client.timeout = 30.0
         with pytest.raises(InsufficientPermissionsError) as exc_info:
             client.update_user_by_id("user-456", "New Name")
 
@@ -709,7 +876,11 @@ class TestAccountFullCoverage:
             status=401,
         )
 
-        client = Account(api_key="test-key")
+        with patch.object(Account, "__init__", return_value=None):
+            client = Account.__new__(Account)
+            client.session = requests.Session()
+            client.base_url = "https://dev.cerevox.ai/v1"
+            client.timeout = 30.0
         with pytest.raises(LexaAuthError) as exc_info:
             client.delete_user_by_id("user-456", "confirm@example.com")
 
@@ -726,7 +897,11 @@ class TestAccountFullCoverage:
             status=403,
         )
 
-        client = Account(api_key="test-key")
+        with patch.object(Account, "__init__", return_value=None):
+            client = Account.__new__(Account)
+            client.session = requests.Session()
+            client.base_url = "https://dev.cerevox.ai/v1"
+            client.timeout = 30.0
         with pytest.raises(InsufficientPermissionsError) as exc_info:
             client.delete_user_by_id("user-456", "confirm@example.com")
 

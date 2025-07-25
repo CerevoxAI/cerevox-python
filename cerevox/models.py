@@ -436,3 +436,176 @@ class DeletedResponse(BaseModel):
     status: str = Field(..., description="Operation status")
 
     model_config = ConfigDict(populate_by_name=True)
+
+
+# Hippo Client Models
+class FolderCreate(BaseModel):
+    """Request for creating a folder"""
+
+    folder_id: str = Field(..., description="Unique folder identifier")
+    folder_name: str = Field(..., description="Folder display name")
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class FolderItem(BaseModel):
+    """Folder information"""
+
+    folder_id: str = Field(..., description="Unique folder identifier")
+    folder_name: str = Field(..., description="Folder display name")
+    last_modified: Optional[str] = Field(
+        None, description="Last modification timestamp"
+    )
+    status: Optional[str] = Field(None, description="Folder status")
+    currentSize: Optional[int] = Field(None, description="Current folder size in bytes")
+    historicalSize: Optional[int] = Field(
+        None, description="Historical folder size in bytes"
+    )
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class FolderCreatedResponse(BaseModel):
+    """Response for folder creation"""
+
+    created: bool = Field(..., description="Creation success flag")
+    status: str = Field(..., description="Operation status")
+    folder_id: str = Field(..., description="Created folder ID")
+    folder_name: str = Field(..., description="Created folder name")
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class FoldersListResponse(BaseModel):
+    """Response containing list of folders"""
+
+    folders: List[FolderItem] = Field(..., description="List of folders")
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class FileItem(BaseModel):
+    """File information"""
+
+    file_id: str = Field(..., description="Unique file identifier")
+    name: str = Field(..., description="File name")
+    size: Optional[int] = Field(None, description="File size in bytes")
+    provider: Optional[str] = Field(None, description="File provider")
+    source: Optional[str] = Field(None, description="File source")
+    ts: Optional[int] = Field(None, description="Timestamp")
+    type: Optional[str] = Field(None, description="File MIME type")
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class FileUploadResponse(BaseModel):
+    """Response for file upload operations"""
+
+    uploaded: bool = Field(..., description="Upload success flag")
+    status: str = Field(..., description="Operation status")
+    uploads: Optional[List[str]] = Field(
+        None, description="List of uploaded file names"
+    )
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class FilesListResponse(BaseModel):
+    """Response containing list of files"""
+
+    files: List[FileItem] = Field(..., description="List of files")
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class ChatCreate(BaseModel):
+    """Request for creating a chat"""
+
+    folder_id: str = Field(..., description="Folder ID to create chat for")
+    openai_key: str = Field(..., description="OpenAI API key for chat functionality")
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class ChatItem(BaseModel):
+    """Chat information"""
+
+    chat_id: str = Field(..., description="Unique chat identifier")
+    chat_name: Optional[str] = Field(None, description="Chat display name")
+    created: Optional[str] = Field(None, description="Creation timestamp")
+    folder_id: Optional[str] = Field(None, description="Associated folder ID")
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class ChatCreatedResponse(BaseModel):
+    """Response for chat creation"""
+
+    created: bool = Field(..., description="Creation success flag")
+    status: str = Field(..., description="Operation status")
+    chat_id: str = Field(..., description="Created chat ID")
+    chat_name: Optional[str] = Field(None, description="Created chat name")
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class ChatsListResponse(BaseModel):
+    """Response containing list of chats"""
+
+    chats: List[ChatItem] = Field(..., description="List of chats")
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class SourceData(BaseModel):
+    """Source data for ask responses"""
+
+    citation: Optional[str] = Field(None, description="Citation information")
+    name: Optional[str] = Field(None, description="Source name")
+    type: Optional[str] = Field(None, description="Source type")
+    page: Optional[int] = Field(None, description="Source page number")
+    text_blocks: Optional[List[str]] = Field(None, description="Source text blocks")
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class AskSubmitRequest(BaseModel):
+    """Request for submitting an ask"""
+
+    query: str = Field(..., description="Question/query to ask")
+    is_qna: bool = Field(
+        ..., description="Whether to return final answer (True) or sources only (False)"
+    )
+    citation_style: Optional[str] = Field(
+        None, description="Citation style for sources"
+    )
+    file_sources: Optional[List[str]] = Field(
+        None, description="Specific files to query against"
+    )
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class AskItem(BaseModel):
+    """Ask information"""
+
+    ask_index: Optional[int] = Field(None, description="Index of the ask")
+    datetime: Optional[str] = Field(None, description="Ask timestamp")
+    query: str = Field(..., description="The question asked")
+    response: str = Field(..., description="The response received")
+    filenames: Optional[List[str]] = Field(
+        None, description="Files checked for response"
+    )
+    source_data: Optional[List[SourceData]] = Field(
+        None, description="Source data for response"
+    )
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class AsksListResponse(BaseModel):
+    """Response containing list of asks"""
+
+    asks: List[AskItem] = Field(..., description="List of asks")
+
+    model_config = ConfigDict(populate_by_name=True)
