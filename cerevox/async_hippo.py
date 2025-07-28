@@ -413,7 +413,6 @@ class AsyncHippo:
         Returns:
             FileUploadResponse containing upload confirmation and file info
         """
-        import os
 
         filename = os.path.basename(file_path)
 

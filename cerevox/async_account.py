@@ -117,8 +117,7 @@ class AsyncAccount:
     async def __aenter__(self) -> "AsyncAccount":
         """Async context manager entry"""
         await self.start_session()
-        # Automatically authenticate using email and password
-        await self.login(self.email, self.api_key)
+
         return self
 
     async def __aexit__(
@@ -134,6 +133,8 @@ class AsyncAccount:
         """Start the aiohttp session"""
         if self.session is None:
             self.session = aiohttp.ClientSession(**self.session_kwargs)
+            # Automatically authenticate using email and password
+            await self.login(self.email, self.api_key)
 
     async def close_session(self) -> None:
         """Close the aiohttp session"""

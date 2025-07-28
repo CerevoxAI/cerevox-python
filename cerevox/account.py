@@ -293,6 +293,11 @@ class Account:
             MessageResponse with revocation confirmation
         """
         response_data = self._request("POST", "/token/revoke")
+
+        # Remove the authorization header since the token is now revoked
+        if "Authorization" in self.session.headers:
+            del self.session.headers["Authorization"]
+
         return MessageResponse(**response_data)
 
     # Account Management Methods
