@@ -1,5 +1,5 @@
 """
-Test suite for cerevox.document_loader
+Test suite for cerevox.utils.document_loader
 
 Comprehensive tests to achieve 100% code coverage for the Document utilities,
 including all methods, error handling, and edge cases.
@@ -29,7 +29,7 @@ try:
 except ImportError:
     BS4_AVAILABLE = False
 
-from cerevox.document_loader import (
+from cerevox.utils.document_loader import (
     Document,
     DocumentBatch,
     DocumentElement,
@@ -58,7 +58,7 @@ class TestImportWarnings:
 
     def test_pandas_functionality_when_unavailable(self):
         """Test that pandas-dependent functionality raises appropriate errors when pandas is unavailable"""
-        with patch("cerevox.document_loader.PANDAS_AVAILABLE", False):
+        with patch("cerevox.utils.document_loader.PANDAS_AVAILABLE", False):
             table = DocumentTable(
                 element_id="test", headers=["A"], rows=[["1"]], page_number=1
             )
@@ -68,7 +68,7 @@ class TestImportWarnings:
 
     def test_beautifulsoup_functionality_when_unavailable(self):
         """Test that BeautifulSoup-dependent functionality returns None when bs4 is unavailable"""
-        with patch("cerevox.document_loader.BS4_AVAILABLE", False):
+        with patch("cerevox.utils.document_loader.BS4_AVAILABLE", False):
             html = "<table><tr><th>Test</th></tr></table>"
             result = Document._parse_table_from_html(html, 0, 1, "test")
             assert result is None
@@ -441,7 +441,7 @@ class TestHelperFunctions:
 
     def test_split_by_paragraphs_if_not_paragraphs(self):
         """Test _split_by_paragraphs with no paragraph breaks"""
-        with patch("cerevox.document_loader.re.split") as mock_split:
+        with patch("cerevox.utils.document_loader.re.split") as mock_split:
             mock_split.return_value = []
             text = "Single paragraph without breaks"
             chunks = _split_by_paragraphs(text, max_size=50)
@@ -483,7 +483,7 @@ class TestHelperFunctions:
             This is not a long one. the next 
             This is a very long sentence that exceeds the maximum size limit and should be split by character limit.
         """
-        with patch("cerevox.document_loader._split_at_sentences") as mock_split:
+        with patch("cerevox.utils.document_loader._split_at_sentences") as mock_split:
             # long string but len is short
             mock_string = MagicMock()
             mock_string.__add__ = (
@@ -826,7 +826,7 @@ class TestDocumentTable:
         if not PANDAS_AVAILABLE:
             pytest.skip("pandas not available")
 
-        with patch("cerevox.document_loader.PANDAS_AVAILABLE", True):
+        with patch("cerevox.utils.document_loader.PANDAS_AVAILABLE", True):
             table = self.create_test_table()
             df = table.to_pandas()
 
@@ -838,7 +838,7 @@ class TestDocumentTable:
 
     def test_to_pandas_no_headers(self):
         """Test to_pandas method without headers"""
-        with patch("cerevox.document_loader.PANDAS_AVAILABLE", True):
+        with patch("cerevox.utils.document_loader.PANDAS_AVAILABLE", True):
             if not PANDAS_AVAILABLE:
                 pytest.skip("pandas not available")
 
@@ -856,7 +856,7 @@ class TestDocumentTable:
 
     def test_to_pandas_empty_rows(self):
         """Test to_pandas method with empty rows"""
-        with patch("cerevox.document_loader.PANDAS_AVAILABLE", True):
+        with patch("cerevox.utils.document_loader.PANDAS_AVAILABLE", True):
             if not PANDAS_AVAILABLE:
                 pytest.skip("pandas not available")
 
@@ -870,7 +870,7 @@ class TestDocumentTable:
 
     def test_to_pandas_not_available(self):
         """Test to_pandas method when pandas is not available"""
-        with patch("cerevox.document_loader.PANDAS_AVAILABLE", False):
+        with patch("cerevox.utils.document_loader.PANDAS_AVAILABLE", False):
             table = self.create_test_table()
 
             with pytest.raises(ImportError, match="pandas is required"):
@@ -1540,7 +1540,7 @@ class TestHelperFunctions2:
 
     def test_split_large_text_by_sentences_no_sentences(self):
         """Test _split_large_text_by_sentences with no sentences"""
-        with patch("cerevox.document_loader._split_at_sentences") as mock_split:
+        with patch("cerevox.utils.document_loader._split_at_sentences") as mock_split:
             mock_split.return_value = ["    "]
             oversized_sentence = "This_is_a_very_long_sentence_without_"
             result = _split_large_text_by_sentences(oversized_sentence, 100)
@@ -1619,7 +1619,7 @@ class TestDocumentAdvanced:
 
     def test_to_pandas_tables(self):
         """Test to_pandas_tables method"""
-        with patch("cerevox.document_loader.PANDAS_AVAILABLE", True):
+        with patch("cerevox.utils.document_loader.PANDAS_AVAILABLE", True):
             if not PANDAS_AVAILABLE:
                 pytest.skip("pandas not available")
 
@@ -1632,7 +1632,7 @@ class TestDocumentAdvanced:
 
     def test_to_pandas_tables_not_available(self):
         """Test to_pandas_tables when pandas not available"""
-        with patch("cerevox.document_loader.PANDAS_AVAILABLE", False):
+        with patch("cerevox.utils.document_loader.PANDAS_AVAILABLE", False):
             doc = self.create_test_document()
 
             with pytest.raises(ImportError, match="pandas is required"):
@@ -1662,7 +1662,7 @@ class TestDocumentAdvanced:
         """Test validate method with invalid data"""
         # Create document with invalid metadata
         with patch(
-            "cerevox.document_loader.Document.get_processing_errors",
+            "cerevox.utils.document_loader.Document.get_processing_errors",
             return_value={
                 "errors": {"filename": "Filename is required"},
                 "error_count": 1,
@@ -1735,7 +1735,7 @@ class TestDocumentAdvanced:
 
     def test_from_api_response_array(self):
         """Test from_api_response with documents format"""
-        with patch("cerevox.document_loader.BS4_AVAILABLE", True):
+        with patch("cerevox.utils.document_loader.BS4_AVAILABLE", True):
             response_data = [
                 {
                     "content": {"markdown": "MD content", "text": "Test content"},
@@ -1797,7 +1797,7 @@ class TestDocumentAdvanced:
 
     def test_parse_table_from_html_not_available(self):
         """Test _parse_table_from_html when BeautifulSoup not available"""
-        with patch("cerevox.document_loader.BS4_AVAILABLE", False):
+        with patch("cerevox.utils.document_loader.BS4_AVAILABLE", False):
             html = "<table><tr><th>Header</th></tr></table>"
 
             table = Document._parse_table_from_html(html, 0, 1, "table1")
@@ -1806,7 +1806,7 @@ class TestDocumentAdvanced:
 
     def test_parse_table_from_html(self):
         """Test _parse_table_from_html method"""
-        with patch("cerevox.document_loader.BS4_AVAILABLE", True):
+        with patch("cerevox.utils.document_loader.BS4_AVAILABLE", True):
             if not BS4_AVAILABLE:
                 pytest.skip("BeautifulSoup4 not available")
 
@@ -2165,7 +2165,7 @@ class TestDocumentBatch:
 
     def test_get_all_pandas_tables(self):
         """Test get_all_pandas_tables method"""
-        with patch("cerevox.document_loader.PANDAS_AVAILABLE", True):
+        with patch("cerevox.utils.document_loader.PANDAS_AVAILABLE", True):
             if not PANDAS_AVAILABLE:
                 pytest.skip("pandas not available")
 
@@ -2195,7 +2195,7 @@ class TestDocumentBatch:
 
     def test_get_all_pandas_tables_not_available(self):
         """Test get_all_pandas_tables when pandas not available"""
-        with patch("cerevox.document_loader.PANDAS_AVAILABLE", False):
+        with patch("cerevox.utils.document_loader.PANDAS_AVAILABLE", False):
             docs = self.create_test_documents()
             batch = DocumentBatch(docs)
 
@@ -2551,6 +2551,8 @@ class TestDocumentBatch:
 
         errors = batch.validate()
 
+        print(errors)
+
         assert isinstance(errors, list)
         # Should have no errors for valid documents
         assert len(errors) == 0
@@ -2739,7 +2741,7 @@ class TestOptionalDependencies:
 
     def test_pandas_warning(self):
         """Test that pandas warning is issued when not available"""
-        with patch("cerevox.document_loader.PANDAS_AVAILABLE", False):
+        with patch("cerevox.utils.document_loader.PANDAS_AVAILABLE", False):
             with warnings.catch_warnings(record=True) as w:
                 warnings.simplefilter("always")
                 # Import would trigger the warning, but it's already imported
@@ -2753,7 +2755,7 @@ class TestOptionalDependencies:
 
     def test_bs4_warning(self):
         """Test that BeautifulSoup warning is issued when not available"""
-        with patch("cerevox.document_loader.BS4_AVAILABLE", False):
+        with patch("cerevox.utils.document_loader.BS4_AVAILABLE", False):
             html = "<table><tr><th>Test</th></tr></table>"
             result = Document._parse_table_from_html(html, 0, 1, "test")
             assert result is None
@@ -2943,14 +2945,14 @@ class TestParseTableFromHTML:
 
     def test_parse_table_bs4_not_available(self):
         """Test _parse_table_from_html when BeautifulSoup is not available"""
-        with patch("cerevox.document_loader.BS4_AVAILABLE", False):
+        with patch("cerevox.utils.document_loader.BS4_AVAILABLE", False):
             html = "<table><tr><th>Header</th></tr><tr><td>Data</td></tr></table>"
             result = Document._parse_table_from_html(html, 0, 1, "test")
             assert result is None
 
     def test_parse_table_malformed_html(self):
         """Test _parse_table_from_html with malformed HTML"""
-        with patch("cerevox.document_loader.BS4_AVAILABLE", True):
+        with patch("cerevox.utils.document_loader.BS4_AVAILABLE", True):
             html = "<malformed>not valid html"
             result = Document._parse_table_from_html(html, 0, 1, "test")
             assert result is None
@@ -2969,7 +2971,7 @@ class TestParseTableFromHTML:
 
     def test_parse_table_with_caption(self):
         """Test _parse_table_from_html with caption"""
-        with patch("cerevox.document_loader.BS4_AVAILABLE", True):
+        with patch("cerevox.utils.document_loader.BS4_AVAILABLE", True):
             if not BS4_AVAILABLE:
                 pytest.skip("BeautifulSoup4 not available")
 
@@ -2982,7 +2984,7 @@ class TestParseTableFromHTML:
 
     def test_parse_table_mixed_th_td_headers(self):
         """Test _parse_table_from_html with mixed th/td in header row"""
-        with patch("cerevox.document_loader.BS4_AVAILABLE", True):
+        with patch("cerevox.utils.document_loader.BS4_AVAILABLE", True):
             if not BS4_AVAILABLE:
                 pytest.skip("BeautifulSoup4 not available")
 
@@ -3222,9 +3224,9 @@ class TestImportWarningsActual:
                 # Re-import the module to trigger the warning
                 import importlib
 
-                import cerevox.document_loader
+                import cerevox.utils.document_loader
 
-                importlib.reload(cerevox.document_loader)
+                importlib.reload(cerevox.utils.document_loader)
 
                 # Check if warning was triggered
                 pandas_warnings = [
@@ -3246,9 +3248,9 @@ class TestImportWarningsActual:
                 # Re-import the module to trigger the warning
                 import importlib
 
-                import cerevox.document_loader
+                import cerevox.utils.document_loader
 
-                importlib.reload(cerevox.document_loader)
+                importlib.reload(cerevox.utils.document_loader)
 
                 # Check if warning was triggered
                 bs4_warnings = [
@@ -3522,7 +3524,7 @@ class TestEdgeCases:
 
     def test_parse_table_from_html_exception_handling(self):
         """Test _parse_table_from_html exception handling"""
-        with patch("cerevox.document_loader.BS4_AVAILABLE", True):
+        with patch("cerevox.utils.document_loader.BS4_AVAILABLE", True):
             # Test with malformed HTML that causes BeautifulSoup to raise exception
             if BS4_AVAILABLE:
                 # This should trigger the exception handling
@@ -3930,7 +3932,7 @@ class TestComprehensiveCoverage:
         # So we can test the functionality that depends on the flags
 
         # Test when PANDAS_AVAILABLE is False
-        with patch("cerevox.document_loader.PANDAS_AVAILABLE", False):
+        with patch("cerevox.utils.document_loader.PANDAS_AVAILABLE", False):
             table = DocumentTable(
                 element_id="test", headers=["A"], rows=[["1"]], page_number=1
             )
@@ -3939,7 +3941,7 @@ class TestComprehensiveCoverage:
                 table.to_pandas()
 
         # Test when BS4_AVAILABLE is False
-        with patch("cerevox.document_loader.BS4_AVAILABLE", False):
+        with patch("cerevox.utils.document_loader.BS4_AVAILABLE", False):
             result = Document._parse_table_from_html("<table></table>", 0, 1, "test")
             assert result is None
 
@@ -4016,7 +4018,7 @@ class TestMissingCoveragePaths:
 
         # Create HTML that will cause an exception in BeautifulSoup parsing (line 907)
         with patch(
-            "cerevox.document_loader.BeautifulSoup",
+            "cerevox.utils.document_loader.BeautifulSoup",
             side_effect=Exception("Parsing error"),
         ):
             result = Document._parse_table_from_html("<table></table>", 0, 1, "test")
@@ -4028,7 +4030,7 @@ class TestMissingCoveragePaths:
             pytest.skip("BeautifulSoup4 not available")
 
         # Mock BeautifulSoup to return None for table element
-        with patch("cerevox.document_loader.BeautifulSoup") as mock_soup:
+        with patch("cerevox.utils.document_loader.BeautifulSoup") as mock_soup:
             mock_soup_instance = MagicMock()
             mock_soup_instance.find.return_value = None
             mock_soup.return_value = mock_soup_instance
@@ -4044,7 +4046,7 @@ class TestMissingCoveragePaths:
             pytest.skip("BeautifulSoup4 not available")
 
         # Mock BeautifulSoup to return a non-Tag object
-        with patch("cerevox.document_loader.BeautifulSoup") as mock_soup:
+        with patch("cerevox.utils.document_loader.BeautifulSoup") as mock_soup:
             mock_soup_instance = MagicMock()
             mock_soup_instance.find.return_value = "not a tag"  # String instead of Tag
             mock_soup.return_value = mock_soup_instance
@@ -4068,7 +4070,7 @@ class TestMissingCoveragePaths:
             pytest.skip("BeautifulSoup4 not available")
 
         # Mock the table structure to return non-Tag for header row
-        with patch("cerevox.document_loader.BeautifulSoup") as mock_soup:
+        with patch("cerevox.utils.document_loader.BeautifulSoup") as mock_soup:
             mock_soup_instance = MagicMock()
             mock_table = MagicMock()
             mock_table.find.return_value = "not a tag"  # String instead of Tag
@@ -4077,7 +4079,7 @@ class TestMissingCoveragePaths:
             mock_soup.return_value = mock_soup_instance
 
             # Also need to mock isinstance check
-            with patch("cerevox.document_loader.isinstance") as mock_isinstance:
+            with patch("cerevox.utils.document_loader.isinstance") as mock_isinstance:
                 mock_isinstance.side_effect = (
                     lambda obj, cls: cls == Tag and obj != "not a tag"
                 )
@@ -4088,7 +4090,7 @@ class TestMissingCoveragePaths:
 
     def test_parse_table_from_html_no_th_elements(self):
         """Test _parse_table_from_html when no th elements are found (covers th_cells check)"""
-        with patch("cerevox.document_loader.BS4_AVAILABLE", True):
+        with patch("cerevox.utils.document_loader.BS4_AVAILABLE", True):
             if not BS4_AVAILABLE:
                 pytest.skip("BeautifulSoup4 not available")
 
@@ -4103,7 +4105,7 @@ class TestMissingCoveragePaths:
 
     def test_parse_table_from_html_empty_rows_check(self):
         """Test _parse_table_from_html path that filters out empty rows (line 933)"""
-        with patch("cerevox.document_loader.BS4_AVAILABLE", True):
+        with patch("cerevox.utils.document_loader.BS4_AVAILABLE", True):
             if not BS4_AVAILABLE:
                 pytest.skip("BeautifulSoup4 not available")
 
@@ -4118,7 +4120,7 @@ class TestMissingCoveragePaths:
 
     def test_parse_table_from_html_no_caption_element(self):
         """Test _parse_table_from_html when no caption element is found (line 938)"""
-        with patch("cerevox.document_loader.BS4_AVAILABLE", True):
+        with patch("cerevox.utils.document_loader.BS4_AVAILABLE", True):
             if not BS4_AVAILABLE:
                 pytest.skip("BeautifulSoup4 not available")
 
@@ -4134,7 +4136,7 @@ class TestMissingCoveragePaths:
             pytest.skip("BeautifulSoup4 not available")
 
         # Mock to make caption element not a Tag
-        with patch("cerevox.document_loader.BeautifulSoup") as mock_soup:
+        with patch("cerevox.utils.document_loader.BeautifulSoup") as mock_soup:
             mock_soup_instance = MagicMock()
             mock_table = MagicMock()
             mock_table.find.side_effect = lambda tag: (
@@ -4144,7 +4146,7 @@ class TestMissingCoveragePaths:
             mock_soup_instance.find.return_value = mock_table
             mock_soup.return_value = mock_soup_instance
 
-            with patch("cerevox.document_loader.isinstance") as mock_isinstance:
+            with patch("cerevox.utils.document_loader.isinstance") as mock_isinstance:
 
                 def isinstance_side_effect(obj, cls):
                     if cls == Tag:
@@ -4319,7 +4321,7 @@ class TestHelperFunctionsCoverage:
 
     def test_split_by_markdown_sections_single_section(self):
         """Test _split_by_markdown_sections that returns original text as single section"""
-        from cerevox.document_loader import _split_by_markdown_sections
+        from cerevox.utils.document_loader import _split_by_markdown_sections
 
         text = "No headers here, just plain text content"
         sections = _split_by_markdown_sections(text)
@@ -4327,14 +4329,14 @@ class TestHelperFunctionsCoverage:
 
     def test_split_by_paragraphs_empty_text(self):
         """Test _split_by_paragraphs with empty text"""
-        from cerevox.document_loader import _split_by_paragraphs
+        from cerevox.utils.document_loader import _split_by_paragraphs
 
         chunks = _split_by_paragraphs("", 1000)
         assert chunks == []
 
     def test_split_large_text_by_sentences_empty_after_code_block_split(self):
         """Test _split_large_text_by_sentences returning empty after code block processing"""
-        from cerevox.document_loader import _split_large_text_by_sentences
+        from cerevox.utils.document_loader import _split_large_text_by_sentences
 
         # Text that becomes empty after code block processing
         text = "```\ncode block\n```"
@@ -4343,7 +4345,7 @@ class TestHelperFunctionsCoverage:
 
     def test_split_preserving_code_blocks_large_code_block(self):
         """Test _split_preserving_code_blocks with code block larger than max_size"""
-        from cerevox.document_loader import _split_preserving_code_blocks
+        from cerevox.utils.document_loader import _split_preserving_code_blocks
 
         large_code = "```\n" + "x" * 2000 + "\n```"
         chunks = _split_preserving_code_blocks(large_code, 500)
@@ -4351,7 +4353,7 @@ class TestHelperFunctionsCoverage:
 
     def test_split_by_character_limit_no_good_boundary(self):
         """Test _split_by_character_limit when no good boundary is found"""
-        from cerevox.document_loader import _split_by_character_limit
+        from cerevox.utils.document_loader import _split_by_character_limit
 
         # Long text with no good split points
         text = "x" * 1000  # No spaces or punctuation
@@ -4360,7 +4362,7 @@ class TestHelperFunctionsCoverage:
 
     def test_split_by_character_limit_boundary_too_early(self):
         """Test _split_by_character_limit when boundary is found too early (less than 70%)"""
-        from cerevox.document_loader import _split_by_character_limit
+        from cerevox.utils.document_loader import _split_by_character_limit
 
         # Text where the boundary would be very early
         text = ". " + "x" * 500
@@ -4369,7 +4371,7 @@ class TestHelperFunctionsCoverage:
 
     def test_split_at_sentences_with_remaining_content(self):
         """Test _split_at_sentences when there's remaining content after last sentence"""
-        from cerevox.document_loader import _split_at_sentences
+        from cerevox.utils.document_loader import _split_at_sentences
 
         text = "First sentence. Second sentence! Third sentence? Remaining text"
         sentences = _split_at_sentences(text)
@@ -4378,7 +4380,7 @@ class TestHelperFunctionsCoverage:
 
     def test_merge_small_chunks_last_chunk_merge(self):
         """Test _merge_small_chunks merging last small chunk with previous"""
-        from cerevox.document_loader import _merge_small_chunks
+        from cerevox.utils.document_loader import _merge_small_chunks
 
         chunks = ["medium text " * 10, "small"]  # Last chunk is small
         merged = _merge_small_chunks(chunks, 50, 1000)
@@ -4386,7 +4388,7 @@ class TestHelperFunctionsCoverage:
 
     def test_merge_small_chunks_tolerance_overflow(self):
         """Test _merge_small_chunks allowing slight overflow within tolerance"""
-        from cerevox.document_loader import _merge_small_chunks
+        from cerevox.utils.document_loader import _merge_small_chunks
 
         # Small chunks that when merged exceed max_size
         chunks = ["a" * 300, "b" * 300, "c" * 300]
@@ -4542,7 +4544,7 @@ class TestRemainingCoverage:
 
     def test_parse_table_from_html_comprehensive_coverage(self):
         """Test _parse_table_from_html with comprehensive edge cases"""
-        with patch("cerevox.document_loader.BS4_AVAILABLE", True):
+        with patch("cerevox.utils.document_loader.BS4_AVAILABLE", True):
             if not BS4_AVAILABLE:
                 pytest.skip("BeautifulSoup4 not available")
 
@@ -4582,7 +4584,7 @@ class TestRemainingCoverage:
 
     def test_parse_table_from_html_no_caption_element(self):
         """Test _parse_table_from_html when no caption element is found"""
-        with patch("cerevox.document_loader.BS4_AVAILABLE", True):
+        with patch("cerevox.utils.document_loader.BS4_AVAILABLE", True):
             if not BS4_AVAILABLE:
                 pytest.skip("BeautifulSoup4 not available")
 
@@ -4869,7 +4871,7 @@ class TestRemainingCoverage:
         assert chunks == []
 
         with patch(
-            "cerevox.document_loader._split_by_markdown_sections"
+            "cerevox.utils.document_loader._split_by_markdown_sections"
         ) as mock_split_by_markdown_sections:
             mock_split_by_markdown_sections.return_value = ["   ", "   "]
             chunks = chunk_markdown("## Header\n\nThis is content. ", target_size=100)
@@ -4928,7 +4930,7 @@ class TestImportWarnings:
 
     def test_pandas_functionality_when_unavailable(self):
         """Test that pandas-dependent functionality raises appropriate errors when pandas is unavailable"""
-        with patch("cerevox.document_loader.PANDAS_AVAILABLE", False):
+        with patch("cerevox.utils.document_loader.PANDAS_AVAILABLE", False):
             table = DocumentTable(
                 element_id="test", headers=["A"], rows=[["1"]], page_number=1
             )
@@ -4938,7 +4940,7 @@ class TestImportWarnings:
 
     def test_beautifulsoup_functionality_when_unavailable(self):
         """Test that BeautifulSoup-dependent functionality returns None when bs4 is unavailable"""
-        with patch("cerevox.document_loader.BS4_AVAILABLE", False):
+        with patch("cerevox.utils.document_loader.BS4_AVAILABLE", False):
             html = "<table><tr><th>Test</th></tr></table>"
             result = Document._parse_table_from_html(html, 0, 1, "test")
             assert result is None
@@ -4965,7 +4967,7 @@ class TestDirectResponseParsing:
 
     def test_from_direct_response_with_elements(self):
         """Test _from_direct_response with elements field to cover lines 828-882"""
-        with patch("cerevox.document_loader.BS4_AVAILABLE", True):
+        with patch("cerevox.utils.document_loader.BS4_AVAILABLE", True):
             response_data = {
                 "filename": "test.pdf",
                 "content": "Test content",
@@ -5052,7 +5054,7 @@ class TestCoverageCompleteness:
 
     def test_parse_table_from_html_with_caption_element(self):
         """Test _parse_table_from_html with caption element that is a Tag"""
-        with patch("cerevox.document_loader.BS4_AVAILABLE", True):
+        with patch("cerevox.utils.document_loader.BS4_AVAILABLE", True):
 
             if not BS4_AVAILABLE:
                 pytest.skip("BeautifulSoup4 not available")
@@ -5067,9 +5069,9 @@ class TestCoverageCompleteness:
     def test_parse_table_from_html_with_exception(self):
         """Test _parse_table_from_html with caption element that is a Tag"""
         with (
-            patch("cerevox.document_loader.BS4_AVAILABLE", True),
+            patch("cerevox.utils.document_loader.BS4_AVAILABLE", True),
             patch(
-                "cerevox.document_loader.BeautifulSoup",
+                "cerevox.utils.document_loader.BeautifulSoup",
                 side_effect=Exception("Test Exception"),
             ),
         ):
@@ -5085,7 +5087,7 @@ class TestCoverageCompleteness:
 
     def test_parse_table_from_html_mixed_th_td_in_first_row(self):
         """Test _parse_table_from_html when first row has mixed th/td elements"""
-        with patch("cerevox.document_loader.BS4_AVAILABLE", True):
+        with patch("cerevox.utils.document_loader.BS4_AVAILABLE", True):
 
             if not BS4_AVAILABLE:
                 pytest.skip("BeautifulSoup4 not available")
@@ -5123,7 +5125,7 @@ class TestCoverageCompleteness:
 
     def test_document_batch_get_documents_by_element_type_returns_correct_type(self):
         """Test get_documents_by_element_type returns DocumentBatch instance"""
-        from cerevox.document_loader import (
+        from cerevox.utils.document_loader import (
             Document,
             DocumentBatch,
             DocumentElement,
@@ -5176,9 +5178,9 @@ class TestCoverageCompleteness:
     def test_document_table_isinstance_check(self):
         """Test DocumentTable isinstance check in test"""
         with (
-            patch("cerevox.document_loader.BS4_AVAILABLE", True),
+            patch("cerevox.utils.document_loader.BS4_AVAILABLE", True),
             patch(
-                "cerevox.document_loader.Document._is_tag_instance",
+                "cerevox.utils.document_loader.Document._is_tag_instance",
                 return_value=False,
             ),
         ):
@@ -5278,7 +5280,7 @@ class TestCoverageCompleteness:
 
     def test_coverage_for_lines_905_to_907(self):
         """Test chunking functions with specific parameters to hit missing lines"""
-        from cerevox.document_loader import chunk_markdown, chunk_text
+        from cerevox.utils.document_loader import chunk_markdown, chunk_text
 
         # Test chunk_text with text that requires specific boundaries
         text = "This is a sentence. " * 50  # Long text to trigger chunking
@@ -5340,7 +5342,7 @@ class TestCoverageCompleteness:
 
     def test_coverage_for_lines_1625_onwards(self):
         """Test DocumentBatch from_api_response for single document detection"""
-        from cerevox.document_loader import DocumentBatch
+        from cerevox.utils.document_loader import DocumentBatch
 
         # Test response that has meaningful content
         response_data = {"text": "some content", "filename": "doc.pdf"}
@@ -5843,7 +5845,7 @@ class TestFinal5:
         # Test 5: Error handling - invalid file data should generate warning but continue
         with patch("warnings.warn") as mock_warn:
             with patch(
-                "cerevox.document_loader.Document.from_api_response",
+                "cerevox.utils.document_loader.Document.from_api_response",
                 side_effect=ValueError("Invalid data format"),
             ):
                 error_response = {
@@ -6066,7 +6068,7 @@ class TestFinal5:
         """Test split_by_markdown_sections edge cases"""
         # Test case 1: Empty string
 
-        with patch("cerevox.document_loader._split_text", return_value=[]):
+        with patch("cerevox.utils.document_loader._split_text", return_value=[]):
             result = _split_by_markdown_sections("")
             assert result == [""]
 
@@ -6168,7 +6170,7 @@ class TestFinal5:
     def test_from_elements_list_content_element(self):
         """Test Document.from_elements_list with ContentElement objects"""
         # Test 1: Single element with comprehensive data to cover lines 803-831
-        from cerevox.models import (
+        from cerevox.core.models import (
             ContentElement,
             ContentInfo,
             ElementSourceInfo,

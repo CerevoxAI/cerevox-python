@@ -1,61 +1,36 @@
 """
-Cerevox SDK's Asynchronous Account Client
+Async base class for Cerevox SDK clients to reduce code duplication
 """
 
 import asyncio
 import base64
 import logging
 import os
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 import aiohttp
 
 from .exceptions import (
-    InsufficientPermissionsError,
-    LexaAuthError,
     LexaError,
     LexaTimeoutError,
     create_error_from_response,
 )
-from .models import (
-    AccountInfo,
-    AccountPlan,
-    CreatedResponse,
-    DeletedResponse,
-    MessageResponse,
-    TokenRefreshRequest,
-    TokenResponse,
-    UpdatedResponse,
-    UsageMetrics,
-    User,
-    UserCreate,
-    UserDelete,
-    UserUpdate,
-)
+from .models import MessageResponse, TokenRefreshRequest, TokenResponse
 
 FAILED_ID = "Failed to get request ID from response"
 
 logger = logging.getLogger(__name__)
 
 
-class AsyncAccount:
+class AsyncBaseClient:
     """
-    Official Asynchronous Python Client for Cerevox Account Management
+    Base class for asynchronous Cerevox API clients
 
-    This client provides a clean, Pythonic async interface to the Cerevox Account API,
-    supporting user authentication, account management, and user administration.
-
-    Example:
-        >>> async with AsyncAccount(email="user@example.com", api_key="password") as client:
-        ...     # Client automatically authenticates during context entry
-        ...     # Get account information
-        ...     account = await client.get_account_info()
-        ...     print(account.account_name)
-        ...     # Manage users
-        ...     users = await client.get_users()
-        ...     print(f"Found {len(users)} users")
-
-    Happy Managing! 👥 ✨
+    Provides common functionality including:
+    - Async session management
+    - HTTP request handling with proper error handling
+    - Authentication (login, refresh_token, revoke_token)
+    - Async context manager support
     """
 
     def __init__(
@@ -69,12 +44,12 @@ class AsyncAccount:
         **kwargs: Any,
     ) -> None:
         """
-        Initialize the AsyncAccount client
+        Initialize the async base client
 
         Args:
             email: User email address for authentication
             api_key: User password for authentication
-            base_url: Base URL for the Cerevox Account API
+            base_url: Base URL for the Cerevox API
             timeout: Request timeout in seconds
             max_retries: Maximum number of retry attempts for failed requests
             **kwargs: Additional aiohttp ClientSession arguments
@@ -114,10 +89,9 @@ class AsyncAccount:
 
         self.session: Optional[aiohttp.ClientSession] = None
 
-    async def __aenter__(self) -> "AsyncAccount":
+    async def __aenter__(self) -> "AsyncBaseClient":
         """Async context manager entry"""
         await self.start_session()
-
         return self
 
     async def __aexit__(
@@ -149,10 +123,11 @@ class AsyncAccount:
         json_data: Optional[Dict[str, Any]] = None,
         params: Optional[Dict[str, Any]] = None,
         headers: Optional[Dict[str, str]] = None,
+        data: Optional[Any] = None,
         **kwargs: Any,
     ) -> Dict[str, Any]:
         """
-        All requests to Account API are handled by this method
+        All requests to API are handled by this method
 
         Args:
             method: The HTTP method to use
@@ -160,6 +135,7 @@ class AsyncAccount:
             json_data: JSON data to send in the request body
             params: Query parameters to send in the request
             headers: Additional headers to send with the request
+            data: Raw data to send (for file uploads)
             **kwargs: Additional arguments to pass to the request
 
         Returns:
@@ -188,6 +164,7 @@ class AsyncAccount:
                 json=json_data,
                 params=params,
                 headers=request_headers,
+                data=data,
                 **kwargs,
             ) as response:
                 # Extract request ID for error reporting
@@ -259,13 +236,9 @@ class AsyncAccount:
 
         token_response = TokenResponse(**response_data)
 
-        await self.close_session()
-
         self.session_kwargs["headers"][
             "Authorization"
         ] = f"Bearer {token_response.access_token}"
-
-        await self.start_session()
 
         return token_response
 
@@ -285,13 +258,9 @@ class AsyncAccount:
         )
         token_response = TokenResponse(**response_data)
 
-        await self.close_session()
-
         self.session_kwargs["headers"][
             "Authorization"
         ] = f"Bearer {token_response.access_token}"
-
-        await self.start_session()
 
         return token_response
 
@@ -303,188 +272,9 @@ class AsyncAccount:
             MessageResponse with revocation confirmation
         """
         response_data = await self._request("POST", "/token/revoke")
+
+        # Remove the authorization header since the token is now revoked
+        if "Authorization" in self.session_kwargs["headers"]:
+            del self.session_kwargs["headers"]["Authorization"]
+
         return MessageResponse(**response_data)
-
-    # Account Management Methods
-
-    async def get_account_info(self) -> AccountInfo:
-        """
-        Get current account information
-
-        Returns:
-            AccountInfo with account_id and account_name
-        """
-        response_data = await self._request("GET", "/accounts/my")
-        return AccountInfo(**response_data)
-
-    async def get_account_plan(self, account_id: str) -> AccountPlan:
-        """
-        Get account plan and limits information
-
-        Args:
-            account_id: The account identifier
-
-        Returns:
-            AccountPlan with plan details and limits
-        """
-        response_data = await self._request("GET", f"/accounts/{account_id}/plan")
-        return AccountPlan(**response_data["plan"])
-
-    async def get_account_usage(self, account_id: str) -> UsageMetrics:
-        """
-        Get account usage metrics
-
-        Args:
-            account_id: The account identifier
-
-        Returns:
-            UsageMetrics with current usage statistics
-        """
-        response_data = await self._request("GET", f"/accounts/{account_id}/usage")
-        return UsageMetrics(**response_data)
-
-    # User Management Methods
-
-    async def create_user(self, email: str, name: str) -> CreatedResponse:
-        """
-        Create a new user in the account
-
-        Args:
-            email: User email address
-            name: User display name
-
-        Returns:
-            CreatedResponse with creation status
-
-        Raises:
-            InsufficientPermissionsError: If not an admin user
-        """
-        request = UserCreate(email=email, name=name)
-        try:
-            response_data = await self._request(
-                "POST", "/users", json_data=request.model_dump()
-            )
-            return CreatedResponse(**response_data)
-        except LexaAuthError as e:
-            if e.status_code == 403:
-                raise InsufficientPermissionsError(
-                    "Admin permissions required to create users"
-                ) from e
-            raise
-
-    async def get_users(self) -> List[User]:
-        """
-        Get list of all users in the account
-
-        Returns:
-            List of User objects
-        """
-        response_data = await self._request("GET", "/users")
-        if isinstance(response_data, list):
-            return [User(**user_data) for user_data in response_data]
-        # Handle case where response is wrapped
-        users_data = response_data.get("users", response_data)
-        return [User(**user_data) for user_data in users_data]
-
-    async def get_user_me(self) -> User:
-        """
-        Get current user information
-
-        Returns:
-            User object with current user details
-        """
-        response_data = await self._request("GET", "/users/me")
-        return User(**response_data)
-
-    async def update_user_me(self, name: str) -> UpdatedResponse:
-        """
-        Update current user information
-
-        Args:
-            name: Updated user display name
-
-        Returns:
-            UpdatedResponse with update status
-        """
-        request = UserUpdate(name=name)
-        response_data = await self._request(
-            "PUT", "/users/me", json_data=request.model_dump()
-        )
-        return UpdatedResponse(**response_data)
-
-    async def get_user_by_id(self, user_id: str) -> User:
-        """
-        Get user information by ID (Admin only)
-
-        Args:
-            user_id: The user identifier
-
-        Returns:
-            User object with user details
-
-        Raises:
-            InsufficientPermissionsError: If not an admin user
-        """
-        try:
-            response_data = await self._request("GET", f"/users/{user_id}")
-            return User(**response_data)
-        except LexaAuthError as e:
-            if e.status_code == 403:
-                raise InsufficientPermissionsError(
-                    "Admin permissions required to get user by ID"
-                ) from e
-            raise
-
-    async def update_user_by_id(self, user_id: str, name: str) -> UpdatedResponse:
-        """
-        Update user information by ID (Admin only)
-
-        Args:
-            user_id: The user identifier
-            name: Updated user display name
-
-        Returns:
-            UpdatedResponse with update status
-
-        Raises:
-            InsufficientPermissionsError: If not an admin user
-        """
-        request = UserUpdate(name=name)
-        try:
-            response_data = await self._request(
-                "PUT", f"/users/{user_id}", json_data=request.model_dump()
-            )
-            return UpdatedResponse(**response_data)
-        except LexaAuthError as e:
-            if e.status_code == 403:
-                raise InsufficientPermissionsError(
-                    "Admin permissions required to update user by ID"
-                ) from e
-            raise
-
-    async def delete_user_by_id(self, user_id: str, email: str) -> DeletedResponse:
-        """
-        Delete user by ID (Admin only)
-
-        Args:
-            user_id: The user identifier
-            email: Email confirmation for deletion
-
-        Returns:
-            DeletedResponse with deletion status
-
-        Raises:
-            InsufficientPermissionsError: If not an admin user
-        """
-        request = UserDelete(email=email)
-        try:
-            response_data = await self._request(
-                "DELETE", f"/users/{user_id}", json_data=request.model_dump()
-            )
-            return DeletedResponse(**response_data)
-        except LexaAuthError as e:
-            if e.status_code == 403:
-                raise InsufficientPermissionsError(
-                    "Admin permissions required to delete user by ID"
-                ) from e
-            raise

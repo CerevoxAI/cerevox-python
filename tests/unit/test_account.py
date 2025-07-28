@@ -1,5 +1,5 @@
 """
-Test suite for cerevox.account
+Test suite for cerevox.clients.account
 
 Comprehensive tests to achieve 100% code coverage for the Account class,
 including all methods, error handling, and edge cases.
@@ -14,8 +14,8 @@ import requests
 import responses
 from requests.exceptions import ConnectionError, RequestException, Timeout
 
-from cerevox.account import Account
-from cerevox.exceptions import (
+from cerevox.clients.account import Account
+from cerevox.core.exceptions import (
     AccountError,
     InsufficientPermissionsError,
     LexaAuthError,
@@ -25,7 +25,7 @@ from cerevox.exceptions import (
     LexaValidationError,
     UserManagementError,
 )
-from cerevox.models import (
+from cerevox.core.models import (
     AccountInfo,
     AccountPlan,
     CreatedResponse,

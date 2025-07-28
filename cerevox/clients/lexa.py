@@ -1,29 +1,31 @@
 """
-Cerevox SDK's Asynchronous Lexa Client
+Cerevox SDK's Synchronous Lexa Client
 """
 
-import asyncio
 import json
 import os
 import re
 import time
 import warnings
-
-# Async Request Handling
-from concurrent.futures import ThreadPoolExecutor
+from io import BytesIO
 from pathlib import Path
 from typing import (
     Any,
+    BinaryIO,
     Callable,
     Dict,
     List,
     Optional,
+    TextIO,
+    Tuple,
     Union,
 )
 from urllib.parse import unquote, urlparse
 
-import aiofiles
-import aiohttp
+# Sync Request Handling
+import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 # Optional tqdm import for progress bars
 try:
@@ -33,9 +35,7 @@ try:
 except ImportError:
     TQDM_AVAILABLE = False
 
-# Internal
-from .document_loader import DocumentBatch
-from .exceptions import (
+from ..core.exceptions import (
     LexaAuthError,
     LexaError,
     LexaJobFailedError,
@@ -43,7 +43,7 @@ from .exceptions import (
     LexaTimeoutError,
     LexaValidationError,
 )
-from .models import (
+from ..core.models import (
     VALID_MODES,
     BucketListResponse,
     DriveListResponse,
@@ -58,24 +58,31 @@ from .models import (
     SiteListResponse,
 )
 
+# Internal
+from ..utils.document_loader import DocumentBatch
+
+HTTP = "http://"
+HTTPS = "https://"
 FAILED_ID = "Failed to get request ID from upload"
 
 
-class AsyncLexa:
+class Lexa:
     """
-    Official Async Python Client for Lexa
+    Official Synchronous Python Client for Lexa
 
     This client provides a clean, Pythonic interface to the Lexa Parsing API,
     supporting file uploads, URL ingestion, and cloud storage integrations.
 
     Example:
-        >>> async with AsyncLexa(api_key="your-api-key") as client:
-        ...     # Batch upload with automatic result retrieval
-        ...     documents = await client.parse_files(
-        ...         files=["doc1.pdf", "doc2.docx"]
-        ...     )
-        ...     for doc in documents:
-        ...         print(f"Processed: {doc.filename}")
+        >>> client = Lexa(api_key="your-api-key")
+        >>> # Parse local files
+        >>> documents = client.parse("example_1.pdf")
+        >>> print(documents)
+        >>> documents = client.parse(["example_2.pdf", "example_2.docx"])
+        >>> print(documents)
+        >>> # Parse external files from URLs
+        >>> documents = client.parse_urls("https://www.example.com/example_3.pdf")
+        >>> print(documents)
 
     Happy Parsing! 🔍 ✨
     """
@@ -85,25 +92,22 @@ class AsyncLexa:
         *,
         api_key: Optional[str] = None,
         base_url: str = "https://www.data.cerevox.ai",
-        max_concurrent: int = 10,
         max_poll_time: float = 600.0,
         max_retries: int = 3,
-        poll_interval: float = 2.0,
+        session_kwargs: Optional[Dict[str, Any]] = None,
         timeout: float = 30.0,
         **kwargs: Any,
     ) -> None:
         """
-        Initialize the AsyncLexa client
+        Initialize the Lexa client
 
         Args:
-            api_key: Your Cerevox API key
-            base_url: Base URL of the Cerevox API
-            max_concurrent: Maximum concurrent requests for batch operations
-            max_poll_time: Maximum time to poll for job completion
-            max_retries: Maximum number of retries for failed requests
-            poll_interval: Polling interval in seconds for job status checks
+            api_key: Your Cerevox API key. If not provided, will try CEREVOX_API_KEY
+            base_url: Base URL for the Cerevox Lexa API
             timeout: Request timeout in seconds
-            **kwargs: Additional aiohttp ClientSession arguments
+            max_retries: Maximum number of retry attempts for failed requests
+            max_poll_time: Maximum time to wait for job completion in seconds
+            session_kwargs: Additional arguments to pass to requests.Session
         """
         self.api_key = api_key or os.getenv("CEREVOX_API_KEY")
         if not self.api_key:
@@ -117,69 +121,51 @@ class AsyncLexa:
             raise ValueError("base_url must be a non-empty string")
 
         # Basic URL validation
-        if not (base_url.startswith("http://") or base_url.startswith("https://")):
-            raise ValueError("base_url must start with http:// or https://")
+        if not (base_url.startswith(HTTP) or base_url.startswith(HTTPS)):
+            raise ValueError(f"base_url must start with {HTTP} or {HTTPS}")
 
-        # Validate max_retries
-        if not isinstance(max_retries, int):
-            raise TypeError("max_retries must be an integer")
-        if max_retries < 0:
-            raise ValueError("max_retries must be a non-negative integer")
-
-        self.base_url = base_url.rstrip("/")
-        self.timeout = aiohttp.ClientTimeout(total=timeout)
-        self.max_concurrent = max_concurrent
+        self.base_url = base_url.rstrip("/")  # Remove trailing slash
+        self.timeout = timeout
         self.max_poll_time = max_poll_time
         self.max_retries = max_retries
-        self.poll_interval = poll_interval
 
-        # Session configuration
-        self.session_kwargs = {
-            "timeout": self.timeout,
-            "headers": {
+        # Initialize session
+        self.session = requests.Session()
+
+        # Configure retry strategy
+        retry_strategy = Retry(
+            total=max_retries,
+            status_forcelist=[500, 501, 502, 503, 504],
+            allowed_methods=["HEAD", "GET", "OPTIONS", "POST"],
+            backoff_factor=0.1,
+        )
+        adapter = HTTPAdapter(max_retries=retry_strategy)
+        self.session.mount(HTTP, adapter)
+        self.session.mount(HTTPS, adapter)
+
+        # Set default headers
+        self.session.headers.update(
+            {
                 "cerevox-api-key": self.api_key,
-                "User-Agent": "cerevox-python-async/0.1.0",
-            },
-            **kwargs,
-        }
+                "User-Agent": "cerevox-python/0.1.0",
+            }
+        )
 
-        self.session: Optional[aiohttp.ClientSession] = None
-        self._semaphore = asyncio.Semaphore(max_concurrent)
-        self._executor = ThreadPoolExecutor(max_workers=max_concurrent)
+        # Apply session configuration
+        if session_kwargs:
+            for key, value in session_kwargs.items():
+                setattr(self.session, key, value)
 
-    async def __aenter__(self) -> "AsyncLexa":
-        """Async context manager entry"""
-        await self.start_session()
-        return self
+        # Apply any additional session configuration for backward compatibility
+        for key, value in kwargs.items():
+            setattr(self.session, key, value)
 
-    async def __aexit__(
-        self,
-        exc_type: Optional[type],
-        exc_val: Optional[BaseException],
-        exc_tb: Optional[Any],
-    ) -> None:
-        """Async context manager exit"""
-        await self.close_session()
-
-    async def start_session(self) -> None:
-        """Start the aiohttp session"""
-        if self.session is None:
-            self.session = aiohttp.ClientSession(**self.session_kwargs)
-
-    async def close_session(self) -> None:
-        """Close the aiohttp session"""
-        if self.session:
-            await self.session.close()
-            self.session = None
-
-        self._executor.shutdown(wait=True)
-
-    async def _request(
+    def _request(
         self,
         method: str,
         endpoint: str,
         json_data: Optional[Dict[str, Any]] = None,
-        data: Optional[aiohttp.FormData] = None,
+        files: Optional[Dict[str, Any]] = None,
         params: Optional[Dict[str, Any]] = None,
         **kwargs: Any,
     ) -> Dict[str, Any]:
@@ -204,97 +190,97 @@ class AsyncLexa:
             LexaTimeoutError: If the request times out
             LexaValidationError: If the request validation fails
         """
-        if not self.session:
-            await self.start_session()
-
-        # Final check - if session is still None after start_session, raise error
-        if self.session is None:
-            raise LexaError("Session not initialized")
-
-        # Runtime validation for max_retries
-        try:
-            max_retries_int = int(self.max_retries)
-            if max_retries_int < 0:
-                raise ValueError("Negative value")
-            if max_retries_int != self.max_retries:  # Catch float/decimal cases
-                raise ValueError("Non-integer value")
-        except (TypeError, ValueError, OverflowError):
-            raise LexaError("max_retries must be a non-negative integer")
-
         url = f"{self.base_url}{endpoint}"
 
-        for attempt in range(max_retries_int + 1):
-            try:
-                async with self.session.request(
-                    method=method,
-                    url=url,
-                    json=json_data,
-                    data=data,
-                    params=params,
-                    **kwargs,
-                ) as response:
-
-                    # Handle authentication errors
-                    if response.status == 401:
-                        error_data = await self._safe_json(response)
-                        raise LexaAuthError(
-                            "Invalid API key or authentication failed",
-                            status_code=401,
-                            response_data=error_data,
-                        )
-
-                    # Handle rate limit errors
-                    if response.status == 429:
-                        error_data = await self._safe_json(response)
-                        raise LexaRateLimitError(
-                            error_data.get("error", "Rate limit exceeded"),
-                            status_code=429,
-                            response_data=error_data,
-                        )
-
-                    # Handle validation errors
-                    if response.status == 400:
-                        error_data = await self._safe_json(response)
-                        raise LexaValidationError(
-                            error_data.get("error", "Request validation failed"),
-                            status_code=400,
-                            response_data=error_data,
-                        )
-
-                    # Handle other API errors
-                    if response.status >= 400:
-                        error_data = await self._safe_json(response)
-                        raise LexaError(
-                            error_data.get(
-                                "error",
-                                f"API request failed with status {response.status}",
-                            ),
-                            status_code=response.status,
-                            response_data=error_data,
-                        )
-
-                    return await self._safe_json(response)
-
-            except (aiohttp.ClientError, asyncio.TimeoutError) as e:
-                if attempt == max_retries_int:
-                    raise LexaError(
-                        f"Request failed after {max_retries_int + 1} attempts: {str(e)}"
-                    )
-
-                # Exponential backoff
-                wait_time = min(2**attempt, 30)
-                await asyncio.sleep(wait_time)
-        return {}
-
-    async def _safe_json(self, response: aiohttp.ClientResponse) -> Dict[str, Any]:
-        """Safely parse JSON response"""
         try:
-            json_data: Dict[str, Any] = await response.json()
-            return json_data
-        except (aiohttp.ContentTypeError, json.JSONDecodeError):
-            return {}
+            response = self.session.request(
+                method=method,
+                url=url,
+                json=json_data,
+                files=files,
+                params=params,
+                timeout=self.timeout,
+                **kwargs,
+            )
 
-    # Private Async Methods
+            # Handle authentication errors
+            if response.status_code == 401:
+                auth_error_data = response.json() if response.content else {}
+                raise LexaAuthError(
+                    "Invalid API key or authentication failed",
+                    status_code=401,
+                    response=auth_error_data,
+                )
+
+            # Handle rate limit errors
+            if response.status_code == 429:
+                rate_limit_error_data = response.json() if response.content else {}
+                raise LexaRateLimitError(
+                    rate_limit_error_data.get("error", "Rate limit exceeded"),
+                    status_code=429,
+                    response=rate_limit_error_data,
+                )
+
+            # Handle validation errors
+            if response.status_code == 400:
+                validation_error_data = response.json() if response.content else {}
+                raise LexaValidationError(
+                    validation_error_data.get("error", "Request validation failed"),
+                    status_code=400,
+                    response=validation_error_data,
+                )
+
+            # Handle other API errors
+            if response.status_code >= 400:
+                general_error_data: Dict[str, Any] = {}
+                content_type = response.headers.get("content-type", "")
+                if content_type.startswith("application/json"):
+                    general_error_data = response.json()
+                raise LexaError(
+                    general_error_data.get(
+                        "error",
+                        f"API request failed with status {response.status_code}",
+                    ),
+                    status_code=response.status_code,
+                    response=general_error_data,
+                )
+
+            try:
+                response_data: Dict[str, Any] = response.json()
+                return response_data
+            except json.JSONDecodeError:
+                # For tests that expect this to be handled gracefully
+                return {}
+
+        except requests.exceptions.Timeout as e:
+            raise LexaTimeoutError(f"Request timed out: {str(e)}")
+        except requests.exceptions.ConnectionError as e:
+            raise LexaError(f"Connection failed: {str(e)}")
+        except requests.exceptions.RetryError as e:
+            # Handle retry exhaustion - try to extract original server error
+            if hasattr(e, "response") and e.response and hasattr(e.response, "json"):
+                try:
+                    retry_error_data = e.response.json()
+                    raise LexaError(
+                        retry_error_data.get(
+                            "error", f"Request failed after retries: {str(e)}"
+                        ),
+                        status_code=getattr(e.response, "status_code", None),
+                        response=retry_error_data,
+                    )
+                except (ValueError, AttributeError):
+                    pass
+
+            # Check if this is a 500 error that was retried
+            error_str = str(e)
+            if "500 error responses" in error_str:
+                raise LexaError("Internal server error")
+
+            raise LexaError(f"Request failed after retries: {str(e)}")
+        except requests.exceptions.RequestException as e:
+            raise LexaError(f"Request failed: {str(e)}")
+
+    # Private methods
 
     def _is_tqdm_available(self) -> bool:
         """Check if tqdm is available"""
@@ -314,9 +300,6 @@ class AsyncLexa:
         """
         if not show_progress:
             return None
-
-        print(f"TQDM_AVAILABLE: {TQDM_AVAILABLE}")
-        print(f"self._is_tqdm_available(): {self._is_tqdm_available()}")
 
         if not self._is_tqdm_available():
             warnings.warn(
@@ -380,11 +363,11 @@ class AsyncLexa:
 
         return progress_callback
 
-    async def _get_documents(
+    def _get_documents(
         self,
         request_id: str,
-        max_poll_time: Optional[float] = None,
-        poll_interval: Optional[float] = None,
+        timeout: Optional[float] = None,
+        poll_interval: float = 2.0,
         progress_callback: Optional[Callable[[JobResponse], None]] = None,
         show_progress: bool = False,
     ) -> DocumentBatch:
@@ -393,7 +376,7 @@ class AsyncLexa:
 
         Args:
             request_id: The job identifier
-            max_poll_time: Maximum time to wait in seconds
+            timeout: Maximum time to wait in seconds (None for no timeout)
             poll_interval: Time between polling attempts in seconds
             progress_callback: Optional function to call with status updates
             show_progress: Whether to show a progress bar using tqdm
@@ -405,8 +388,8 @@ class AsyncLexa:
         if show_progress and progress_callback is None:
             progress_callback = self._create_progress_callback(show_progress)
 
-        status = await self._wait_for_completion(
-            request_id, max_poll_time, poll_interval, progress_callback
+        status = self._wait_for_completion(
+            request_id, timeout, poll_interval, progress_callback
         )
 
         # Handle the new response structure where results are in files field
@@ -435,7 +418,7 @@ class AsyncLexa:
         # Return empty document batch if no data
         return DocumentBatch([])
 
-    async def _get_file_info_from_url(self, url: str) -> FileInfo:
+    def _get_file_info_from_url(self, url: str) -> FileInfo:
         """
         Extract file information from a URL using HEAD request
 
@@ -445,52 +428,48 @@ class AsyncLexa:
         Returns:
             FileInfo object with name, url, and type fields
         """
-        if not self.session:
-            await self.start_session()
-
-        # Final check - if session is still None after start_session, raise error
-        if self.session is None:
-            raise LexaError("Session not initialized")
-
         try:
-            # Make async HEAD request to get headers without downloading content
-            async with self.session.head(
-                url, timeout=aiohttp.ClientTimeout(total=10), allow_redirects=True
-            ) as response:
-                response.raise_for_status()
+            # Make HEAD request to get headers without downloading content
+            response = self.session.head(url, timeout=10, allow_redirects=True)
+            response.raise_for_status()
 
-                # Extract filename from Content-Disposition header
-                filename = None
-                content_disposition = response.headers.get("Content-Disposition", "")
-                if content_disposition:
-                    # Look for filename= or filename*= patterns
-                    filename_match = re.search(
-                        r'filename\*?=["\']?([^"\';\r\n]+)', content_disposition
-                    )
-                    if filename_match:
-                        filename = filename_match.group(1).strip()
-
-                # Fallback to extracting filename from URL path
-                if not filename:
-                    parsed_url = urlparse(url)
-                    filename = unquote(parsed_url.path.split("/")[-1])
-
-                # Final fallback if no filename found
-                if not filename or filename == "":
-                    filename = f"file_{hash(url) % 10000}"
-
-                # Get content type from headers
-                content_type = response.headers.get(
-                    "Content-Type", "application/octet-stream"
+            # Extract filename from Content-Disposition header
+            filename = None
+            content_disposition = response.headers.get("Content-Disposition", "")
+            if content_disposition:
+                # Look for filename= or filename*= patterns
+                filename_match = re.search(
+                    r'filename\*?=["\']?([^"\';\r\n]+)', content_disposition
                 )
-                # Remove charset and other parameters from content type
-                content_type = content_type.split(";")[0].strip()
+                if filename_match:
+                    filename = filename_match.group(1).strip()
+
+            # Fallback to extracting filename from URL path
+            if not filename:
+                parsed_url = urlparse(url)
+                filename = unquote(parsed_url.path.split("/")[-1])
+                # Remove query parameters if they got included
+                if "?" in filename:
+                    filename = filename.split("?")[0]
+
+            # Final fallback if no filename found
+            if not filename or filename == "":
+                filename = f"file_{hash(url) % 10000}"
+
+            # Get content type from headers
+            content_type = response.headers.get(
+                "Content-Type", "application/octet-stream"
+            )
+            # Remove charset and other parameters from content type
+            content_type = content_type.split(";")[0].strip()
 
         except Exception:
             # If HEAD request fails, use URL-based fallbacks
             try:
                 parsed_url = urlparse(url)
                 filename = unquote(parsed_url.path.split("/")[-1])
+                if "?" in filename:
+                    filename = filename.split("?")[0]
                 if not filename or filename == "":
                     filename = f"file_{hash(url) % 10000}"
             except Exception:
@@ -500,7 +479,7 @@ class AsyncLexa:
 
         return FileInfo(name=filename, url=url, type=content_type)
 
-    async def _get_job_status(self, request_id: str) -> JobResponse:
+    def _get_job_status(self, request_id: str) -> JobResponse:
         """
         Get the status and results of a parsing job
 
@@ -511,20 +490,20 @@ class AsyncLexa:
             JobResponse object containing the current status and any results
 
         Raises:
-            ValueError: If request_id is empty
+            TypeError: If request_id is not a string
+
         """
         if not request_id or request_id.strip() == "":
             raise ValueError("request_id cannot be empty")
 
-        async with self._semaphore:
-            response = await self._request("GET", f"/v0/job/{request_id}")
-            return JobResponse(**response)
+        response = self._request("GET", f"/v0/job/{request_id}")
+        return JobResponse(**response)
 
-    async def _wait_for_completion(
+    def _wait_for_completion(
         self,
         request_id: str,
-        max_poll_time: Optional[float] = None,
-        poll_interval: Optional[float] = None,
+        timeout: Optional[float] = None,
+        poll_interval: float = 2.0,
         progress_callback: Optional[Callable[[JobResponse], None]] = None,
     ) -> JobResponse:
         """
@@ -532,8 +511,8 @@ class AsyncLexa:
 
         Args:
             request_id: The job identifier to wait for
+            timeout: Maximum time to wait in seconds (None for no timeout)
             poll_interval: Time between polling attempts in seconds
-            max_poll_time: Maximum time to wait in seconds (None for no timeout)
             progress_callback: Optional function to call with status updates
 
         Returns:
@@ -543,18 +522,24 @@ class AsyncLexa:
             LexaTimeoutError: If timeout is reached
             LexaJobFailedError: If job fails
         """
-        poll_interval = poll_interval or self.poll_interval
-        max_poll_time = max_poll_time or self.max_poll_time
-
         start_time = time.time()
+        poll_count = 0
+
+        if timeout is None:
+            timeout = self.max_poll_time
 
         while True:
-            status = await self._get_job_status(request_id)
+            poll_count += 1
+            current_time = time.time()
+            elapsed_time = current_time - start_time
+
+            status = self._get_job_status(request_id)
 
             if progress_callback:
                 progress_callback(status)
 
             if status.status in [JobStatus.COMPLETE, JobStatus.PARTIAL_SUCCESS]:
+
                 return status
             elif status.status in [
                 JobStatus.FAILED,
@@ -562,48 +547,21 @@ class AsyncLexa:
                 JobStatus.NOT_FOUND,
             ]:
                 error_msg = status.error or "Job failed"
+
                 raise LexaJobFailedError(error_msg, response={"status": status.status})
 
-            # Check max_poll_time
-            if time.time() - start_time >= max_poll_time:
+            if time.time() - start_time >= timeout:
+
                 raise LexaTimeoutError(
                     f"Job {request_id} exceeded maximum"
-                    + f" wait time of {max_poll_time} seconds"
+                    + f" wait time of {timeout} seconds"
                 )
 
-            await asyncio.sleep(poll_interval)
+            time.sleep(poll_interval)
 
-    # Mode Validation
-    def _validate_mode(self, mode: Union[ProcessingMode, str]) -> str:
-        """
-        Validate and normalize processing mode
+    # File Ingestion
 
-        Args:
-            mode: Processing mode to validate
-
-        Returns:
-            Normalized mode string
-
-        Raises:
-            ValueError: If mode is invalid
-            TypeError: If mode is wrong type
-        """
-        if isinstance(mode, ProcessingMode):
-            return mode.value
-        elif isinstance(mode, str):
-            if mode not in VALID_MODES:
-                raise ValueError(
-                    f"Invalid processing mode: {mode}. Valid modes are: {VALID_MODES}"
-                )
-            return mode
-        else:
-            raise TypeError(
-                f"Mode must be ProcessingMode enum or string, got {type(mode)}"
-            )
-
-    # Batch File Processing
-
-    async def _upload_files(
+    def _upload_files(
         self,
         files: Union[List[FileInput], FileInput],
         mode: Union[ProcessingMode, str] = ProcessingMode.DEFAULT,
@@ -633,85 +591,63 @@ class AsyncLexa:
         # Validate mode parameter
         mode = self._validate_mode(mode)
 
-        # Prepare files for upload using aiohttp.FormData
-        data = aiohttp.FormData()
+        # Prepare files for upload
+        file_objects: List[Tuple[str, Tuple[str, Union[BinaryIO, TextIO, BytesIO]]]] = (
+            []
+        )
+        # Track files we opened so we can close them
+        opened_files = []
 
         try:
             for i, file_input in enumerate(files):
                 if isinstance(file_input, (str, Path)):
-                    # Handle file paths with async file I/O
+                    # Handle file paths
                     path = Path(file_input)
                     if not path.exists():
                         raise ValueError(f"File not found: {file_input}")
                     if not path.is_file():
                         raise ValueError(f"Not a file: {file_input}")
 
-                    # Read file asynchronously
-                    async with aiofiles.open(path, "rb") as file:
-                        file_content = await file.read()
-
-                    data.add_field("files", file_content, filename=path.name)
+                    file_handle = open(path, "rb")
+                    opened_files.append(file_handle)
+                    file_objects.append(("files", (path.name, file_handle)))
 
                 elif isinstance(file_input, (bytes, bytearray)):
                     # Handle raw content
+                    content_stream = BytesIO(file_input)
                     filename = f"file_{i}.bin"  # Generate a default filename
-                    data.add_field("files", file_input, filename=filename)
+                    file_objects.append(("files", (filename, content_stream)))
 
                 elif hasattr(file_input, "read"):
                     # Handle file-like objects (streams)
-                    raw_filename = getattr(file_input, "name", f"stream_{i}.bin")
-
-                    # Safely extract filename
-                    if isinstance(raw_filename, Path):
-                        filename = raw_filename.name
-                    elif isinstance(raw_filename, str):
-                        filename = os.path.basename(str(raw_filename))
-                    else:
-                        filename = f"stream_{i}.bin"
-
-                    # Ensure we have a valid filename
-                    if not filename or filename == ".":
-                        filename = f"stream_{i}.bin"
-
-                    # Read content from file-like object
-                    if hasattr(file_input, "read"):
-                        if hasattr(file_input, "seek"):
-                            file_input.seek(0)  # Reset position for potential reuse
-                        content = file_input.read()
-                        data.add_field("files", content, filename=filename)
-                    else:
-                        data.add_field("files", file_input, filename=filename)
+                    filename = getattr(file_input, "name", f"stream_{i}.bin")
+                    # Extract just the filename if it's a full path
+                    if isinstance(filename, (str, Path)):
+                        try:
+                            filename = Path(filename).name
+                        except (OSError, ValueError):
+                            # Handle invalid path strings - keep original filename or set default
+                            filename = str(filename) if filename else f"stream_{i}.bin"
+                    file_objects.append(("files", (filename, file_input)))
 
                 else:
                     raise ValueError(f"Unsupported file input type: {type(file_input)}")
 
-            # Prepare query parameters
-            params = {"mode": mode, "product": "lexa"}
+            # Prepare form data
+            data = {"mode": mode, "product": "lexa"}
 
-            async with self._semaphore:
-                response = await self._request(
-                    "POST", "/v0/files", data=data, params=params
-                )
+            response = self._request(
+                "POST", "/v0/files", files=dict(file_objects), params=data
+            )
             return IngestionResult(**response)
 
-        except Exception as e:
-            # Re-raise ValueError and LexaError as-is, wrap others in LexaError
-            if isinstance(
-                e,
-                (
-                    ValueError,
-                    LexaError,
-                    LexaAuthError,
-                    LexaValidationError,
-                    LexaRateLimitError,
-                    LexaTimeoutError,
-                ),
-            ):
-                raise
-            else:
-                raise LexaError(f"File upload failed: {str(e)}")
+        finally:
+            # Close any files we opened
+            for file_handle in opened_files:
+                if hasattr(file_handle, "close"):
+                    file_handle.close()
 
-    async def _upload_urls(
+    def _upload_urls(
         self,
         urls: Union[List[FileURLInput], FileURLInput],
         mode: Union[ProcessingMode, str] = ProcessingMode.DEFAULT,
@@ -741,22 +677,49 @@ class AsyncLexa:
         processed_urls = []
         for url in urls:
             # Validate URL format
-            if not (url.startswith("http://") or url.startswith("https://")):
+            if not (url.startswith(HTTP) or url.startswith(HTTPS)):
                 raise ValueError(f"Invalid URL format: {url}")
 
             # Get file info from URL
-            file_info = await self._get_file_info_from_url(url)
+            file_info = self._get_file_info_from_url(url)
             processed_urls.append(file_info.model_dump())
 
         payload = {"files": processed_urls, "mode": mode, "product": "lexa"}
 
-        async with self._semaphore:
-            data = await self._request("POST", "/v0/file-urls", json_data=payload)
+        data = self._request("POST", "/v0/file-urls", json_data=payload)
         return IngestionResult(**data)
+
+    # Mode Validation
+    def _validate_mode(self, mode: Union[ProcessingMode, str]) -> str:
+        """
+        Validate and normalize processing mode
+
+        Args:
+            mode: Processing mode to validate
+
+        Returns:
+            Normalized mode string
+
+        Raises:
+            ValueError: If mode is invalid
+            TypeError: If mode is wrong type
+        """
+        if isinstance(mode, ProcessingMode):
+            return mode.value
+        elif isinstance(mode, str):
+            if mode not in VALID_MODES:
+                raise ValueError(
+                    f"Invalid processing mode: {mode}. Valid modes are: {VALID_MODES}"
+                )
+            return mode
+        else:
+            raise TypeError(
+                f"Mode must be ProcessingMode enum or string, got {type(mode)}"
+            )
 
     # Amazon S3 Integration (private)
 
-    async def _upload_s3_folder(
+    def _upload_s3_folder(
         self,
         bucket_name: str,
         folder_path: str,
@@ -783,13 +746,12 @@ class AsyncLexa:
             "product": "lexa",
         }
 
-        async with self._semaphore:
-            data = await self._request("POST", "/v0/amazon-folder", json_data=payload)
+        data = self._request("POST", "/v0/amazon-folder", json_data=payload)
         return IngestionResult(**data)
 
     # Box Integration (private)
 
-    async def _upload_box_folder(
+    def _upload_box_folder(
         self,
         box_folder_id: str,
         mode: Union[ProcessingMode, str] = ProcessingMode.DEFAULT,
@@ -809,13 +771,12 @@ class AsyncLexa:
 
         payload = {"folder_id": box_folder_id, "mode": mode, "product": "lexa"}
 
-        async with self._semaphore:
-            data = await self._request("POST", "/v0/box-folder", json_data=payload)
+        data = self._request("POST", "/v0/box-folder", json_data=payload)
         return IngestionResult(**data)
 
     # Dropbox Integration (private)
 
-    async def _upload_dropbox_folder(
+    def _upload_dropbox_folder(
         self,
         folder_path: str,
         mode: Union[ProcessingMode, str] = ProcessingMode.DEFAULT,
@@ -835,13 +796,12 @@ class AsyncLexa:
 
         payload = {"path": folder_path, "mode": mode, "product": "lexa"}
 
-        async with self._semaphore:
-            data = await self._request("POST", "/v0/dropbox-folder", json_data=payload)
+        data = self._request("POST", "/v0/dropbox-folder", json_data=payload)
         return IngestionResult(**data)
 
     # Microsoft SharePoint Integration (private)
 
-    async def _upload_sharepoint_folder(
+    def _upload_sharepoint_folder(
         self,
         drive_id: str,
         folder_id: str,
@@ -868,15 +828,12 @@ class AsyncLexa:
             "product": "lexa",
         }
 
-        async with self._semaphore:
-            data = await self._request(
-                "POST", "/v0/microsoft-folder", json_data=payload
-            )
+        data = self._request("POST", "/v0/microsoft-folder", json_data=payload)
         return IngestionResult(**data)
 
     # Salesforce Integration (private)
 
-    async def _upload_salesforce_folder(
+    def _upload_salesforce_folder(
         self,
         folder_name: str,
         mode: Union[ProcessingMode, str] = ProcessingMode.DEFAULT,
@@ -896,15 +853,12 @@ class AsyncLexa:
 
         payload = {"name": folder_name, "mode": mode, "product": "lexa"}
 
-        async with self._semaphore:
-            data = await self._request(
-                "POST", "/v0/salesforce-folder", json_data=payload
-            )
+        data = self._request("POST", "/v0/salesforce-folder", json_data=payload)
         return IngestionResult(**data)
 
     # Sendme Integration (private)
 
-    async def _upload_sendme_files(
+    def _upload_sendme_files(
         self, ticket: str, mode: Union[ProcessingMode, str] = ProcessingMode.DEFAULT
     ) -> IngestionResult:
         """
@@ -922,18 +876,17 @@ class AsyncLexa:
 
         payload = {"ticket": ticket, "mode": mode, "product": "lexa"}
 
-        async with self._semaphore:
-            data = await self._request("POST", "/v0/sendme", json_data=payload)
+        data = self._request("POST", "/v0/sendme", json_data=payload)
         return IngestionResult(**data)
 
     # Public methods
 
-    async def parse(
+    def parse(
         self,
         files: Union[List[FileInput], FileInput],
         mode: Union[ProcessingMode, str] = ProcessingMode.DEFAULT,
-        max_poll_time: Optional[float] = None,
-        poll_interval: Optional[float] = None,
+        timeout: Optional[float] = None,
+        poll_interval: float = 2.0,
         progress_callback: Optional[Callable[[JobResponse], None]] = None,
         show_progress: bool = False,
     ) -> DocumentBatch:
@@ -941,9 +894,9 @@ class AsyncLexa:
         Parse files and receive documents.
 
         Args:
-            files: List of files to parse (supports paths, raw content, or streams)
-            mode: Processing mode for the files
-            max_poll_time: Maximum time to wait for completion
+            files: List of files to parse
+            mode: Processing mode
+            timeout: Maximum time to wait for completion
             poll_interval: Time between status checks
             progress_callback: Optional callback for progress updates
             show_progress: Whether to show a progress bar using tqdm
@@ -951,33 +904,30 @@ class AsyncLexa:
         Returns:
             DocumentBatch containing parsed documents
         """
-        result = await self._upload_files(files, mode)
+
+        result = self._upload_files(files, mode)
         if not result.request_id:
-            raise LexaError("Failed to get request ID from upload")
-        return await self._get_documents(
-            result.request_id,
-            max_poll_time,
-            poll_interval,
-            progress_callback,
-            show_progress,
+            raise LexaError(FAILED_ID)
+        return self._get_documents(
+            result.request_id, timeout, poll_interval, progress_callback, show_progress
         )
 
-    async def parse_urls(
+    def parse_urls(
         self,
         urls: Union[List[FileURLInput], FileURLInput],
         mode: Union[ProcessingMode, str] = ProcessingMode.DEFAULT,
-        max_poll_time: Optional[float] = None,
-        poll_interval: Optional[float] = None,
+        timeout: Optional[float] = None,
+        poll_interval: float = 2.0,
         progress_callback: Optional[Callable[[JobResponse], None]] = None,
         show_progress: bool = False,
     ) -> DocumentBatch:
         """
-        Parse URLs and receive documents.
+        Parse URLs
 
         Args:
             urls: List of URLs to parse
             mode: Processing mode
-            max_poll_time: Maximum time to wait for completion
+            timeout: Maximum time to wait for completion
             poll_interval: Time between status checks
             progress_callback: Optional callback for progress updates
             show_progress: Whether to show a progress bar using tqdm
@@ -985,31 +935,26 @@ class AsyncLexa:
         Returns:
             DocumentBatch containing parsed documents
         """
-        result = await self._upload_urls(urls, mode)
+        result = self._upload_urls(urls, mode)
         if not result.request_id:
-            raise LexaError("Failed to get request ID from upload")
-        return await self._get_documents(
-            result.request_id,
-            max_poll_time,
-            poll_interval,
-            progress_callback,
-            show_progress,
+            raise LexaError(FAILED_ID)
+        return self._get_documents(
+            result.request_id, timeout, poll_interval, progress_callback, show_progress
         )
 
     # Amazon S3 Integration (public)
 
-    async def list_s3_buckets(self) -> BucketListResponse:
+    def list_s3_buckets(self) -> BucketListResponse:
         """
         List available S3 buckets
 
         Returns:
             BucketListResponse containing list of available buckets
         """
-        async with self._semaphore:
-            data = await self._request("GET", "/v0/amazon-listBuckets")
+        data = self._request("GET", "/v0/amazon-listBuckets")
         return BucketListResponse(**data)
 
-    async def list_s3_folders(self, bucket_name: str) -> FolderListResponse:
+    def list_s3_folders(self, bucket_name: str) -> FolderListResponse:
         """
         List folders in an S3 bucket
 
@@ -1019,19 +964,18 @@ class AsyncLexa:
         Returns:
             FolderListResponse containing list of folders in the bucket
         """
-        async with self._semaphore:
-            data = await self._request(
-                "GET", "/v0/amazon-listFoldersInBucket", params={"bucket": bucket_name}
-            )
+        data = self._request(
+            "GET", "/v0/amazon-listFoldersInBucket", params={"bucket": bucket_name}
+        )
         return FolderListResponse(**data)
 
-    async def parse_s3_folder(
+    def parse_s3_folder(
         self,
         bucket_name: str,
         folder_path: str,
         mode: Union[ProcessingMode, str] = ProcessingMode.DEFAULT,
-        max_poll_time: Optional[float] = None,
-        poll_interval: Optional[float] = None,
+        timeout: Optional[float] = None,
+        poll_interval: float = 2.0,
         progress_callback: Optional[Callable[[JobResponse], None]] = None,
         show_progress: bool = False,
     ) -> DocumentBatch:
@@ -1042,7 +986,7 @@ class AsyncLexa:
             bucket_name: Name of the S3 bucket
             folder_path: Path to the folder within the bucket
             mode: Processing mode
-            max_poll_time: Maximum time to wait for completion
+            timeout: Maximum time to wait for completion
             poll_interval: Time between status checks
             progress_callback: Optional callback for progress updates
             show_progress: Whether to show a progress bar using tqdm
@@ -1050,36 +994,31 @@ class AsyncLexa:
         Returns:
             DocumentBatch containing parsed documents
         """
-        result = await self._upload_s3_folder(bucket_name, folder_path, mode)
+        result = self._upload_s3_folder(bucket_name, folder_path, mode)
         if not result.request_id:
-            raise LexaError("Failed to get request ID from upload")
-        return await self._get_documents(
-            result.request_id,
-            max_poll_time,
-            poll_interval,
-            progress_callback,
-            show_progress,
+            raise LexaError(FAILED_ID)
+        return self._get_documents(
+            result.request_id, timeout, poll_interval, progress_callback, show_progress
         )
 
     # Box Integration (public)
 
-    async def list_box_folders(self) -> FolderListResponse:
+    def list_box_folders(self) -> FolderListResponse:
         """
         List available Box folders
 
         Returns:
             FolderListResponse containing list of available folders
         """
-        async with self._semaphore:
-            data = await self._request("GET", "/v0/box-listFolders")
+        data = self._request("GET", "/v0/box-listFolders")
         return FolderListResponse(**data)
 
-    async def parse_box_folder(
+    def parse_box_folder(
         self,
         box_folder_id: str,
         mode: Union[ProcessingMode, str] = ProcessingMode.DEFAULT,
-        max_poll_time: Optional[float] = None,
-        poll_interval: Optional[float] = None,
+        timeout: Optional[float] = None,
+        poll_interval: float = 2.0,
         progress_callback: Optional[Callable[[JobResponse], None]] = None,
         show_progress: bool = False,
     ) -> DocumentBatch:
@@ -1089,7 +1028,7 @@ class AsyncLexa:
         Args:
             box_folder_id: Box folder ID to process
             mode: Processing mode
-            max_poll_time: Maximum time to wait for completion
+            timeout: Maximum time to wait for completion
             poll_interval: Time between status checks
             progress_callback: Optional callback for progress updates
             show_progress: Whether to show a progress bar using tqdm
@@ -1097,36 +1036,31 @@ class AsyncLexa:
         Returns:
             DocumentBatch containing parsed documents
         """
-        result = await self._upload_box_folder(box_folder_id, mode)
+        result = self._upload_box_folder(box_folder_id, mode)
         if not result.request_id:
-            raise LexaError("Failed to get request ID from upload")
-        return await self._get_documents(
-            result.request_id,
-            max_poll_time,
-            poll_interval,
-            progress_callback,
-            show_progress,
+            raise LexaError(FAILED_ID)
+        return self._get_documents(
+            result.request_id, timeout, poll_interval, progress_callback, show_progress
         )
 
     # Dropbox Integration (public)
 
-    async def list_dropbox_folders(self) -> FolderListResponse:
+    def list_dropbox_folders(self) -> FolderListResponse:
         """
         List available Dropbox folders
 
         Returns:
             FolderListResponse containing list of available folders
         """
-        async with self._semaphore:
-            data = await self._request("GET", "/v0/dropbox-listFolders")
+        data = self._request("GET", "/v0/dropbox-listFolders")
         return FolderListResponse(**data)
 
-    async def parse_dropbox_folder(
+    def parse_dropbox_folder(
         self,
         folder_path: str,
         mode: Union[ProcessingMode, str] = ProcessingMode.DEFAULT,
-        max_poll_time: Optional[float] = None,
-        poll_interval: Optional[float] = None,
+        timeout: Optional[float] = None,
+        poll_interval: float = 2.0,
         progress_callback: Optional[Callable[[JobResponse], None]] = None,
         show_progress: bool = False,
     ) -> DocumentBatch:
@@ -1136,7 +1070,7 @@ class AsyncLexa:
         Args:
             folder_path: Dropbox folder path to process
             mode: Processing mode
-            max_poll_time: Maximum time to wait for completion
+            timeout: Maximum time to wait for completion
             poll_interval: Time between status checks
             progress_callback: Optional callback for progress updates
             show_progress: Whether to show a progress bar using tqdm
@@ -1144,31 +1078,26 @@ class AsyncLexa:
         Returns:
             DocumentBatch containing parsed documents
         """
-        result = await self._upload_dropbox_folder(folder_path, mode)
+        result = self._upload_dropbox_folder(folder_path, mode)
         if not result.request_id:
-            raise LexaError("Failed to get request ID from upload")
-        return await self._get_documents(
-            result.request_id,
-            max_poll_time,
-            poll_interval,
-            progress_callback,
-            show_progress,
+            raise LexaError(FAILED_ID)
+        return self._get_documents(
+            result.request_id, timeout, poll_interval, progress_callback, show_progress
         )
 
     # Microsoft SharePoint Integration (public)
 
-    async def list_sharepoint_sites(self) -> SiteListResponse:
+    def list_sharepoint_sites(self) -> SiteListResponse:
         """
         List available SharePoint sites
 
         Returns:
             SiteListResponse containing list of available sites
         """
-        async with self._semaphore:
-            data = await self._request("GET", "/v0/microsoft-listSites")
+        data = self._request("GET", "/v0/microsoft-listSites")
         return SiteListResponse(**data)
 
-    async def list_sharepoint_drives(self, site_id: str) -> DriveListResponse:
+    def list_sharepoint_drives(self, site_id: str) -> DriveListResponse:
         """
         List drives in a SharePoint site
 
@@ -1178,13 +1107,12 @@ class AsyncLexa:
         Returns:
             DriveListResponse containing list of drives in the site
         """
-        async with self._semaphore:
-            data = await self._request(
-                "GET", "/v0/microsoft-listDrivesInSite", params={"site_id": site_id}
-            )
+        data = self._request(
+            "GET", "/v0/microsoft-listDrivesInSite", params={"site_id": site_id}
+        )
         return DriveListResponse(**data)
 
-    async def list_sharepoint_folders(self, drive_id: str) -> FolderListResponse:
+    def list_sharepoint_folders(self, drive_id: str) -> FolderListResponse:
         """
         List folders in a drive
 
@@ -1194,19 +1122,18 @@ class AsyncLexa:
         Returns:
             FolderListResponse containing list of folders in the drive
         """
-        async with self._semaphore:
-            data = await self._request(
-                "GET", "/v0/microsoft-listFoldersInDrive", params={"drive_id": drive_id}
-            )
+        data = self._request(
+            "GET", "/v0/microsoft-listFoldersInDrive", params={"drive_id": drive_id}
+        )
         return FolderListResponse(**data)
 
-    async def parse_sharepoint_folder(
+    def parse_sharepoint_folder(
         self,
         drive_id: str,
         folder_id: str,
         mode: Union[ProcessingMode, str] = ProcessingMode.DEFAULT,
-        max_poll_time: Optional[float] = None,
-        poll_interval: Optional[float] = None,
+        timeout: Optional[float] = None,
+        poll_interval: float = 2.0,
         progress_callback: Optional[Callable[[JobResponse], None]] = None,
         show_progress: bool = False,
     ) -> DocumentBatch:
@@ -1214,10 +1141,10 @@ class AsyncLexa:
         Parse files from a SharePoint folder
 
         Args:
-            drive_id: Drive ID within the site
-            folder_id: Microsoft folder ID to process
+            drive_id: Drive ID
+            folder_id: Folder ID
             mode: Processing mode
-            max_poll_time: Maximum time to wait for completion
+            timeout: Maximum time to wait for completion
             poll_interval: Time between status checks
             progress_callback: Optional callback for progress updates
             show_progress: Whether to show a progress bar using tqdm
@@ -1225,36 +1152,31 @@ class AsyncLexa:
         Returns:
             DocumentBatch containing parsed documents
         """
-        result = await self._upload_sharepoint_folder(drive_id, folder_id, mode)
+        result = self._upload_sharepoint_folder(drive_id, folder_id, mode)
         if not result.request_id:
-            raise LexaError("Failed to get request ID from upload")
-        return await self._get_documents(
-            result.request_id,
-            max_poll_time,
-            poll_interval,
-            progress_callback,
-            show_progress,
+            raise LexaError(FAILED_ID)
+        return self._get_documents(
+            result.request_id, timeout, poll_interval, progress_callback, show_progress
         )
 
     # Salesforce Integration (public)
 
-    async def list_salesforce_folders(self) -> FolderListResponse:
+    def list_salesforce_folders(self) -> FolderListResponse:
         """
         List available Salesforce folders
 
         Returns:
             FolderListResponse containing list of available folders
         """
-        async with self._semaphore:
-            data = await self._request("GET", "/v0/salesforce-listFolders")
+        data = self._request("GET", "/v0/salesforce-listFolders")
         return FolderListResponse(**data)
 
-    async def parse_salesforce_folder(
+    def parse_salesforce_folder(
         self,
         folder_name: str,
         mode: Union[ProcessingMode, str] = ProcessingMode.DEFAULT,
-        max_poll_time: Optional[float] = None,
-        poll_interval: Optional[float] = None,
+        timeout: Optional[float] = None,
+        poll_interval: float = 2.0,
         progress_callback: Optional[Callable[[JobResponse], None]] = None,
         show_progress: bool = False,
     ) -> DocumentBatch:
@@ -1262,9 +1184,9 @@ class AsyncLexa:
         Parse files from a Salesforce folder
 
         Args:
-            folder_name: Name of the folder for organization
+            folder_name: Salesforce folder name to process
             mode: Processing mode
-            max_poll_time: Maximum time to wait for completion
+            timeout: Maximum time to wait for completion
             poll_interval: Time between status checks
             progress_callback: Optional callback for progress updates
             show_progress: Whether to show a progress bar using tqdm
@@ -1272,25 +1194,21 @@ class AsyncLexa:
         Returns:
             DocumentBatch containing parsed documents
         """
-        result = await self._upload_salesforce_folder(folder_name, mode)
+        result = self._upload_salesforce_folder(folder_name, mode)
         if not result.request_id:
-            raise LexaError("Failed to get request ID from upload")
-        return await self._get_documents(
-            result.request_id,
-            max_poll_time,
-            poll_interval,
-            progress_callback,
-            show_progress,
+            raise LexaError(FAILED_ID)
+        return self._get_documents(
+            result.request_id, timeout, poll_interval, progress_callback, show_progress
         )
 
     # Sendme Integration (public)
 
-    async def parse_sendme_files(
+    def parse_sendme_files(
         self,
         ticket: str,
         mode: Union[ProcessingMode, str] = ProcessingMode.DEFAULT,
-        max_poll_time: Optional[float] = None,
-        poll_interval: Optional[float] = None,
+        timeout: Optional[float] = None,
+        poll_interval: float = 2.0,
         progress_callback: Optional[Callable[[JobResponse], None]] = None,
         show_progress: bool = False,
     ) -> DocumentBatch:
@@ -1300,7 +1218,7 @@ class AsyncLexa:
         Args:
             ticket: Sendme ticket ID
             mode: Processing mode
-            max_poll_time: Maximum time to wait for completion
+            timeout: Maximum time to wait for completion
             poll_interval: Time between status checks
             progress_callback: Optional callback for progress updates
             show_progress: Whether to show a progress bar using tqdm
@@ -1308,13 +1226,9 @@ class AsyncLexa:
         Returns:
             DocumentBatch containing parsed documents
         """
-        result = await self._upload_sendme_files(ticket, mode)
+        result = self._upload_sendme_files(ticket, mode)
         if not result.request_id:
-            raise LexaError("Failed to get request ID from upload")
-        return await self._get_documents(
-            result.request_id,
-            max_poll_time,
-            poll_interval,
-            progress_callback,
-            show_progress,
+            raise LexaError(FAILED_ID)
+        return self._get_documents(
+            result.request_id, timeout, poll_interval, progress_callback, show_progress
         )

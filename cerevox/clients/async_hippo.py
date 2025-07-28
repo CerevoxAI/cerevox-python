@@ -2,21 +2,14 @@
 Cerevox SDK's Asynchronous Hippo Client for RAG Operations
 """
 
-import asyncio
-import base64
 import logging
 import os
 from typing import Any, Dict, List, Optional
 
 import aiohttp
 
-from .exceptions import (
-    LexaAuthError,
-    LexaError,
-    LexaTimeoutError,
-    create_error_from_response,
-)
-from .models import (
+from ..core.async_base_client import AsyncBaseClient
+from ..core.models import (
     AskItem,
     AsksListResponse,
     AskSubmitRequest,
@@ -32,18 +25,13 @@ from .models import (
     FolderCreatedResponse,
     FolderItem,
     FoldersListResponse,
-    MessageResponse,
-    TokenRefreshRequest,
-    TokenResponse,
     UpdatedResponse,
 )
-
-FAILED_ID = "Failed to get request ID from response"
 
 logger = logging.getLogger(__name__)
 
 
-class AsyncHippo:
+class AsyncHippo(AsyncBaseClient):
     """
     Official Asynchronous Python Client for Cerevox Hippo (RAG Operations)
 
@@ -86,67 +74,14 @@ class AsyncHippo:
             max_retries: Maximum number of retry attempts for failed requests
             **kwargs: Additional aiohttp ClientSession arguments
         """
-        self.email = email
-        self.api_key = api_key or os.getenv("CEREVOX_API_KEY")
-        if not self.email or not self.api_key:
-            raise ValueError("Both email and api_key are required for authentication")
-
-        # Validate base_url format
-        if not base_url or not isinstance(base_url, str):
-            raise ValueError("base_url must be a non-empty string")
-
-        # Basic URL validation
-        if not (base_url.startswith("http://") or base_url.startswith("https://")):
-            raise ValueError("base_url must start with http:// or https://")
-
-        # Validate max_retries
-        if not isinstance(max_retries, int):
-            raise TypeError("max_retries must be an integer")
-        if max_retries < 0:
-            raise ValueError("max_retries must be a non-negative integer")
-
-        self.base_url = base_url.rstrip("/")  # Remove trailing slash
-        self.timeout = aiohttp.ClientTimeout(total=timeout)
-        self.max_retries = max_retries
-
-        # Session configuration
-        self.session_kwargs = {
-            "timeout": self.timeout,
-            "headers": {
-                "User-Agent": "cerevox-python-async/0.1.6",
-                "Content-Type": "application/json",
-            },
+        super().__init__(
+            email=email,
+            api_key=api_key,
+            base_url=base_url,
+            max_retries=max_retries,
+            timeout=timeout,
             **kwargs,
-        }
-
-        self.session: Optional[aiohttp.ClientSession] = None
-
-    async def __aenter__(self) -> "AsyncHippo":
-        """Async context manager entry"""
-        await self.start_session()
-        # Automatically authenticate using email and password
-        await self.login(self.email, self.api_key)
-        return self
-
-    async def __aexit__(
-        self,
-        exc_type: Optional[type],
-        exc_val: Optional[BaseException],
-        exc_tb: Optional[Any],
-    ) -> None:
-        """Async context manager exit"""
-        await self.close_session()
-
-    async def start_session(self) -> None:
-        """Start the aiohttp session"""
-        if self.session is None:
-            self.session = aiohttp.ClientSession(**self.session_kwargs)
-
-    async def close_session(self) -> None:
-        """Close the aiohttp session"""
-        if self.session:
-            await self.session.close()
-            self.session = None
+        )
 
     async def _request(
         self,
@@ -159,164 +94,32 @@ class AsyncHippo:
         **kwargs: Any,
     ) -> Dict[str, Any]:
         """
-        All requests to Hippo API are handled by this method
-
-        Args:
-            method: The HTTP method to use
-            endpoint: The API endpoint to call
-            json_data: JSON data to send in the request body
-            params: Query parameters to send in the request
-            headers: Additional headers to send with the request
-            data: FormData for file uploads
-            **kwargs: Additional arguments to pass to the request
-
-        Returns:
-            The response from the API
-
-        Raises:
-            LexaAuthError: If authentication fails
-            LexaError: If the request fails for other reasons
-            LexaTimeoutError: If the request times out
-            Various other LexaError subclasses: Based on response status and content
+        Override base _request to support file uploads with FormData
         """
-        if not self.session:
-            raise LexaError("Session not initialized. Use async context manager.")
-
-        url = f"{self.base_url}{endpoint}"
-
-        # Merge additional headers
-        request_headers = dict(self.session.headers)
-        if headers:
-            request_headers.update(headers)
-
-        # For file uploads, remove Content-Type to let aiohttp set it
         if data is not None:
-            request_headers = {
-                k: v for k, v in request_headers.items() if k.lower() != "content-type"
+            # For file uploads, remove Content-Type to let aiohttp set it
+            upload_headers = {
+                k: v for k, v in (headers or {}).items() if k.lower() != "content-type"
             }
-
-        request_kwargs = {
-            "params": params,
-            "headers": request_headers,
-            **kwargs,
-        }
-
-        if json_data is not None:
-            request_kwargs["json"] = json_data
-        elif data is not None:
-            request_kwargs["data"] = data
-
-        try:
-            async with self.session.request(method, url, **request_kwargs) as response:
-                # Extract request ID for error reporting
-                request_id = response.headers.get("x-request-id", FAILED_ID)
-
-                # Handle successful responses
-                if 200 <= response.status < 300:
-                    try:
-                        response_data: Dict[str, Any] = await response.json()
-                        return response_data
-                    except (ValueError, aiohttp.ContentTypeError):
-                        # Non-JSON response, return basic success info
-                        return {"status": "success"}
-
-                # Handle error responses
-                try:
-                    error_data = await response.json()
-                except (ValueError, aiohttp.ContentTypeError):
-                    error_text = await response.text()
-                    error_data = {
-                        "error": f"HTTP {response.status}",
-                        "message": error_text,
-                    }
-
-                # Create and raise appropriate exception
-                raise create_error_from_response(
-                    status_code=response.status,
-                    response_data=error_data,
-                    request_id=request_id,
-                )
-
-        except asyncio.TimeoutError as e:
-            logger.error(f"Request timeout for {method} {url}: {e}")
-            raise LexaTimeoutError(
-                "Request timed out", timeout_duration=self.timeout.total
-            ) from e
-
-        except aiohttp.ClientError as e:
-            logger.error(f"Request failed for {method} {url}: {e}")
-            raise LexaError(f"Request failed: {e}", request_id=FAILED_ID) from e
-
-    # Authentication Methods
-
-    async def login(
-        self, email: Optional[str] = None, password: Optional[str] = None
-    ) -> TokenResponse:
-        """
-        Authenticate with email and password to get access tokens
-
-        Args:
-            email: User email address
-            password: User password
-
-        Returns:
-            TokenResponse containing access_token, refresh_token, etc.
-
-        Raises:
-            LexaAuthError: If authentication fails
-        """
-        # Use Basic Auth for login
-        credentials = f"{email}:{password}"
-        encoded_credentials = base64.b64encode(credentials.encode()).decode()
-
-        # Update session headers temporarily for login
-        headers = {"Authorization": f"Basic {encoded_credentials}"}
-
-        response_data = await self._request("POST", "/token/login", headers=headers)
-
-        token_response = TokenResponse(**response_data)
-
-        # Update session headers with Bearer token
-        if self.session:
-            self.session.headers.update(
-                {"Authorization": f"Bearer {token_response.access_token}"}
+            return await super()._request(
+                method=method,
+                endpoint=endpoint,
+                params=params,
+                headers=upload_headers,
+                data=data,
+                **kwargs,
+            )
+        else:
+            return await super()._request(
+                method=method,
+                endpoint=endpoint,
+                json_data=json_data,
+                params=params,
+                headers=headers,
+                **kwargs,
             )
 
-        return token_response
-
-    async def refresh_token(self, refresh_token: str) -> TokenResponse:
-        """
-        Refresh access token using refresh token
-
-        Args:
-            refresh_token: The refresh token
-
-        Returns:
-            TokenResponse with new tokens
-        """
-        request = TokenRefreshRequest(refresh_token=refresh_token)
-        response_data = await self._request(
-            "POST", "/token/refresh", json_data=request.model_dump()
-        )
-        token_response = TokenResponse(**response_data)
-
-        # Update session headers with new Bearer token
-        if self.session:
-            self.session.headers.update(
-                {"Authorization": f"Bearer {token_response.access_token}"}
-            )
-
-        return token_response
-
-    async def revoke_token(self) -> MessageResponse:
-        """
-        Revoke the current access token
-
-        Returns:
-            MessageResponse with revocation confirmation
-        """
-        response_data = await self._request("POST", "/token/revoke")
-        return MessageResponse(**response_data)
+    # Authentication Methods (inherited from AsyncBaseClient)
 
     # Folder Management Methods
 

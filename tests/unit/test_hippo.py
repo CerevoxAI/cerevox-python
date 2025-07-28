@@ -1,5 +1,5 @@
 """
-Test suite for cerevox.hippo
+Test suite for cerevox.clients.hippo
 
 Comprehensive tests to achieve 100% code coverage for the Hippo class,
 including all methods, error handling, and edge cases.
@@ -16,14 +16,14 @@ import pytest
 import responses
 from requests.exceptions import ConnectionError, RequestException, Timeout
 
-from cerevox.exceptions import (
+from cerevox.clients.hippo import Hippo
+from cerevox.core.exceptions import (
     LexaAuthError,
     LexaError,
     LexaTimeoutError,
     create_error_from_response,
 )
-from cerevox.hippo import Hippo
-from cerevox.models import (
+from cerevox.core.models import (
     AskItem,
     AsksListResponse,
     AskSubmitRequest,

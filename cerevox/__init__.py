@@ -3,25 +3,23 @@ Cerevox - The Data Layer
 """
 
 # Account management clients
-from .account import Account
-from .async_account import AsyncAccount
-from .async_hippo import AsyncHippo
-from .async_lexa import AsyncLexa
+from .clients.account import Account
+from .clients.async_account import AsyncAccount
 
-# Document processing
-from .document_loader import (
-    Document,
-    DocumentBatch,
-    DocumentElement,
-    DocumentImage,
-    DocumentMetadata,
-    DocumentTable,
-    chunk_markdown,
-    chunk_text,
-)
+# RAG Clients
+from .clients.async_hippo import AsyncHippo
+
+# Document parsing Clients
+from .clients.async_lexa import AsyncLexa
+
+# RAG clients
+from .clients.hippo import Hippo
+
+# Document parsing clients
+from .clients.lexa import Lexa
 
 # Error handling
-from .exceptions import (
+from .core.exceptions import (
     LexaAuthError,
     LexaError,
     LexaJobFailedError,
@@ -29,14 +27,8 @@ from .exceptions import (
     LexaTimeoutError,
 )
 
-# RAG clients
-from .hippo import Hippo
-
-# Document parsing clients
-from .lexa import Lexa
-
 # Models and types
-from .models import (
+from .core.models import (
     AccountInfo,
     AccountPlan,
     BucketListResponse,
@@ -55,6 +47,18 @@ from .models import (
     User,
     UserCreate,
     UserUpdate,
+)
+
+# Document processing
+from .utils.document_loader import (
+    Document,
+    DocumentBatch,
+    DocumentElement,
+    DocumentImage,
+    DocumentMetadata,
+    DocumentTable,
+    chunk_markdown,
+    chunk_text,
 )
 
 # Version info

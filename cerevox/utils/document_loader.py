@@ -222,7 +222,7 @@ def is_document_instance(obj: Any) -> bool:
     return (
         hasattr(obj, "__class__")
         and obj.__class__.__name__ == "Document"
-        and obj.__class__.__module__ == "cerevox.document_loader"
+        and obj.__class__.__module__ == "cerevox.utils.document_loader"
     )
 
 

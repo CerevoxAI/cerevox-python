@@ -1,5 +1,5 @@
 """
-Test suite for cerevox.async_hippo
+Test suite for cerevox.clients.async_hippo
 
 Comprehensive tests to achieve 100% code coverage for the AsyncHippo class,
 including all methods, error handling, and edge cases.
@@ -15,14 +15,14 @@ import aiohttp
 import pytest
 from aioresponses import aioresponses
 
-from cerevox.async_hippo import AsyncHippo
-from cerevox.exceptions import (
+from cerevox.clients.async_hippo import AsyncHippo
+from cerevox.core.exceptions import (
     LexaAuthError,
     LexaError,
     LexaTimeoutError,
     create_error_from_response,
 )
-from cerevox.models import (
+from cerevox.core.models import (
     AskItem,
     AsksListResponse,
     AskSubmitRequest,
@@ -45,8 +45,47 @@ from cerevox.models import (
 )
 
 
+@pytest.fixture
+def mock_login_response():
+    """Standard login response for mocking"""
+    return {
+        "access_token": "test-access-token",
+        "expires_in": 3600,
+        "refresh_token": "test-refresh-token",
+        "token_type": "Bearer",
+    }
+
+
+def setup_login_mock(mock, login_response=None):
+    """Helper to setup login mock"""
+    if login_response is None:
+        login_response = {
+            "access_token": "test-access-token",
+            "expires_in": 3600,
+            "refresh_token": "test-refresh-token",
+            "token_type": "Bearer",
+        }
+
+    mock.post(
+        "https://dev.cerevox.ai/v1/token/login",
+        payload=login_response,
+        status=200,
+    )
+
+
 class TestAsyncHippoInitialization:
     """Test AsyncHippo client initialization"""
+
+    def setup_method(self):
+        """Set up test fixtures with mocked login"""
+        self.mock_patcher = aioresponses()
+        self.mock = self.mock_patcher.__enter__()
+        # Mock the login call that happens during client initialization
+        setup_login_mock(self.mock)
+
+    def teardown_method(self):
+        """Clean up mocks"""
+        self.mock_patcher.__exit__(None, None, None)
 
     def test_init_with_email_and_api_key(self):
         """Test initialization with email and API key parameters"""
@@ -107,158 +146,132 @@ class TestAsyncHippoInitialization:
     @pytest.mark.asyncio
     async def test_context_manager(self):
         """Test async context manager functionality"""
-        with aioresponses() as m:
-            m.post(
-                "https://dev.cerevox.ai/v1/token/login",
-                payload={
-                    "access_token": "test-access-token",
-                    "expires_in": 3600,
-                    "refresh_token": "test-refresh-token",
-                    "token_type": "Bearer",
-                },
-            )
+        async with AsyncHippo(email="test@example.com", api_key="test-key") as client:
+            assert client.session is not None
+            assert isinstance(client.session, aiohttp.ClientSession)
 
-            async with AsyncHippo(
-                email="test@example.com", api_key="test-key"
-            ) as client:
-                assert client.session is not None
-                assert isinstance(client.session, aiohttp.ClientSession)
-
-            # Session should be closed after context exit
-            assert client.session is None or client.session.closed
+        # Session should be closed after context exit
+        assert client.session is None or client.session.closed
 
     @pytest.mark.asyncio
     async def test_start_and_close_session(self):
         """Test manual session management"""
         client = AsyncHippo(email="test@example.com", api_key="test-key")
 
-        # Start session
-        await client.start_session()
+        # Session should be None initially
+        assert client.session is None
+
         await client.start_session()
         assert client.session is not None
-        assert isinstance(client.session, aiohttp.ClientSession)
 
-        # Close session
         await client.close_session()
         assert client.session is None
-        await client.close_session()
 
 
 class TestAsyncHippoAuthentication:
     """Test authentication methods"""
 
+    def setup_method(self):
+        """Set up test client with mocked login"""
+        self.mock_patcher = aioresponses()
+        self.mock = self.mock_patcher.__enter__()
+        # Mock the login call that happens during initialization
+        setup_login_mock(self.mock)
+
+    def teardown_method(self):
+        """Clean up mocks"""
+        self.mock_patcher.__exit__(None, None, None)
+
     @pytest.mark.asyncio
     async def test_login_success(self):
         """Test successful login"""
-        client = AsyncHippo(email="test@example.com", api_key="test-key")
-        await client.start_session()
+        self.mock.post(
+            "https://dev.cerevox.ai/v1/token/login",
+            payload={
+                "access_token": "test-access-token",
+                "expires_in": 3600,
+                "refresh_token": "test-refresh-token",
+                "token_type": "Bearer",
+            },
+        )
 
-        try:
-            with aioresponses() as m:
-                m.post(
-                    "https://dev.cerevox.ai/v1/token/login",
-                    payload={
-                        "access_token": "test-access-token",
-                        "expires_in": 3600,
-                        "refresh_token": "test-refresh-token",
-                        "token_type": "Bearer",
-                    },
-                )
+        async with AsyncHippo(email="test@example.com", api_key="test-key") as client:
+            response = await client.login("test@example.com", "password")
 
-                response = await client.login("test@example.com", "password")
-
-                assert isinstance(response, TokenResponse)
-                assert response.access_token == "test-access-token"
-                assert (
-                    "Bearer test-access-token"
-                    in client.session.headers["Authorization"]
-                )
-        finally:
-            await client.close_session()
+            assert isinstance(response, TokenResponse)
+            assert response.access_token == "test-access-token"
+            assert (
+                "Bearer test-access-token"
+                in client.session_kwargs["headers"]["Authorization"]
+            )
 
     @pytest.mark.asyncio
     async def test_login_failure(self):
         """Test login failure"""
-        with aioresponses() as m:
-            m.post(
-                "https://dev.cerevox.ai/v1/token/login",
-                payload={"error": "Invalid credentials"},
-                status=401,
-            )
+        self.mock.post(
+            "https://dev.cerevox.ai/v1/token/login",
+            payload={"error": "Invalid credentials"},
+            status=401,
+        )
 
-            client = AsyncHippo(email="test@example.com", api_key="test-key")
-            await client.start_session()
-
-            try:
-                with pytest.raises(LexaAuthError):
-                    await client.login("test@example.com", "wrong-password")
-            finally:
-                await client.close_session()
+        async with AsyncHippo(email="test@example.com", api_key="test-key") as client:
+            with pytest.raises(LexaAuthError):
+                await client.login("test@example.com", "wrong-password")
 
     @pytest.mark.asyncio
     async def test_refresh_token_success(self):
         """Test successful token refresh"""
-        with aioresponses() as m:
-            # Initial login
-            m.post(
-                "https://dev.cerevox.ai/v1/token/login",
-                payload={
-                    "access_token": "initial-token",
-                    "expires_in": 3600,
-                    "refresh_token": "initial-refresh-token",
-                    "token_type": "Bearer",
-                },
-            )
-            # Token refresh
-            m.post(
-                "https://dev.cerevox.ai/v1/token/refresh",
-                payload={
-                    "access_token": "refreshed-access-token",
-                    "expires_in": 3600,
-                    "refresh_token": "new-refresh-token",
-                    "token_type": "Bearer",
-                },
-            )
+        # Token refresh
+        self.mock.post(
+            "https://dev.cerevox.ai/v1/token/refresh",
+            payload={
+                "access_token": "refreshed-access-token",
+                "expires_in": 3600,
+                "refresh_token": "new-refresh-token",
+                "token_type": "Bearer",
+            },
+        )
 
-            async with AsyncHippo(
-                email="test@example.com", api_key="test-key"
-            ) as client:
-                response = await client.refresh_token("old-refresh-token")
+        async with AsyncHippo(email="test@example.com", api_key="test-key") as client:
+            response = await client.refresh_token("old-refresh-token")
 
-                assert isinstance(response, TokenResponse)
-                assert response.access_token == "refreshed-access-token"
-                assert (
-                    "Bearer refreshed-access-token"
-                    in client.session.headers["Authorization"]
-                )
+            assert isinstance(response, TokenResponse)
+            assert response.access_token == "refreshed-access-token"
+            assert (
+                "Bearer refreshed-access-token"
+                in client.session_kwargs["headers"]["Authorization"]
+            )
 
     @pytest.mark.asyncio
     async def test_revoke_token_success(self):
         """Test successful token revocation"""
-        with aioresponses() as m:
-            # Initial login
-            m.post(
-                "https://dev.cerevox.ai/v1/token/login",
-                payload={
-                    "access_token": "test-access-token",
-                    "expires_in": 3600,
-                    "refresh_token": "test-refresh-token",
-                    "token_type": "Bearer",
-                },
-            )
-            # Token revocation
-            m.post(
-                "https://dev.cerevox.ai/v1/token/revoke",
-                payload={"message": "Token revoked successfully", "status": "ok"},
-            )
+        # Token revocation
+        self.mock.post(
+            "https://dev.cerevox.ai/v1/token/revoke",
+            payload={"message": "Token revoked successfully", "status": "ok"},
+        )
 
-            async with AsyncHippo(
-                email="test@example.com", api_key="test-key"
-            ) as client:
-                response = await client.revoke_token()
+        async with AsyncHippo(email="test@example.com", api_key="test-key") as client:
+            response = await client.revoke_token()
 
-                assert isinstance(response, MessageResponse)
-                assert response.message == "Token revoked successfully"
+            assert isinstance(response, MessageResponse)
+            assert response.message == "Token revoked successfully"
+
+    @pytest.mark.asyncio
+    async def test_revoke_token_fail(self):
+        """Test failed token revocation"""
+        # Token revocation
+        self.mock.post(
+            "https://dev.cerevox.ai/v1/token/revoke",
+            payload={"message": "Token revoked successfully", "status": "ok"},
+        )
+
+        async with AsyncHippo(email="test@example.com", api_key="test-key") as client:
+            del client.session_kwargs["headers"]["Authorization"]
+            response = await client.revoke_token()
+
+            assert isinstance(response, MessageResponse)
+            assert response.message == "Token revoked successfully"
 
     @pytest.mark.asyncio
     async def test_refresh_token_with_none_session(self):
@@ -334,1182 +347,813 @@ class TestAsyncHippoAuthentication:
 class TestAsyncHippoFolderManagement:
     """Test folder management methods"""
 
+    def setup_method(self):
+        """Set up test client with mocked login"""
+        self.mock_patcher = aioresponses()
+        self.mock = self.mock_patcher.__enter__()
+        # Mock the login call that happens during initialization
+        setup_login_mock(self.mock)
+
+    def teardown_method(self):
+        """Clean up mocks"""
+        self.mock_patcher.__exit__(None, None, None)
+
     @pytest.mark.asyncio
     async def test_create_folder_success(self):
         """Test successful folder creation"""
-        with aioresponses() as m:
-            # Login
-            m.post(
-                "https://dev.cerevox.ai/v1/token/login",
-                payload={
-                    "access_token": "test-access-token",
-                    "expires_in": 3600,
-                    "refresh_token": "test-refresh-token",
-                    "token_type": "Bearer",
-                },
-            )
-            # Create folder
-            m.post(
-                "https://dev.cerevox.ai/v1/folders",
-                payload={
-                    "created": True,
-                    "status": "ok",
-                    "folder_id": "test-folder",
-                    "folder_name": "Test Folder",
-                },
-            )
+        # Create folder
+        self.mock.post(
+            "https://dev.cerevox.ai/v1/folders",
+            payload={
+                "created": True,
+                "status": "ok",
+                "folder_id": "test-folder",
+                "folder_name": "Test Folder",
+            },
+        )
 
-            async with AsyncHippo(
-                email="test@example.com", api_key="test-key"
-            ) as client:
-                response = await client.create_folder("test-folder", "Test Folder")
+        async with AsyncHippo(email="test@example.com", api_key="test-key") as client:
+            response = await client.create_folder("test-folder", "Test Folder")
 
-                assert isinstance(response, FolderCreatedResponse)
-                assert response.created is True
-                assert response.folder_id == "test-folder"
-                assert response.folder_name == "Test Folder"
+            assert isinstance(response, FolderCreatedResponse)
+            assert response.created is True
+            assert response.folder_id == "test-folder"
+            assert response.folder_name == "Test Folder"
 
     @pytest.mark.asyncio
     async def test_get_folders_success(self):
         """Test successful folder listing"""
-        with aioresponses() as m:
-            # Login
-            m.post(
-                "https://dev.cerevox.ai/v1/token/login",
-                payload={
-                    "access_token": "test-access-token",
-                    "expires_in": 3600,
-                    "refresh_token": "test-refresh-token",
-                    "token_type": "Bearer",
-                },
-            )
-            # Get folders
-            m.get(
-                "https://dev.cerevox.ai/v1/folders",
-                payload={
-                    "folders": [
-                        {"folder_id": "folder1", "folder_name": "Folder 1"},
-                        {"folder_id": "folder2", "folder_name": "Folder 2"},
-                    ]
-                },
-            )
+        # Get folders
+        self.mock.get(
+            "https://dev.cerevox.ai/v1/folders",
+            payload={
+                "folders": [
+                    {"folder_id": "folder1", "folder_name": "Folder 1"},
+                    {"folder_id": "folder2", "folder_name": "Folder 2"},
+                ]
+            },
+        )
 
-            async with AsyncHippo(
-                email="test@example.com", api_key="test-key"
-            ) as client:
-                response = await client.get_folders()
+        async with AsyncHippo(email="test@example.com", api_key="test-key") as client:
+            response = await client.get_folders()
 
-                assert isinstance(response, list)
-                assert len(response) == 2
-                assert all(isinstance(folder, FolderItem) for folder in response)
-                assert response[0].folder_id == "folder1"
+            assert isinstance(response, list)
+            assert len(response) == 2
+            assert all(isinstance(folder, FolderItem) for folder in response)
+            assert response[0].folder_id == "folder1"
 
     @pytest.mark.asyncio
     async def test_get_folders_with_search(self):
         """Test folder listing with search parameter"""
-        with aioresponses() as m:
-            m.post(
-                "https://dev.cerevox.ai/v1/token/login",
-                payload={
-                    "access_token": "test-access-token",
-                    "expires_in": 3600,
-                    "refresh_token": "test-refresh-token",
-                    "token_type": "Bearer",
-                },
-            )
-            m.get(
-                "https://dev.cerevox.ai/v1/folders?search_name=test",
-                payload={
-                    "folders": [{"folder_id": "folder1", "folder_name": "Test Folder"}]
-                },
-            )
+        self.mock.get(
+            "https://dev.cerevox.ai/v1/folders?search_name=test",
+            payload={
+                "folders": [{"folder_id": "folder1", "folder_name": "Test Folder"}]
+            },
+        )
 
-            async with AsyncHippo(
-                email="test@example.com", api_key="test-key"
-            ) as client:
-                response = await client.get_folders(search_name="test")
+        async with AsyncHippo(email="test@example.com", api_key="test-key") as client:
+            response = await client.get_folders(search_name="test")
 
-                assert len(response) == 1
-                assert response[0].folder_name == "Test Folder"
+            assert len(response) == 1
+            assert response[0].folder_name == "Test Folder"
 
     @pytest.mark.asyncio
     async def test_get_folder_by_id_success(self):
         """Test successful folder retrieval by ID"""
-        with aioresponses() as m:
-            m.post(
-                "https://dev.cerevox.ai/v1/token/login",
-                payload={
-                    "access_token": "test-access-token",
-                    "expires_in": 3600,
-                    "refresh_token": "test-refresh-token",
-                    "token_type": "Bearer",
-                },
-            )
-            m.get(
-                "https://dev.cerevox.ai/v1/folders/test-folder",
-                payload={
-                    "folder_id": "test-folder",
-                    "folder_name": "Test Folder",
-                    "status": "ready",
-                    "currentSize": 1024,
-                    "historicalSize": 2048,
-                },
-            )
+        self.mock.get(
+            "https://dev.cerevox.ai/v1/folders/test-folder",
+            payload={
+                "folder_id": "test-folder",
+                "folder_name": "Test Folder",
+                "status": "ready",
+                "currentSize": 1024,
+                "historicalSize": 2048,
+            },
+        )
 
-            async with AsyncHippo(
-                email="test@example.com", api_key="test-key"
-            ) as client:
-                response = await client.get_folder_by_id("test-folder")
+        async with AsyncHippo(email="test@example.com", api_key="test-key") as client:
+            response = await client.get_folder_by_id("test-folder")
 
-                assert isinstance(response, FolderItem)
-                assert response.folder_id == "test-folder"
-                assert response.status == "ready"
-                assert response.currentSize == 1024
+            assert isinstance(response, FolderItem)
+            assert response.folder_id == "test-folder"
+            assert response.status == "ready"
+            assert response.currentSize == 1024
 
     @pytest.mark.asyncio
     async def test_update_folder_success(self):
         """Test successful folder update"""
-        with aioresponses() as m:
-            m.post(
-                "https://dev.cerevox.ai/v1/token/login",
-                payload={
-                    "access_token": "test-access-token",
-                    "expires_in": 3600,
-                    "refresh_token": "test-refresh-token",
-                    "token_type": "Bearer",
-                },
-            )
-            m.put(
-                "https://dev.cerevox.ai/v1/folders/test-folder",
-                payload={"updated": True, "status": "ok"},
-            )
+        self.mock.put(
+            "https://dev.cerevox.ai/v1/folders/test-folder",
+            payload={"updated": True, "status": "ok"},
+        )
 
-            async with AsyncHippo(
-                email="test@example.com", api_key="test-key"
-            ) as client:
-                response = await client.update_folder(
-                    "test-folder", "Updated Folder Name"
-                )
+        async with AsyncHippo(email="test@example.com", api_key="test-key") as client:
+            response = await client.update_folder("test-folder", "Updated Folder Name")
 
-                assert isinstance(response, UpdatedResponse)
-                assert response.updated is True
+            assert isinstance(response, UpdatedResponse)
+            assert response.updated is True
 
     @pytest.mark.asyncio
     async def test_delete_folder_success(self):
         """Test successful folder deletion"""
-        with aioresponses() as m:
-            m.post(
-                "https://dev.cerevox.ai/v1/token/login",
-                payload={
-                    "access_token": "test-access-token",
-                    "expires_in": 3600,
-                    "refresh_token": "test-refresh-token",
-                    "token_type": "Bearer",
-                },
-            )
-            m.delete(
-                "https://dev.cerevox.ai/v1/folders/test-folder",
-                payload={"deleted": True, "status": "ok"},
-            )
+        self.mock.delete(
+            "https://dev.cerevox.ai/v1/folders/test-folder",
+            payload={"deleted": True, "status": "ok"},
+        )
 
-            async with AsyncHippo(
-                email="test@example.com", api_key="test-key"
-            ) as client:
-                response = await client.delete_folder("test-folder")
+        async with AsyncHippo(email="test@example.com", api_key="test-key") as client:
+            response = await client.delete_folder("test-folder")
 
-                assert isinstance(response, DeletedResponse)
-                assert response.deleted is True
+            assert isinstance(response, DeletedResponse)
+            assert response.deleted is True
 
 
 class TestAsyncHippoFileManagement:
     """Test file management methods"""
 
+    def setup_method(self):
+        """Set up test client with mocked login"""
+        self.mock_patcher = aioresponses()
+        self.mock = self.mock_patcher.__enter__()
+        # Mock the login call that happens during initialization
+        setup_login_mock(self.mock)
+
+    def teardown_method(self):
+        """Clean up mocks"""
+        self.mock_patcher.__exit__(None, None, None)
+
     @pytest.mark.asyncio
     async def test_upload_file_success(self):
         """Test successful file upload"""
-        with aioresponses() as m:
-            m.post(
-                "https://dev.cerevox.ai/v1/token/login",
-                payload={
-                    "access_token": "test-access-token",
-                    "expires_in": 3600,
-                    "refresh_token": "test-refresh-token",
-                    "token_type": "Bearer",
-                },
-            )
-            m.post(
-                "https://dev.cerevox.ai/v1/folders/test-folder/files",
-                payload={"uploaded": True, "status": "ok", "uploads": ["test.txt"]},
-            )
+        self.mock.post(
+            "https://dev.cerevox.ai/v1/folders/test-folder/files",
+            payload={"uploaded": True, "status": "ok", "uploads": ["test.txt"]},
+        )
 
-            async with AsyncHippo(
-                email="test@example.com", api_key="test-key"
-            ) as client:
-                with patch("builtins.open", mock_open(read_data=b"test content")):
-                    with patch("os.path.basename", return_value="test.txt"):
-                        response = await client.upload_file(
-                            "test-folder", "/path/to/test.txt"
-                        )
+        async with AsyncHippo(email="test@example.com", api_key="test-key") as client:
+            with patch("builtins.open", mock_open(read_data=b"test content")):
+                with patch("os.path.basename", return_value="test.txt"):
+                    response = await client.upload_file(
+                        "test-folder", "/path/to/test.txt"
+                    )
 
-                assert isinstance(response, FileUploadResponse)
-                assert response.uploaded is True
-                assert "test.txt" in response.uploads
+            assert isinstance(response, FileUploadResponse)
+            assert response.uploaded is True
+            assert "test.txt" in response.uploads
 
     @pytest.mark.asyncio
     async def test_upload_file_from_url_success(self):
         """Test successful file upload from URL"""
-        with aioresponses() as m:
-            m.post(
-                "https://dev.cerevox.ai/v1/token/login",
-                payload={
-                    "access_token": "test-access-token",
-                    "expires_in": 3600,
-                    "refresh_token": "test-refresh-token",
-                    "token_type": "Bearer",
-                },
-            )
-            m.post(
-                "https://dev.cerevox.ai/v1/folders/test-folder/files/url",
-                payload={
-                    "uploaded": True,
-                    "status": "ok",
-                    "uploads": ["remote-file.pdf"],
-                },
-            )
+        self.mock.post(
+            "https://dev.cerevox.ai/v1/folders/test-folder/files/url",
+            payload={
+                "uploaded": True,
+                "status": "ok",
+                "uploads": ["remote-file.pdf"],
+            },
+        )
 
-            async with AsyncHippo(
-                email="test@example.com", api_key="test-key"
-            ) as client:
-                files = [
-                    {
-                        "url": "https://example.com/file.pdf",
-                        "filename": "remote-file.pdf",
-                    }
-                ]
-                response = await client.upload_file_from_url("test-folder", files)
+        async with AsyncHippo(email="test@example.com", api_key="test-key") as client:
+            files = [
+                {
+                    "url": "https://example.com/file.pdf",
+                    "filename": "remote-file.pdf",
+                }
+            ]
+            response = await client.upload_file_from_url("test-folder", files)
 
-                assert isinstance(response, FileUploadResponse)
-                assert response.uploaded is True
+            assert isinstance(response, FileUploadResponse)
+            assert response.uploaded is True
 
     @pytest.mark.asyncio
     async def test_get_files_success(self):
         """Test successful file listing"""
-        with aioresponses() as m:
-            m.post(
-                "https://dev.cerevox.ai/v1/token/login",
-                payload={
-                    "access_token": "test-access-token",
-                    "expires_in": 3600,
-                    "refresh_token": "test-refresh-token",
-                    "token_type": "Bearer",
-                },
-            )
-            m.get(
-                "https://dev.cerevox.ai/v1/folders/test-folder/files",
-                payload={
-                    "files": [
-                        {
-                            "file_id": "file1",
-                            "name": "document1.pdf",
-                            "size": 1024,
-                            "type": "application/pdf",
-                        }
-                    ]
-                },
-            )
+        self.mock.get(
+            "https://dev.cerevox.ai/v1/folders/test-folder/files",
+            payload={
+                "files": [
+                    {
+                        "file_id": "file1",
+                        "name": "document1.pdf",
+                        "size": 1024,
+                        "type": "application/pdf",
+                    }
+                ]
+            },
+        )
 
-            async with AsyncHippo(
-                email="test@example.com", api_key="test-key"
-            ) as client:
-                response = await client.get_files("test-folder")
+        async with AsyncHippo(email="test@example.com", api_key="test-key") as client:
+            response = await client.get_files("test-folder")
 
-                assert isinstance(response, list)
-                assert len(response) == 1
-                assert isinstance(response[0], FileItem)
-                assert response[0].file_id == "file1"
+            assert isinstance(response, list)
+            assert len(response) == 1
+            assert isinstance(response[0], FileItem)
+            assert response[0].file_id == "file1"
 
     @pytest.mark.asyncio
     async def test_get_files_with_search(self):
         """Test file listing with search parameter"""
-        with aioresponses() as m:
-            m.post(
-                "https://dev.cerevox.ai/v1/token/login",
-                payload={
-                    "access_token": "test-access-token",
-                    "expires_in": 3600,
-                    "refresh_token": "test-refresh-token",
-                    "token_type": "Bearer",
-                },
-            )
-            m.get(
-                "https://dev.cerevox.ai/v1/folders/test-folder/files?search_name=test",
-                payload={
-                    "files": [
-                        {
-                            "file_id": "file1",
-                            "name": "test-document.pdf",
-                            "size": 1024,
-                            "type": "application/pdf",
-                        }
-                    ]
-                },
-            )
+        self.mock.get(
+            "https://dev.cerevox.ai/v1/folders/test-folder/files?search_name=test",
+            payload={
+                "files": [
+                    {
+                        "file_id": "file1",
+                        "name": "test-document.pdf",
+                        "size": 1024,
+                        "type": "application/pdf",
+                    }
+                ]
+            },
+        )
 
-            async with AsyncHippo(
-                email="test@example.com", api_key="test-key"
-            ) as client:
-                response = await client.get_files("test-folder", search_name="test")
+        async with AsyncHippo(email="test@example.com", api_key="test-key") as client:
+            response = await client.get_files("test-folder", search_name="test")
 
-                assert len(response) == 1
-                assert response[0].name == "test-document.pdf"
+            assert len(response) == 1
+            assert response[0].name == "test-document.pdf"
 
     @pytest.mark.asyncio
     async def test_get_file_by_id_success(self):
         """Test successful file retrieval by ID"""
-        with aioresponses() as m:
-            m.post(
-                "https://dev.cerevox.ai/v1/token/login",
-                payload={
-                    "access_token": "test-access-token",
-                    "expires_in": 3600,
-                    "refresh_token": "test-refresh-token",
-                    "token_type": "Bearer",
-                },
-            )
-            m.get(
-                "https://dev.cerevox.ai/v1/folders/test-folder/files/file1",
-                payload={
-                    "file_id": "file1",
-                    "name": "document.pdf",
-                    "size": 2048,
-                    "type": "application/pdf",
-                    "provider": "local",
-                    "source": "upload",
-                },
-            )
+        self.mock.get(
+            "https://dev.cerevox.ai/v1/folders/test-folder/files/file1",
+            payload={
+                "file_id": "file1",
+                "name": "document.pdf",
+                "size": 2048,
+                "type": "application/pdf",
+                "provider": "local",
+                "source": "upload",
+            },
+        )
 
-            async with AsyncHippo(
-                email="test@example.com", api_key="test-key"
-            ) as client:
-                response = await client.get_file_by_id("test-folder", "file1")
+        async with AsyncHippo(email="test@example.com", api_key="test-key") as client:
+            response = await client.get_file_by_id("test-folder", "file1")
 
-                assert isinstance(response, FileItem)
-                assert response.file_id == "file1"
-                assert response.size == 2048
+            assert isinstance(response, FileItem)
+            assert response.file_id == "file1"
+            assert response.size == 2048
 
     @pytest.mark.asyncio
     async def test_delete_file_by_id_success(self):
         """Test successful file deletion by ID"""
-        with aioresponses() as m:
-            m.post(
-                "https://dev.cerevox.ai/v1/token/login",
-                payload={
-                    "access_token": "test-access-token",
-                    "expires_in": 3600,
-                    "refresh_token": "test-refresh-token",
-                    "token_type": "Bearer",
-                },
-            )
-            m.delete(
-                "https://dev.cerevox.ai/v1/folders/test-folder/files/file1",
-                payload={"deleted": True, "status": "ok"},
-            )
+        self.mock.delete(
+            "https://dev.cerevox.ai/v1/folders/test-folder/files/file1",
+            payload={"deleted": True, "status": "ok"},
+        )
 
-            async with AsyncHippo(
-                email="test@example.com", api_key="test-key"
-            ) as client:
-                response = await client.delete_file_by_id("test-folder", "file1")
+        async with AsyncHippo(email="test@example.com", api_key="test-key") as client:
+            response = await client.delete_file_by_id("test-folder", "file1")
 
-                assert isinstance(response, DeletedResponse)
-                assert response.deleted is True
+            assert isinstance(response, DeletedResponse)
+            assert response.deleted is True
 
     @pytest.mark.asyncio
     async def test_delete_all_files_success(self):
         """Test successful deletion of all files"""
-        with aioresponses() as m:
-            m.post(
-                "https://dev.cerevox.ai/v1/token/login",
-                payload={
-                    "access_token": "test-access-token",
-                    "expires_in": 3600,
-                    "refresh_token": "test-refresh-token",
-                    "token_type": "Bearer",
-                },
-            )
-            m.delete(
-                "https://dev.cerevox.ai/v1/folders/test-folder/files",
-                payload={"deleted": True, "status": "ok"},
-            )
+        self.mock.delete(
+            "https://dev.cerevox.ai/v1/folders/test-folder/files",
+            payload={"deleted": True, "status": "ok"},
+        )
 
-            async with AsyncHippo(
-                email="test@example.com", api_key="test-key"
-            ) as client:
-                response = await client.delete_all_files("test-folder")
+        async with AsyncHippo(email="test@example.com", api_key="test-key") as client:
+            response = await client.delete_all_files("test-folder")
 
-                assert isinstance(response, DeletedResponse)
-                assert response.deleted is True
+            assert isinstance(response, DeletedResponse)
+            assert response.deleted is True
 
 
 class TestAsyncHippoChatManagement:
     """Test chat management methods"""
 
+    def setup_method(self):
+        """Set up test client with mocked login"""
+        self.mock_patcher = aioresponses()
+        self.mock = self.mock_patcher.__enter__()
+        # Mock the login call that happens during initialization
+        setup_login_mock(self.mock)
+
+    def teardown_method(self):
+        """Clean up mocks"""
+        self.mock_patcher.__exit__(None, None, None)
+
     @pytest.mark.asyncio
     async def test_create_chat_success(self):
         """Test successful chat creation"""
-        with aioresponses() as m:
-            m.post(
-                "https://dev.cerevox.ai/v1/token/login",
-                payload={
-                    "access_token": "test-access-token",
-                    "expires_in": 3600,
-                    "refresh_token": "test-refresh-token",
-                    "token_type": "Bearer",
-                },
-            )
-            m.post(
-                "https://dev.cerevox.ai/v1/chats",
-                payload={
-                    "created": True,
-                    "status": "ok",
-                    "chat_id": "chat123",
-                    "chat_name": "Test Chat",
-                },
-            )
+        self.mock.post(
+            "https://dev.cerevox.ai/v1/chats",
+            payload={
+                "created": True,
+                "status": "ok",
+                "chat_id": "chat123",
+                "chat_name": "Test Chat",
+            },
+        )
 
-            async with AsyncHippo(
-                email="test@example.com", api_key="test-key"
-            ) as client:
-                response = await client.create_chat("test-folder", "openai-key")
+        async with AsyncHippo(email="test@example.com", api_key="test-key") as client:
+            response = await client.create_chat("test-folder", "openai-key")
 
-                assert isinstance(response, ChatCreatedResponse)
-                assert response.created is True
-                assert response.chat_id == "chat123"
+            assert isinstance(response, ChatCreatedResponse)
+            assert response.created is True
+            assert response.chat_id == "chat123"
 
     @pytest.mark.asyncio
     async def test_get_chats_success(self):
         """Test successful chat listing"""
-        with aioresponses() as m:
-            m.post(
-                "https://dev.cerevox.ai/v1/token/login",
-                payload={
-                    "access_token": "test-access-token",
-                    "expires_in": 3600,
-                    "refresh_token": "test-refresh-token",
-                    "token_type": "Bearer",
-                },
-            )
-            m.get(
-                "https://dev.cerevox.ai/v1/chats",
-                payload={
-                    "chats": [
-                        {
-                            "chat_id": "chat1",
-                            "chat_name": "Chat 1",
-                            "folder_id": "folder1",
-                            "created": "2024-01-01T00:00:00Z",
-                        }
-                    ]
-                },
-            )
+        self.mock.get(
+            "https://dev.cerevox.ai/v1/chats",
+            payload={
+                "chats": [
+                    {
+                        "chat_id": "chat1",
+                        "chat_name": "Chat 1",
+                        "folder_id": "folder1",
+                        "created": "2024-01-01T00:00:00Z",
+                    }
+                ]
+            },
+        )
 
-            async with AsyncHippo(
-                email="test@example.com", api_key="test-key"
-            ) as client:
-                response = await client.get_chats()
+        async with AsyncHippo(email="test@example.com", api_key="test-key") as client:
+            response = await client.get_chats()
 
-                assert isinstance(response, list)
-                assert len(response) == 1
-                assert isinstance(response[0], ChatItem)
-                assert response[0].chat_id == "chat1"
+            assert isinstance(response, list)
+            assert len(response) == 1
+            assert isinstance(response[0], ChatItem)
+            assert response[0].chat_id == "chat1"
 
     @pytest.mark.asyncio
     async def test_get_chats_with_folder_filter(self):
         """Test chat listing with folder filter"""
-        with aioresponses() as m:
-            m.post(
-                "https://dev.cerevox.ai/v1/token/login",
-                payload={
-                    "access_token": "test-access-token",
-                    "expires_in": 3600,
-                    "refresh_token": "test-refresh-token",
-                    "token_type": "Bearer",
-                },
-            )
-            m.get(
-                "https://dev.cerevox.ai/v1/chats?folder_id=test-folder",
-                payload={
-                    "chats": [
-                        {
-                            "chat_id": "chat1",
-                            "chat_name": "Chat 1",
-                            "folder_id": "test-folder",
-                        }
-                    ]
-                },
-            )
+        self.mock.get(
+            "https://dev.cerevox.ai/v1/chats?folder_id=test-folder",
+            payload={
+                "chats": [
+                    {
+                        "chat_id": "chat1",
+                        "chat_name": "Chat 1",
+                        "folder_id": "test-folder",
+                    }
+                ]
+            },
+        )
 
-            async with AsyncHippo(
-                email="test@example.com", api_key="test-key"
-            ) as client:
-                response = await client.get_chats(folder_id="test-folder")
+        async with AsyncHippo(email="test@example.com", api_key="test-key") as client:
+            response = await client.get_chats(folder_id="test-folder")
 
-                assert len(response) == 1
-                assert response[0].folder_id == "test-folder"
+            assert len(response) == 1
+            assert response[0].folder_id == "test-folder"
 
     @pytest.mark.asyncio
     async def test_get_chat_by_id_success(self):
         """Test successful chat retrieval by ID"""
-        with aioresponses() as m:
-            m.post(
-                "https://dev.cerevox.ai/v1/token/login",
-                payload={
-                    "access_token": "test-access-token",
-                    "expires_in": 3600,
-                    "refresh_token": "test-refresh-token",
-                    "token_type": "Bearer",
-                },
-            )
-            m.get(
-                "https://dev.cerevox.ai/v1/chats/chat123",
-                payload={
-                    "chat_id": "chat123",
-                    "chat_name": "Test Chat",
-                    "folder_id": "folder1",
-                    "created": "2024-01-01T00:00:00Z",
-                },
-            )
+        self.mock.get(
+            "https://dev.cerevox.ai/v1/chats/chat123",
+            payload={
+                "chat_id": "chat123",
+                "chat_name": "Test Chat",
+                "folder_id": "folder1",
+                "created": "2024-01-01T00:00:00Z",
+            },
+        )
 
-            async with AsyncHippo(
-                email="test@example.com", api_key="test-key"
-            ) as client:
-                response = await client.get_chat_by_id("chat123")
+        async with AsyncHippo(email="test@example.com", api_key="test-key") as client:
+            response = await client.get_chat_by_id("chat123")
 
-                assert isinstance(response, ChatItem)
-                assert response.chat_id == "chat123"
-                assert response.chat_name == "Test Chat"
+            assert isinstance(response, ChatItem)
+            assert response.chat_id == "chat123"
+            assert response.chat_name == "Test Chat"
 
     @pytest.mark.asyncio
     async def test_update_chat_success(self):
         """Test successful chat update"""
-        with aioresponses() as m:
-            m.post(
-                "https://dev.cerevox.ai/v1/token/login",
-                payload={
-                    "access_token": "test-access-token",
-                    "expires_in": 3600,
-                    "refresh_token": "test-refresh-token",
-                    "token_type": "Bearer",
-                },
-            )
-            m.put(
-                "https://dev.cerevox.ai/v1/chats/chat123",
-                payload={"updated": True, "status": "ok"},
-            )
+        self.mock.put(
+            "https://dev.cerevox.ai/v1/chats/chat123",
+            payload={"updated": True, "status": "ok"},
+        )
 
-            async with AsyncHippo(
-                email="test@example.com", api_key="test-key"
-            ) as client:
-                response = await client.update_chat("chat123", "Updated Chat Name")
+        async with AsyncHippo(email="test@example.com", api_key="test-key") as client:
+            response = await client.update_chat("chat123", "Updated Chat Name")
 
-                assert isinstance(response, UpdatedResponse)
-                assert response.updated is True
+            assert isinstance(response, UpdatedResponse)
+            assert response.updated is True
 
     @pytest.mark.asyncio
     async def test_delete_chat_success(self):
         """Test successful chat deletion"""
-        with aioresponses() as m:
-            m.post(
-                "https://dev.cerevox.ai/v1/token/login",
-                payload={
-                    "access_token": "test-access-token",
-                    "expires_in": 3600,
-                    "refresh_token": "test-refresh-token",
-                    "token_type": "Bearer",
-                },
-            )
-            m.delete(
-                "https://dev.cerevox.ai/v1/chats/chat123",
-                payload={"deleted": True, "status": "ok"},
-            )
+        self.mock.delete(
+            "https://dev.cerevox.ai/v1/chats/chat123",
+            payload={"deleted": True, "status": "ok"},
+        )
 
-            async with AsyncHippo(
-                email="test@example.com", api_key="test-key"
-            ) as client:
-                response = await client.delete_chat("chat123")
+        async with AsyncHippo(email="test@example.com", api_key="test-key") as client:
+            response = await client.delete_chat("chat123")
 
-                assert isinstance(response, DeletedResponse)
-                assert response.deleted is True
+            assert isinstance(response, DeletedResponse)
+            assert response.deleted is True
 
 
 class TestAsyncHippoAskManagement:
     """Test ask management methods (Core RAG functionality)"""
 
+    def setup_method(self):
+        """Set up test client with mocked login"""
+        self.mock_patcher = aioresponses()
+        self.mock = self.mock_patcher.__enter__()
+        # Mock the login call that happens during initialization
+        setup_login_mock(self.mock)
+
+    def teardown_method(self):
+        """Clean up mocks"""
+        self.mock_patcher.__exit__(None, None, None)
+
     @pytest.mark.asyncio
     async def test_submit_ask_success_default(self):
         """Test successful ask submission with default parameters"""
-        with aioresponses() as m:
-            m.post(
-                "https://dev.cerevox.ai/v1/token/login",
-                payload={
-                    "access_token": "test-access-token",
-                    "expires_in": 3600,
-                    "refresh_token": "test-refresh-token",
-                    "token_type": "Bearer",
-                },
-            )
-            m.post(
-                "https://dev.cerevox.ai/v1/chats/chat123/asks",
-                payload={
-                    "ask_index": 1,
-                    "datetime": "2024-01-01T00:00:00Z",
-                    "query": "What is this document about?",
-                    "response": "This document is about testing.",
-                },
+        self.mock.post(
+            "https://dev.cerevox.ai/v1/chats/chat123/asks",
+            payload={
+                "ask_index": 1,
+                "datetime": "2024-01-01T00:00:00Z",
+                "query": "What is this document about?",
+                "response": "This document is about testing.",
+            },
+        )
+
+        async with AsyncHippo(email="test@example.com", api_key="test-key") as client:
+            response = await client.submit_ask(
+                "chat123", "What is this document about?"
             )
 
-            async with AsyncHippo(
-                email="test@example.com", api_key="test-key"
-            ) as client:
-                response = await client.submit_ask(
-                    "chat123", "What is this document about?"
-                )
-
-                assert isinstance(response, AskItem)
-                assert response.query == "What is this document about?"
-                assert response.response == "This document is about testing."
+            assert isinstance(response, AskItem)
+            assert response.query == "What is this document about?"
+            assert response.response == "This document is about testing."
 
     @pytest.mark.asyncio
     async def test_submit_ask_success_with_parameters(self):
         """Test successful ask submission with all parameters"""
-        with aioresponses() as m:
-            m.post(
-                "https://dev.cerevox.ai/v1/token/login",
-                payload={
-                    "access_token": "test-access-token",
-                    "expires_in": 3600,
-                    "refresh_token": "test-refresh-token",
-                    "token_type": "Bearer",
-                },
-            )
-            m.post(
-                "https://dev.cerevox.ai/v1/chats/chat123/asks",
-                payload={
-                    "ask_index": 1,
-                    "datetime": "2024-01-01T00:00:00Z",
-                    "query": "What is this document about?",
-                    "response": "This document is about testing.",
-                    "source_data": [
-                        {
-                            "citation": "Document 1, Page 1",
-                            "name": "test.pdf",
-                            "type": "pdf",
-                            "page": 1,
-                            "text_blocks": ["Sample text"],
-                        }
-                    ],
-                },
+        self.mock.post(
+            "https://dev.cerevox.ai/v1/chats/chat123/asks",
+            payload={
+                "ask_index": 1,
+                "datetime": "2024-01-01T00:00:00Z",
+                "query": "What is this document about?",
+                "response": "This document is about testing.",
+                "source_data": [
+                    {
+                        "citation": "Document 1, Page 1",
+                        "name": "test.pdf",
+                        "type": "pdf",
+                        "page": 1,
+                        "text_blocks": ["Sample text"],
+                    }
+                ],
+            },
+        )
+
+        async with AsyncHippo(email="test@example.com", api_key="test-key") as client:
+            response = await client.submit_ask(
+                "chat123",
+                "What is this document about?",
+                is_qna=False,
+                citation_style="APA",
+                file_sources=["file1", "file2"],
             )
 
-            async with AsyncHippo(
-                email="test@example.com", api_key="test-key"
-            ) as client:
-                response = await client.submit_ask(
-                    "chat123",
-                    "What is this document about?",
-                    is_qna=False,
-                    citation_style="APA",
-                    file_sources=["file1", "file2"],
-                )
-
-                assert isinstance(response, AskItem)
-                assert response.source_data is not None
-                assert len(response.source_data) == 1
+            assert isinstance(response, AskItem)
+            assert response.source_data is not None
+            assert len(response.source_data) == 1
 
     @pytest.mark.asyncio
     async def test_get_asks_success(self):
         """Test successful ask listing"""
-        with aioresponses() as m:
-            m.post(
-                "https://dev.cerevox.ai/v1/token/login",
-                payload={
-                    "access_token": "test-access-token",
-                    "expires_in": 3600,
-                    "refresh_token": "test-refresh-token",
-                    "token_type": "Bearer",
-                },
-            )
-            m.get(
-                "https://dev.cerevox.ai/v1/chats/chat123/asks?msg_maxlen=120",
-                payload={
-                    "asks": [
-                        {
-                            "ask_index": 1,
-                            "datetime": "2024-01-01T00:00:00Z",
-                            "query": "Question 1",
-                            "response": "Answer 1",
-                        },
-                        {
-                            "ask_index": 2,
-                            "datetime": "2024-01-01T01:00:00Z",
-                            "query": "Question 2",
-                            "response": "Answer 2",
-                        },
-                    ]
-                },
-            )
+        self.mock.get(
+            "https://dev.cerevox.ai/v1/chats/chat123/asks?msg_maxlen=120",
+            payload={
+                "asks": [
+                    {
+                        "ask_index": 1,
+                        "datetime": "2024-01-01T00:00:00Z",
+                        "query": "Question 1",
+                        "response": "Answer 1",
+                    },
+                    {
+                        "ask_index": 2,
+                        "datetime": "2024-01-01T01:00:00Z",
+                        "query": "Question 2",
+                        "response": "Answer 2",
+                    },
+                ]
+            },
+        )
 
-            async with AsyncHippo(
-                email="test@example.com", api_key="test-key"
-            ) as client:
-                response = await client.get_asks("chat123")
+        async with AsyncHippo(email="test@example.com", api_key="test-key") as client:
+            response = await client.get_asks("chat123")
 
-                assert isinstance(response, list)
-                assert len(response) == 2
-                assert all(isinstance(ask, AskItem) for ask in response)
-                assert response[0].ask_index == 1
+            assert isinstance(response, list)
+            assert len(response) == 2
+            assert all(isinstance(ask, AskItem) for ask in response)
+            assert response[0].ask_index == 1
 
     @pytest.mark.asyncio
     async def test_get_asks_with_custom_maxlen(self):
         """Test ask listing with custom message length"""
-        with aioresponses() as m:
-            m.post(
-                "https://dev.cerevox.ai/v1/token/login",
-                payload={
-                    "access_token": "test-access-token",
-                    "expires_in": 3600,
-                    "refresh_token": "test-refresh-token",
-                    "token_type": "Bearer",
-                },
-            )
-            m.get(
-                "https://dev.cerevox.ai/v1/chats/chat123/asks?msg_maxlen=50",
-                payload={
-                    "asks": [
-                        {
-                            "ask_index": 1,
-                            "datetime": "2024-01-01T00:00:00Z",
-                            "query": "Short question",
-                            "response": "Short answer",
-                        }
-                    ]
-                },
-            )
+        self.mock.get(
+            "https://dev.cerevox.ai/v1/chats/chat123/asks?msg_maxlen=50",
+            payload={
+                "asks": [
+                    {
+                        "ask_index": 1,
+                        "datetime": "2024-01-01T00:00:00Z",
+                        "query": "Short question",
+                        "response": "Short answer",
+                    }
+                ]
+            },
+        )
 
-            async with AsyncHippo(
-                email="test@example.com", api_key="test-key"
-            ) as client:
-                response = await client.get_asks("chat123", msg_maxlen=50)
+        async with AsyncHippo(email="test@example.com", api_key="test-key") as client:
+            response = await client.get_asks("chat123", msg_maxlen=50)
 
-                assert len(response) == 1
-                assert response[0].query == "Short question"
+            assert len(response) == 1
+            assert response[0].query == "Short question"
 
     @pytest.mark.asyncio
     async def test_get_ask_by_index_success(self):
         """Test successful ask retrieval by index"""
-        with aioresponses() as m:
-            m.post(
-                "https://dev.cerevox.ai/v1/token/login",
-                payload={
-                    "access_token": "test-access-token",
-                    "expires_in": 3600,
-                    "refresh_token": "test-refresh-token",
-                    "token_type": "Bearer",
-                },
-            )
-            m.get(
-                "https://dev.cerevox.ai/v1/chats/chat123/asks/1",
-                payload={
-                    "ask_index": 1,
-                    "datetime": "2024-01-01T00:00:00Z",
-                    "query": "What is this document about?",
-                    "response": "This document is about testing.",
-                },
-            )
+        self.mock.get(
+            "https://dev.cerevox.ai/v1/chats/chat123/asks/1",
+            payload={
+                "ask_index": 1,
+                "datetime": "2024-01-01T00:00:00Z",
+                "query": "What is this document about?",
+                "response": "This document is about testing.",
+            },
+        )
 
-            async with AsyncHippo(
-                email="test@example.com", api_key="test-key"
-            ) as client:
-                response = await client.get_ask_by_index("chat123", 1)
+        async with AsyncHippo(email="test@example.com", api_key="test-key") as client:
+            response = await client.get_ask_by_index("chat123", 1)
 
-                assert isinstance(response, AskItem)
-                assert response.ask_index == 1
+            assert isinstance(response, AskItem)
+            assert response.ask_index == 1
 
     @pytest.mark.asyncio
     async def test_get_ask_by_index_with_options(self):
         """Test ask retrieval with show_files and show_source options"""
-        with aioresponses() as m:
-            m.post(
-                "https://dev.cerevox.ai/v1/token/login",
-                payload={
-                    "access_token": "test-access-token",
-                    "expires_in": 3600,
-                    "refresh_token": "test-refresh-token",
-                    "token_type": "Bearer",
-                },
-            )
-            m.get(
-                "https://dev.cerevox.ai/v1/chats/chat123/asks/1?show_files=true&show_source=true",
-                payload={
-                    "ask_index": 1,
-                    "datetime": "2024-01-01T00:00:00Z",
-                    "query": "What is this document about?",
-                    "response": "This document is about testing.",
-                    "filenames": ["test.pdf", "doc.docx"],
-                    "source_data": [
-                        {
-                            "citation": "Document 1",
-                            "name": "test.pdf",
-                            "type": "pdf",
-                            "page": 1,
-                            "text_blocks": ["Sample text"],
-                        }
-                    ],
-                },
+        self.mock.get(
+            "https://dev.cerevox.ai/v1/chats/chat123/asks/1?show_files=true&show_source=true",
+            payload={
+                "ask_index": 1,
+                "datetime": "2024-01-01T00:00:00Z",
+                "query": "What is this document about?",
+                "response": "This document is about testing.",
+                "filenames": ["test.pdf", "doc.docx"],
+                "source_data": [
+                    {
+                        "citation": "Document 1",
+                        "name": "test.pdf",
+                        "type": "pdf",
+                        "page": 1,
+                        "text_blocks": ["Sample text"],
+                    }
+                ],
+            },
+        )
+
+        async with AsyncHippo(email="test@example.com", api_key="test-key") as client:
+            response = await client.get_ask_by_index(
+                "chat123", 1, show_files=True, show_source=True
             )
 
-            async with AsyncHippo(
-                email="test@example.com", api_key="test-key"
-            ) as client:
-                response = await client.get_ask_by_index(
-                    "chat123", 1, show_files=True, show_source=True
-                )
-
-                assert isinstance(response, AskItem)
-                assert response.filenames is not None
-                assert len(response.filenames) == 2
-                assert response.source_data is not None
+            assert isinstance(response, AskItem)
+            assert response.filenames is not None
+            assert len(response.filenames) == 2
+            assert response.source_data is not None
 
     @pytest.mark.asyncio
     async def test_delete_ask_by_index_success(self):
         """Test successful ask deletion by index"""
-        with aioresponses() as m:
-            m.post(
-                "https://dev.cerevox.ai/v1/token/login",
-                payload={
-                    "access_token": "test-access-token",
-                    "expires_in": 3600,
-                    "refresh_token": "test-refresh-token",
-                    "token_type": "Bearer",
-                },
-            )
-            m.delete(
-                "https://dev.cerevox.ai/v1/chats/chat123/asks/1",
-                payload={"deleted": True, "status": "ok"},
-            )
+        self.mock.delete(
+            "https://dev.cerevox.ai/v1/chats/chat123/asks/1",
+            payload={"deleted": True, "status": "ok"},
+        )
 
-            async with AsyncHippo(
-                email="test@example.com", api_key="test-key"
-            ) as client:
-                response = await client.delete_ask_by_index("chat123", 1)
+        async with AsyncHippo(email="test@example.com", api_key="test-key") as client:
+            response = await client.delete_ask_by_index("chat123", 1)
 
-                assert isinstance(response, DeletedResponse)
-                assert response.deleted is True
+            assert isinstance(response, DeletedResponse)
+            assert response.deleted is True
 
 
 class TestAsyncHippoConvenienceMethods:
     """Test convenience methods"""
 
+    def setup_method(self):
+        """Set up test client with mocked login"""
+        self.mock_patcher = aioresponses()
+        self.mock = self.mock_patcher.__enter__()
+        # Mock the login call that happens during initialization
+        setup_login_mock(self.mock)
+
+    def teardown_method(self):
+        """Clean up mocks"""
+        self.mock_patcher.__exit__(None, None, None)
+
     @pytest.mark.asyncio
     async def test_get_folder_file_count(self):
         """Test folder file count convenience method"""
-        with aioresponses() as m:
-            m.post(
-                "https://dev.cerevox.ai/v1/token/login",
-                payload={
-                    "access_token": "test-access-token",
-                    "expires_in": 3600,
-                    "refresh_token": "test-refresh-token",
-                    "token_type": "Bearer",
-                },
-            )
-            m.get(
-                "https://dev.cerevox.ai/v1/folders/test-folder/files",
-                payload={
-                    "files": [
-                        {"file_id": "file1", "name": "doc1.pdf"},
-                        {"file_id": "file2", "name": "doc2.pdf"},
-                        {"file_id": "file3", "name": "doc3.pdf"},
-                    ]
-                },
-            )
+        self.mock.get(
+            "https://dev.cerevox.ai/v1/folders/test-folder/files",
+            payload={
+                "files": [
+                    {"file_id": "file1", "name": "doc1.pdf"},
+                    {"file_id": "file2", "name": "doc2.pdf"},
+                    {"file_id": "file3", "name": "doc3.pdf"},
+                ]
+            },
+        )
 
-            async with AsyncHippo(
-                email="test@example.com", api_key="test-key"
-            ) as client:
-                count = await client.get_folder_file_count("test-folder")
+        async with AsyncHippo(email="test@example.com", api_key="test-key") as client:
+            count = await client.get_folder_file_count("test-folder")
 
-                assert count == 3
+            assert count == 3
 
     @pytest.mark.asyncio
     async def test_get_chat_ask_count(self):
         """Test chat ask count convenience method"""
-        with aioresponses() as m:
-            m.post(
-                "https://dev.cerevox.ai/v1/token/login",
-                payload={
-                    "access_token": "test-access-token",
-                    "expires_in": 3600,
-                    "refresh_token": "test-refresh-token",
-                    "token_type": "Bearer",
-                },
-            )
-            m.get(
-                "https://dev.cerevox.ai/v1/chats/chat123/asks?msg_maxlen=120",
-                payload={
-                    "asks": [
-                        {"ask_index": 1, "query": "Q1", "response": "A1"},
-                        {"ask_index": 2, "query": "Q2", "response": "A2"},
-                    ]
-                },
-            )
+        self.mock.get(
+            "https://dev.cerevox.ai/v1/chats/chat123/asks?msg_maxlen=120",
+            payload={
+                "asks": [
+                    {"ask_index": 1, "query": "Q1", "response": "A1"},
+                    {"ask_index": 2, "query": "Q2", "response": "A2"},
+                ]
+            },
+        )
 
-            async with AsyncHippo(
-                email="test@example.com", api_key="test-key"
-            ) as client:
-                count = await client.get_chat_ask_count("chat123")
+        async with AsyncHippo(email="test@example.com", api_key="test-key") as client:
+            count = await client.get_chat_ask_count("chat123")
 
-                assert count == 2
+            assert count == 2
 
 
 class TestAsyncHippoErrorHandling:
     """Test error handling in requests"""
 
-    @pytest.mark.asyncio
-    async def test_request_without_session(self):
-        """Test request without initialized session"""
-        client = AsyncHippo(email="test@example.com", api_key="test-key")
+    def setup_method(self):
+        """Set up test client with mocked login"""
+        self.mock_patcher = aioresponses()
+        self.mock = self.mock_patcher.__enter__()
+        # Mock the login call that happens during initialization
+        setup_login_mock(self.mock)
 
-        with pytest.raises(LexaError, match="Session not initialized"):
-            await client._request("GET", "/folders")
+    def teardown_method(self):
+        """Clean up mocks"""
+        self.mock_patcher.__exit__(None, None, None)
 
     @pytest.mark.asyncio
     async def test_request_timeout_error(self):
         """Test timeout error handling"""
-        with aioresponses() as m:
-            m.post(
-                "https://dev.cerevox.ai/v1/token/login",
-                payload={
-                    "access_token": "test-access-token",
-                    "expires_in": 3600,
-                    "refresh_token": "test-refresh-token",
-                    "token_type": "Bearer",
-                },
-            )
+        async with AsyncHippo(email="test@example.com", api_key="test-key") as client:
+            # Mock timeout
+            with patch.object(client.session, "request") as mock_request:
+                mock_request.side_effect = asyncio.TimeoutError("Request timed out")
 
-            async with AsyncHippo(
-                email="test@example.com", api_key="test-key"
-            ) as client:
-                # Mock timeout
-                with patch.object(client.session, "request") as mock_request:
-                    mock_request.side_effect = asyncio.TimeoutError("Request timed out")
-
-                    with pytest.raises(LexaTimeoutError):
-                        await client.get_folders()
+                with pytest.raises(LexaTimeoutError):
+                    await client.get_folders()
 
     @pytest.mark.asyncio
     async def test_request_connection_error(self):
         """Test connection error handling"""
-        with aioresponses() as m:
-            m.post(
-                "https://dev.cerevox.ai/v1/token/login",
-                payload={
-                    "access_token": "test-access-token",
-                    "expires_in": 3600,
-                    "refresh_token": "test-refresh-token",
-                    "token_type": "Bearer",
-                },
-            )
+        async with AsyncHippo(email="test@example.com", api_key="test-key") as client:
+            # Mock connection error
+            with patch.object(client.session, "request") as mock_request:
+                mock_request.side_effect = aiohttp.ClientError("Connection failed")
 
-            async with AsyncHippo(
-                email="test@example.com", api_key="test-key"
-            ) as client:
-                # Mock connection error
-                with patch.object(client.session, "request") as mock_request:
-                    mock_request.side_effect = aiohttp.ClientError("Connection failed")
-
-                    with pytest.raises(LexaError):
-                        await client.get_folders()
+                with pytest.raises(LexaError):
+                    await client.get_folders()
 
     @pytest.mark.asyncio
     async def test_http_error_response(self):
         """Test HTTP error response handling"""
-        with aioresponses() as m:
-            m.post(
-                "https://dev.cerevox.ai/v1/token/login",
-                payload={
-                    "access_token": "test-access-token",
-                    "expires_in": 3600,
-                    "refresh_token": "test-refresh-token",
-                    "token_type": "Bearer",
-                },
-            )
-            m.get(
-                "https://dev.cerevox.ai/v1/folders/nonexistent",
-                payload={
-                    "error": "Folder not found",
-                    "message": "The requested folder does not exist",
-                },
-                status=404,
-            )
+        self.mock.get(
+            "https://dev.cerevox.ai/v1/folders/nonexistent",
+            payload={
+                "error": "Folder not found",
+                "message": "The requested folder does not exist",
+            },
+            status=404,
+        )
 
-            async with AsyncHippo(
-                email="test@example.com", api_key="test-key"
-            ) as client:
-                with pytest.raises(LexaError):
-                    await client.get_folder_by_id("nonexistent")
+        async with AsyncHippo(email="test@example.com", api_key="test-key") as client:
+            with pytest.raises(LexaError):
+                await client.get_folder_by_id("nonexistent")
 
     @pytest.mark.asyncio
     async def test_non_json_success_response(self):
         """Test handling of non-JSON success response"""
-        with aioresponses() as m:
-            m.post(
-                "https://dev.cerevox.ai/v1/token/login",
-                payload={
-                    "access_token": "test-access-token",
-                    "expires_in": 3600,
-                    "refresh_token": "test-refresh-token",
-                    "token_type": "Bearer",
-                },
-            )
-            m.delete(
-                "https://dev.cerevox.ai/v1/folders/test-folder",
-                body="OK",
-                status=200,
-                content_type="text/plain",
-            )
+        self.mock.delete(
+            "https://dev.cerevox.ai/v1/folders/test-folder",
+            body="OK",
+            status=200,
+            content_type="text/plain",
+        )
 
-            async with AsyncHippo(
-                email="test@example.com", api_key="test-key"
-            ) as client:
-                # This should not raise an error and return a basic success response
-                response_data = await client._request("DELETE", "/folders/test-folder")
-                assert response_data == {"status": "success"}
+        async with AsyncHippo(email="test@example.com", api_key="test-key") as client:
+            # This should not raise an error and return a basic success response
+            response_data = await client._request("DELETE", "/folders/test-folder")
+            assert response_data == {"status": "success"}
 
     @pytest.mark.asyncio
     async def test_non_json_error_response(self):
         """Test handling of non-JSON error response"""
-        with aioresponses() as m:
-            m.post(
-                "https://dev.cerevox.ai/v1/token/login",
-                payload={
-                    "access_token": "test-access-token",
-                    "expires_in": 3600,
-                    "refresh_token": "test-refresh-token",
-                    "token_type": "Bearer",
-                },
-            )
-            m.get(
-                "https://dev.cerevox.ai/v1/folders/error",
-                body="Internal Server Error",
-                status=500,
-                content_type="text/plain",
-            )
+        self.mock.get(
+            "https://dev.cerevox.ai/v1/folders/error",
+            body="Internal Server Error",
+            status=500,
+            content_type="text/plain",
+        )
 
-            async with AsyncHippo(
-                email="test@example.com", api_key="test-key"
-            ) as client:
-                with pytest.raises(LexaError) as exc_info:
-                    await client.get_folder_by_id("error")
+        async with AsyncHippo(email="test@example.com", api_key="test-key") as client:
+            with pytest.raises(LexaError) as exc_info:
+                await client.get_folder_by_id("error")
 
-                # The error should contain the HTTP status
-                assert "500" in str(exc_info.value) or "Internal Server Error" in str(
-                    exc_info.value
-                )
+            # The error should contain the HTTP status
+            assert "500" in str(exc_info.value) or "Internal Server Error" in str(
+                exc_info.value
+            )
 
 
 class TestAsyncHippoRequestHeaders:
     """Test request header handling"""
 
+    def setup_method(self):
+        """Set up test client with mocked login"""
+        self.mock_patcher = aioresponses()
+        self.mock = self.mock_patcher.__enter__()
+        # Mock the login call that happens during initialization
+        setup_login_mock(self.mock)
+
+    def teardown_method(self):
+        """Clean up mocks"""
+        self.mock_patcher.__exit__(None, None, None)
+
     @pytest.mark.asyncio
     async def test_request_with_custom_headers(self):
         """Test request with custom headers"""
-        with aioresponses() as m:
-            m.post(
-                "https://dev.cerevox.ai/v1/token/login",
-                payload={
-                    "access_token": "test-access-token",
-                    "expires_in": 3600,
-                    "refresh_token": "test-refresh-token",
-                    "token_type": "Bearer",
-                },
-            )
-            m.get("https://dev.cerevox.ai/v1/folders", payload={"folders": []})
+        self.mock.get("https://dev.cerevox.ai/v1/folders", payload={"folders": []})
 
-            async with AsyncHippo(
-                email="test@example.com", api_key="test-key"
-            ) as client:
-                # Make request with custom headers - just verify it doesn't error
-                response = await client._request(
-                    "GET", "/folders", headers={"X-Custom-Header": "custom-value"}
-                )
-                assert response == {"folders": []}
+        async with AsyncHippo(email="test@example.com", api_key="test-key") as client:
+            # Make request with custom headers - just verify it doesn't error
+            response = await client._request(
+                "GET", "/folders", headers={"X-Custom-Header": "custom-value"}
+            )
+            assert response == {"folders": []}
 
     @pytest.mark.asyncio
     async def test_file_upload_headers(self):
         """Test that file upload works correctly"""
-        with aioresponses() as m:
-            m.post(
-                "https://dev.cerevox.ai/v1/token/login",
-                payload={
-                    "access_token": "test-access-token",
-                    "expires_in": 3600,
-                    "refresh_token": "test-refresh-token",
-                    "token_type": "Bearer",
-                },
-            )
-            m.post(
-                "https://dev.cerevox.ai/v1/folders/test-folder/files",
-                payload={"uploaded": True, "status": "ok", "uploads": ["test.txt"]},
-            )
+        self.mock.post(
+            "https://dev.cerevox.ai/v1/folders/test-folder/files",
+            payload={"uploaded": True, "status": "ok", "uploads": ["test.txt"]},
+        )
 
-            async with AsyncHippo(
-                email="test@example.com", api_key="test-key"
-            ) as client:
-                with patch("builtins.open", mock_open(read_data=b"test content")):
-                    with patch("os.path.basename", return_value="test.txt"):
-                        response = await client.upload_file(
-                            "test-folder", "/path/to/test.txt"
-                        )
-                        assert response.uploaded is True
+        async with AsyncHippo(email="test@example.com", api_key="test-key") as client:
+            with patch("builtins.open", mock_open(read_data=b"test content")):
+                with patch("os.path.basename", return_value="test.txt"):
+                    response = await client.upload_file(
+                        "test-folder", "/path/to/test.txt"
+                    )
+                    assert response.uploaded is True
 
     @pytest.mark.asyncio
     async def test_json_vs_form_data_request(self):
         """Test that requests handle JSON vs FormData correctly"""
-        with aioresponses() as m:
-            m.post(
-                "https://dev.cerevox.ai/v1/token/login",
-                payload={
-                    "access_token": "test-access-token",
-                    "expires_in": 3600,
-                    "refresh_token": "test-refresh-token",
-                    "token_type": "Bearer",
-                },
-            )
-            m.post(
-                "https://dev.cerevox.ai/v1/folders",
-                payload={
-                    "created": True,
-                    "status": "ok",
-                    "folder_id": "test",
-                    "folder_name": "Test",
-                },
-            )
-            m.post(
-                "https://dev.cerevox.ai/v1/folders/test-folder/files",
-                payload={"uploaded": True, "status": "ok", "uploads": ["test.txt"]},
-            )
+        self.mock.post(
+            "https://dev.cerevox.ai/v1/folders",
+            payload={
+                "created": True,
+                "status": "ok",
+                "folder_id": "test",
+                "folder_name": "Test",
+            },
+        )
+        self.mock.post(
+            "https://dev.cerevox.ai/v1/folders/test-folder/files",
+            payload={"uploaded": True, "status": "ok", "uploads": ["test.txt"]},
+        )
 
-            async with AsyncHippo(
-                email="test@example.com", api_key="test-key"
-            ) as client:
-                # Test JSON request
-                response1 = await client.create_folder("test", "Test")
-                assert response1.created is True
+        async with AsyncHippo(email="test@example.com", api_key="test-key") as client:
+            # Test JSON request
+            response1 = await client.create_folder("test", "Test")
+            assert response1.created is True
 
-                # Test FormData request
-                with patch("builtins.open", mock_open(read_data=b"test content")):
-                    with patch("os.path.basename", return_value="test.txt"):
-                        response2 = await client.upload_file(
-                            "test-folder", "/path/to/test.txt"
-                        )
-                        assert response2.uploaded is True
+            # Test FormData request
+            with patch("builtins.open", mock_open(read_data=b"test content")):
+                with patch("os.path.basename", return_value="test.txt"):
+                    response2 = await client.upload_file(
+                        "test-folder", "/path/to/test.txt"
+                    )
+                    assert response2.uploaded is True

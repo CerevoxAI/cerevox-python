@@ -399,7 +399,7 @@ class TestImportResilience:
 
         assert first_version == third_version
 
-    @patch("cerevox.lexa")
+    @patch("cerevox.clients.lexa")
     def test_import_with_missing_submodule(self, mock_lexa):
         """Test behavior when a submodule import fails."""
         # This test ensures that if a submodule has issues, we handle it gracefully

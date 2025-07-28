@@ -1,5 +1,5 @@
 """
-Tests for cerevox.models
+Tests for cerevox.core.models
 
 Comprehensive tests to achieve 100% code coverage for the models,
 including all methods, error handling, and edge cases.
@@ -11,7 +11,7 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from cerevox.models import (  # Enums; Type aliases; Models
+from cerevox.core.models import (  # Enums; Type aliases; Models
     VALID_MODES,
     BucketInfo,
     BucketListResponse,
