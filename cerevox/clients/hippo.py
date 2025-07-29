@@ -44,7 +44,7 @@ class Hippo(BaseClient):
         >>> client.create_folder("docs", "My Documents")
         >>> client.upload_file("docs", "/path/to/document.pdf")
         >>> # Create chat and ask questions
-        >>> chat = client.create_chat("docs", "your-openai-key")
+        >>> chat = client.create_chat("docs")
         >>> response = client.submit_ask(chat["chat_id"], "What is this document about?")
         >>> print(response["response"])
 
@@ -280,18 +280,17 @@ class Hippo(BaseClient):
 
     # Chat Management Methods
 
-    def create_chat(self, folder_id: str, openai_key: str) -> ChatCreatedResponse:
+    def create_chat(self, folder_id: str) -> ChatCreatedResponse:
         """
         Create a new chat session for a folder
 
         Args:
             folder_id: Folder ID to create chat for
-            openai_key: OpenAI API key for chat functionality
 
         Returns:
             ChatCreatedResponse containing creation confirmation with chat_id
         """
-        request = ChatCreate(folder_id=folder_id, openai_key=openai_key)
+        request = ChatCreate(folder_id=folder_id)
         response_data = self._request("POST", "/chats", json_data=request.model_dump())
         return ChatCreatedResponse(**response_data)
 

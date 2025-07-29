@@ -653,7 +653,7 @@ class TestAsyncHippoChatManagement:
         )
 
         async with AsyncHippo(email="test@example.com", api_key="test-key") as client:
-            response = await client.create_chat("test-folder", "openai-key")
+            response = await client.create_chat("test-folder")
 
             assert isinstance(response, ChatCreatedResponse)
             assert response.created is True

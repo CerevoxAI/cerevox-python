@@ -46,7 +46,7 @@ class AsyncHippo(AsyncBaseClient):
         ...     await client.create_folder("docs", "My Documents")
         ...     await client.upload_file("docs", "/path/to/document.pdf")
         ...     # Create chat and ask questions
-        ...     chat = await client.create_chat("docs", "your-openai-key")
+        ...     chat = await client.create_chat("docs")
         ...     response = await client.submit_ask(chat["chat_id"], "What is this document about?")
         ...     print(response["response"])
 
@@ -318,18 +318,17 @@ class AsyncHippo(AsyncBaseClient):
 
     # Chat Management Methods
 
-    async def create_chat(self, folder_id: str, openai_key: str) -> ChatCreatedResponse:
+    async def create_chat(self, folder_id: str) -> ChatCreatedResponse:
         """
         Create a new chat session for a folder
 
         Args:
             folder_id: Folder ID to create chat for
-            openai_key: OpenAI API key for chat functionality
 
         Returns:
             ChatCreatedResponse containing creation confirmation with chat_id
         """
-        request = ChatCreate(folder_id=folder_id, openai_key=openai_key)
+        request = ChatCreate(folder_id=folder_id)
         response_data = await self._request(
             "POST", "/chats", json_data=request.model_dump()
         )

@@ -574,7 +574,7 @@ class TestHippoChatManagement:
             status=200,
         )
 
-        response = self.client.create_chat("test-folder", "openai-key")
+        response = self.client.create_chat("test-folder")
 
         assert isinstance(response, ChatCreatedResponse)
         assert response.created is True

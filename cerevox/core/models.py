@@ -522,7 +522,6 @@ class ChatCreate(BaseModel):
     """Request for creating a chat"""
 
     folder_id: str = Field(..., description="Folder ID to create chat for")
-    openai_key: str = Field(..., description="OpenAI API key for chat functionality")
 
     model_config = ConfigDict(populate_by_name=True)
 
