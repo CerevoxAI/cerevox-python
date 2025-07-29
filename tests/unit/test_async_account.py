@@ -6,28 +6,25 @@ including all methods, error handling, and edge cases.
 """
 
 import asyncio
-import json
 import os
-from unittest.mock import AsyncMock, Mock, patch
+from unittest.mock import patch
 
 import aiohttp
 import pytest
 from aioresponses import aioresponses
 
-from cerevox.clients.async_account import AsyncAccount
-from cerevox.core.exceptions import (
+from cerevox import AsyncAccount
+from cerevox.core import (
+    AccountInfo,
+    AccountPlan,
+    CreatedResponse,
+    DeletedResponse,
     InsufficientPermissionsError,
     LexaAuthError,
     LexaError,
     LexaRateLimitError,
     LexaTimeoutError,
     LexaValidationError,
-)
-from cerevox.core.models import (
-    AccountInfo,
-    AccountPlan,
-    CreatedResponse,
-    DeletedResponse,
     MessageResponse,
     TokenResponse,
     UpdatedResponse,

@@ -12,6 +12,11 @@ from .document_loader import (
     DocumentImage,
     DocumentMetadata,
     DocumentTable,
+    ElementContent,
+    ElementStats,
+    FileInfo,
+    PageInfo,
+    SourceInfo,
     chunk_markdown,
     chunk_text,
 )
@@ -23,6 +28,11 @@ __all__ = [
     "DocumentImage",
     "DocumentMetadata",
     "DocumentTable",
+    "ElementContent",
+    "ElementStats",
+    "FileInfo",
+    "PageInfo",
+    "SourceInfo",
     "chunk_markdown",
     "chunk_text",
 ]

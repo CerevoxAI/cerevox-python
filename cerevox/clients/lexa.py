@@ -35,15 +35,7 @@ try:
 except ImportError:
     TQDM_AVAILABLE = False
 
-from ..core.exceptions import (
-    LexaAuthError,
-    LexaError,
-    LexaJobFailedError,
-    LexaRateLimitError,
-    LexaTimeoutError,
-    LexaValidationError,
-)
-from ..core.models import (
+from ..core import (
     VALID_MODES,
     BucketListResponse,
     DriveListResponse,
@@ -54,12 +46,18 @@ from ..core.models import (
     IngestionResult,
     JobResponse,
     JobStatus,
+    LexaAuthError,
+    LexaError,
+    LexaJobFailedError,
+    LexaRateLimitError,
+    LexaTimeoutError,
+    LexaValidationError,
     ProcessingMode,
     SiteListResponse,
 )
 
 # Internal
-from ..utils.document_loader import DocumentBatch
+from ..utils import DocumentBatch
 
 HTTP = "http://"
 HTTPS = "https://"

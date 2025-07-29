@@ -2,43 +2,29 @@
 Cerevox - The Data Layer
 """
 
-# Account management clients
-from .clients.account import Account
-from .clients.async_account import AsyncAccount
+from .clients import Account  # Account management client
+from .clients import AsyncAccount  # Account management client
+from .clients import AsyncHippo  # RAG client
+from .clients import AsyncLexa  # Document parsing client
+from .clients import Hippo  # RAG client
+from .clients import Lexa  # Document parsing client
 
-# RAG Clients
-from .clients.async_hippo import AsyncHippo
-
-# Document parsing Clients
-from .clients.async_lexa import AsyncLexa
-
-# RAG clients
-from .clients.hippo import Hippo
-
-# Document parsing clients
-from .clients.lexa import Lexa
-
-# Error handling
-from .core.exceptions import (
-    LexaAuthError,
-    LexaError,
-    LexaJobFailedError,
-    LexaRateLimitError,
-    LexaTimeoutError,
-)
-
-# Models and types
-from .core.models import (
+# Core models and exceptions
+from .core import (  # Account models; Lexa (Document Processing) models; Exceptions
     AccountInfo,
     AccountPlan,
     BucketListResponse,
     CreatedResponse,
     DeletedResponse,
-    FileInfo,
     FolderListResponse,
     IngestionResult,
     JobResponse,
     JobStatus,
+    LexaAuthError,
+    LexaError,
+    LexaJobFailedError,
+    LexaRateLimitError,
+    LexaTimeoutError,
     MessageResponse,
     ProcessingMode,
     TokenResponse,
@@ -50,13 +36,18 @@ from .core.models import (
 )
 
 # Document processing
-from .utils.document_loader import (
+from .utils import (
     Document,
     DocumentBatch,
     DocumentElement,
     DocumentImage,
     DocumentMetadata,
     DocumentTable,
+    ElementContent,
+    ElementStats,
+    FileInfo,
+    PageInfo,
+    SourceInfo,
     chunk_markdown,
     chunk_text,
 )
@@ -69,7 +60,6 @@ __description__ = (
 )
 __author__ = "Cerevox Team"
 __license__ = "MIT"
-
 
 __all__ = [
     # Account management clients
@@ -84,20 +74,17 @@ __all__ = [
     # Document processing
     "Document",
     "DocumentBatch",
+    "DocumentElement",
+    "DocumentImage",
     "DocumentMetadata",
     "DocumentTable",
-    "DocumentImage",
-    "DocumentElement",
+    "ElementContent",
+    "ElementStats",
+    "FileInfo",
+    "PageInfo",
+    "SourceInfo",
     "chunk_markdown",
     "chunk_text",
-    # Models and types
-    "JobStatus",
-    "JobResponse",
-    "IngestionResult",
-    "ProcessingMode",
-    "FileInfo",
-    "BucketListResponse",
-    "FolderListResponse",
     # Account models
     "AccountInfo",
     "AccountPlan",
@@ -110,12 +97,19 @@ __all__ = [
     "UserCreate",
     "UserUpdate",
     "UsageMetrics",
+    # Lexa (Document Processing) models
+    "BucketListResponse",
+    "FolderListResponse",
+    "IngestionResult",
+    "JobResponse",
+    "JobStatus",
+    "ProcessingMode",
     # Exceptions
-    "LexaError",
     "LexaAuthError",
+    "LexaError",
+    "LexaJobFailedError",
     "LexaRateLimitError",
     "LexaTimeoutError",
-    "LexaJobFailedError",
     # Version info
     "__version__",
     "__title__",

@@ -5,31 +5,26 @@ Comprehensive tests to achieve 100% code coverage for the Account class,
 including all methods, error handling, and edge cases.
 """
 
-import json
 import os
 from unittest.mock import Mock, patch
 
 import pytest
 import requests
 import responses
-from requests.exceptions import ConnectionError, RequestException, Timeout
+from requests.exceptions import ConnectionError, Timeout
 
-from cerevox.clients.account import Account
-from cerevox.core.exceptions import (
-    AccountError,
+from cerevox import Account
+from cerevox.core import (
+    AccountInfo,
+    AccountPlan,
+    CreatedResponse,
+    DeletedResponse,
     InsufficientPermissionsError,
     LexaAuthError,
     LexaError,
     LexaRateLimitError,
     LexaTimeoutError,
     LexaValidationError,
-    UserManagementError,
-)
-from cerevox.core.models import (
-    AccountInfo,
-    AccountPlan,
-    CreatedResponse,
-    DeletedResponse,
     MessageResponse,
     TokenResponse,
     UpdatedResponse,

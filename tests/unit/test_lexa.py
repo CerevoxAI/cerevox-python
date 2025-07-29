@@ -17,16 +17,8 @@ import pytest
 import responses
 from requests.exceptions import ConnectionError, RequestException, RetryError, Timeout
 
-from cerevox.clients.lexa import Lexa
-from cerevox.core.exceptions import (
-    LexaAuthError,
-    LexaError,
-    LexaJobFailedError,
-    LexaRateLimitError,
-    LexaTimeoutError,
-    LexaValidationError,
-)
-from cerevox.core.models import (
+from cerevox import Lexa
+from cerevox.core import (
     VALID_MODES,
     BucketListResponse,
     DriveListResponse,
@@ -35,6 +27,12 @@ from cerevox.core.models import (
     IngestionResult,
     JobResponse,
     JobStatus,
+    LexaAuthError,
+    LexaError,
+    LexaJobFailedError,
+    LexaRateLimitError,
+    LexaTimeoutError,
+    LexaValidationError,
     ProcessingMode,
     SiteListResponse,
 )

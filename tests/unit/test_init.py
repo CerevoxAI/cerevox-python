@@ -218,6 +218,11 @@ class TestAllExports:
             "DocumentTable",
             "DocumentImage",
             "DocumentElement",
+            "ElementContent",
+            "ElementStats",
+            "FileInfo",
+            "PageInfo",
+            "SourceInfo",
             "chunk_markdown",
             "chunk_text",
             # Models and types
@@ -225,7 +230,6 @@ class TestAllExports:
             "JobResponse",
             "IngestionResult",
             "ProcessingMode",
-            "FileInfo",
             "BucketListResponse",
             "FolderListResponse",
             # Account models
@@ -273,7 +277,7 @@ class TestAllExports:
         import cerevox
 
         # Count expected items based on the actual __all__ list in __init__.py
-        expected_count = 42  # Based on the actual __all__ list in the file (added Hippo + AsyncHippo)
+        expected_count = 46  # Based on the actual __all__ list in the file (added all models and exceptions)
         actual_count = len(cerevox.__all__)
 
         assert actual_count == expected_count, (
@@ -549,6 +553,11 @@ class TestCompleteImportCoverage:
             "DocumentTable",
             "DocumentImage",
             "DocumentElement",
+            "ElementContent",
+            "ElementStats",
+            "FileInfo",
+            "PageInfo",
+            "SourceInfo",
             "chunk_markdown",
             "chunk_text",
             # Models and types
@@ -556,7 +565,6 @@ class TestCompleteImportCoverage:
             "JobResponse",
             "IngestionResult",
             "ProcessingMode",
-            "FileInfo",
             "BucketListResponse",
             "FolderListResponse",
             # Account models

@@ -11,7 +11,7 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from cerevox.core.models import (  # Enums; Type aliases; Models
+from cerevox.core import (  # Enums; Type aliases; Models
     VALID_MODES,
     BucketInfo,
     BucketListResponse,

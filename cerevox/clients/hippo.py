@@ -6,11 +6,11 @@ import logging
 import os
 from typing import Any, Dict, List, Optional
 
-from ..core.base_client import BaseClient
-from ..core.models import (
+from ..core import (
     AskItem,
     AsksListResponse,
     AskSubmitRequest,
+    BaseClient,
     ChatCreate,
     ChatCreatedResponse,
     ChatItem,
@@ -82,8 +82,6 @@ class Hippo(BaseClient):
             timeout=timeout,
             **kwargs,
         )
-
-    # Authentication Methods (inherited from BaseClient)
 
     # Folder Management Methods
 

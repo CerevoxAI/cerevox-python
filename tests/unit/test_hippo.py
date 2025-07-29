@@ -5,42 +5,28 @@ Comprehensive tests to achieve 100% code coverage for the Hippo class,
 including all methods, error handling, and edge cases.
 """
 
-import base64
 import json
 import os
-from io import BytesIO
-from pathlib import Path
 from unittest.mock import Mock, mock_open, patch
 
 import pytest
 import responses
 from requests.exceptions import ConnectionError, RequestException, Timeout
 
-from cerevox.clients.hippo import Hippo
-from cerevox.core.exceptions import (
+from cerevox import Hippo
+from cerevox.core import (
+    AskItem,
+    ChatCreatedResponse,
+    ChatItem,
+    DeletedResponse,
+    FileItem,
+    FileUploadResponse,
+    FolderCreatedResponse,
+    FolderItem,
     LexaAuthError,
     LexaError,
     LexaTimeoutError,
-    create_error_from_response,
-)
-from cerevox.core.models import (
-    AskItem,
-    AsksListResponse,
-    AskSubmitRequest,
-    ChatCreate,
-    ChatCreatedResponse,
-    ChatItem,
-    ChatsListResponse,
-    DeletedResponse,
-    FileItem,
-    FilesListResponse,
-    FileUploadResponse,
-    FolderCreate,
-    FolderCreatedResponse,
-    FolderItem,
-    FoldersListResponse,
     MessageResponse,
-    TokenRefreshRequest,
     TokenResponse,
     UpdatedResponse,
 )

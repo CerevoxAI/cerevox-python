@@ -6,40 +6,27 @@ including all methods, error handling, and edge cases.
 """
 
 import asyncio
-import base64
-import json
-import os
-from unittest.mock import AsyncMock, Mock, mock_open, patch
+import io
+from unittest.mock import mock_open, patch
 
 import aiohttp
 import pytest
 from aioresponses import aioresponses
 
-from cerevox.clients.async_hippo import AsyncHippo
-from cerevox.core.exceptions import (
+from cerevox import AsyncHippo
+from cerevox.core import (
+    AskItem,
+    ChatCreatedResponse,
+    ChatItem,
+    DeletedResponse,
+    FileItem,
+    FileUploadResponse,
+    FolderCreatedResponse,
+    FolderItem,
     LexaAuthError,
     LexaError,
     LexaTimeoutError,
-    create_error_from_response,
-)
-from cerevox.core.models import (
-    AskItem,
-    AsksListResponse,
-    AskSubmitRequest,
-    ChatCreate,
-    ChatCreatedResponse,
-    ChatItem,
-    ChatsListResponse,
-    DeletedResponse,
-    FileItem,
-    FilesListResponse,
-    FileUploadResponse,
-    FolderCreate,
-    FolderCreatedResponse,
-    FolderItem,
-    FoldersListResponse,
     MessageResponse,
-    TokenRefreshRequest,
     TokenResponse,
     UpdatedResponse,
 )
@@ -492,7 +479,9 @@ class TestAsyncHippoFileManagement:
         )
 
         async with AsyncHippo(email="test@example.com", api_key="test-key") as client:
-            with patch("builtins.open", mock_open(read_data=b"test content")):
+            # Create a real BytesIO object instead of mock_open
+            fake_file = io.BytesIO(b"test content")
+            with patch("builtins.open", return_value=fake_file):
                 with patch("os.path.basename", return_value="test.txt"):
                     response = await client.upload_file(
                         "test-folder", "/path/to/test.txt"
@@ -1121,7 +1110,9 @@ class TestAsyncHippoRequestHeaders:
         )
 
         async with AsyncHippo(email="test@example.com", api_key="test-key") as client:
-            with patch("builtins.open", mock_open(read_data=b"test content")):
+            # Create a real BytesIO object instead of mock_open
+            fake_file = io.BytesIO(b"test content")
+            with patch("builtins.open", return_value=fake_file):
                 with patch("os.path.basename", return_value="test.txt"):
                     response = await client.upload_file(
                         "test-folder", "/path/to/test.txt"
@@ -1151,7 +1142,8 @@ class TestAsyncHippoRequestHeaders:
             assert response1.created is True
 
             # Test FormData request
-            with patch("builtins.open", mock_open(read_data=b"test content")):
+            fake_file = io.BytesIO(b"test content")
+            with patch("builtins.open", return_value=fake_file):
                 with patch("os.path.basename", return_value="test.txt"):
                     response2 = await client.upload_file(
                         "test-folder", "/path/to/test.txt"

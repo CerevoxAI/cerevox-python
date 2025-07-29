@@ -5,16 +5,14 @@ Cerevox SDK's Synchronous Account Client
 import logging
 from typing import Any, Dict, List, Optional
 
-from ..core.base_client import BaseClient
-from ..core.exceptions import (
-    InsufficientPermissionsError,
-    LexaAuthError,
-)
-from ..core.models import (
+from ..core import (
     AccountInfo,
     AccountPlan,
+    BaseClient,
     CreatedResponse,
     DeletedResponse,
+    InsufficientPermissionsError,
+    LexaAuthError,
     UpdatedResponse,
     UsageMetrics,
     User,
@@ -77,8 +75,6 @@ class Account(BaseClient):
             timeout=timeout,
             **kwargs,
         )
-
-    # Authentication Methods (inherited from BaseClient)
 
     # Account Management Methods
 

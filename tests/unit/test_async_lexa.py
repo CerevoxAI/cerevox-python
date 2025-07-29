@@ -21,16 +21,8 @@ import pytest
 import pytest_asyncio
 from pydantic_core import ValidationError
 
-from cerevox.clients.async_lexa import AsyncLexa
-from cerevox.core.exceptions import (
-    LexaAuthError,
-    LexaError,
-    LexaJobFailedError,
-    LexaRateLimitError,
-    LexaTimeoutError,
-    LexaValidationError,
-)
-from cerevox.core.models import (
+from cerevox import AsyncLexa
+from cerevox.core import (
     VALID_MODES,
     BucketListResponse,
     DriveListResponse,
@@ -39,6 +31,12 @@ from cerevox.core.models import (
     IngestionResult,
     JobResponse,
     JobStatus,
+    LexaAuthError,
+    LexaError,
+    LexaJobFailedError,
+    LexaRateLimitError,
+    LexaTimeoutError,
+    LexaValidationError,
     ProcessingMode,
     SiteListResponse,
 )

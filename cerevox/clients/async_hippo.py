@@ -8,11 +8,11 @@ from typing import Any, Dict, List, Optional
 
 import aiohttp
 
-from ..core.async_base_client import AsyncBaseClient
-from ..core.models import (
+from ..core import (
     AskItem,
     AsksListResponse,
     AskSubmitRequest,
+    AsyncBaseClient,
     ChatCreate,
     ChatCreatedResponse,
     ChatItem,
@@ -82,44 +82,6 @@ class AsyncHippo(AsyncBaseClient):
             timeout=timeout,
             **kwargs,
         )
-
-    async def _request(
-        self,
-        method: str,
-        endpoint: str,
-        json_data: Optional[Dict[str, Any]] = None,
-        params: Optional[Dict[str, Any]] = None,
-        headers: Optional[Dict[str, str]] = None,
-        data: Optional[aiohttp.FormData] = None,
-        **kwargs: Any,
-    ) -> Dict[str, Any]:
-        """
-        Override base _request to support file uploads with FormData
-        """
-        if data is not None:
-            # For file uploads, remove Content-Type to let aiohttp set it
-            upload_headers = {
-                k: v for k, v in (headers or {}).items() if k.lower() != "content-type"
-            }
-            return await super()._request(
-                method=method,
-                endpoint=endpoint,
-                params=params,
-                headers=upload_headers,
-                data=data,
-                **kwargs,
-            )
-        else:
-            return await super()._request(
-                method=method,
-                endpoint=endpoint,
-                json_data=json_data,
-                params=params,
-                headers=headers,
-                **kwargs,
-            )
-
-    # Authentication Methods (inherited from AsyncBaseClient)
 
     # Folder Management Methods
 
@@ -221,13 +183,16 @@ class AsyncHippo(AsyncBaseClient):
 
         # Create FormData for file upload
         data = aiohttp.FormData()
-        with open(file_path, "rb") as file:
-            data.add_field("file", file, filename=filename)
+        data.add_field("file", open(file_path, "rb"), filename=filename)
+        form_data = data._gen_form_data()
+        content_type = form_data.content_type
 
-            response_data = await self._request(
-                "POST", f"/folders/{folder_id}/files", data=data
-            )
-            return FileUploadResponse(**response_data)
+        headers = {"Content-Type": content_type}
+
+        response_data = await self._request(
+            "POST", f"/folders/{folder_id}/files", data=data, headers=headers
+        )
+        return FileUploadResponse(**response_data)
 
     async def upload_file_from_url(
         self, folder_id: str, files: List[Dict[str, str]]
