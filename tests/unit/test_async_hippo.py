@@ -808,7 +808,7 @@ class TestAsyncHippoAskManagement:
                 "What is this document about?",
                 is_qna=False,
                 citation_style="APA",
-                file_sources=["file1", "file2"],
+                sources=["file1", "file2"],
             )
 
             assert isinstance(response, AskItem)

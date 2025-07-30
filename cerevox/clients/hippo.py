@@ -359,7 +359,7 @@ class Hippo(BaseClient):
         query: str,
         is_qna: bool = True,
         citation_style: Optional[str] = None,
-        file_sources: Optional[List[str]] = None,
+        sources: Optional[List[str]] = None,
     ) -> AskItem:
         """
         Submit a question to get RAG response
@@ -369,7 +369,7 @@ class Hippo(BaseClient):
             query: Question/query to ask
             is_qna: If True, returns final answer + sources. If False, returns sources only.
             citation_style: Optional citation style for sources
-            file_sources: Optional list of specific files to query against
+            sources: Optional list of specific files to query against
 
         Returns:
             AskItem containing ask response with answer and sources
@@ -378,7 +378,7 @@ class Hippo(BaseClient):
             query=query,
             is_qna=is_qna,
             citation_style=citation_style,
-            file_sources=file_sources,
+            sources=sources,
         )
         response_data = self._request(
             "POST", f"/chats/{chat_id}/asks", json_data=request.model_dump()

@@ -578,7 +578,7 @@ class AskSubmitRequest(BaseModel):
     citation_style: Optional[str] = Field(
         None, description="Citation style for sources"
     )
-    file_sources: Optional[List[str]] = Field(
+    sources: Optional[List[str]] = Field(
         None, description="Specific files to query against"
     )
 
