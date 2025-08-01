@@ -7,7 +7,7 @@ including all methods, error handling, and edge cases.
 
 import asyncio
 import io
-from unittest.mock import mock_open, patch
+from unittest.mock import patch
 
 import aiohttp
 import pytest
@@ -16,6 +16,9 @@ from aioresponses import aioresponses
 from cerevox import AsyncHippo
 from cerevox.core import (
     AskItem,
+    AskListItem,
+    AsksListResponse,
+    AskSubmitResponse,
     ChatCreatedResponse,
     ChatItem,
     DeletedResponse,
@@ -765,9 +768,9 @@ class TestAsyncHippoAskManagement:
             "https://dev.cerevox.ai/v1/chats/chat123/asks",
             payload={
                 "ask_index": 1,
-                "datetime": "2024-01-01T00:00:00Z",
                 "query": "What is this document about?",
-                "response": "This document is about testing.",
+                "reply": "This document is about testing.",
+                "source_data": [],
             },
         )
 
@@ -776,9 +779,9 @@ class TestAsyncHippoAskManagement:
                 "chat123", "What is this document about?"
             )
 
-            assert isinstance(response, AskItem)
+            assert isinstance(response, AskSubmitResponse)
             assert response.query == "What is this document about?"
-            assert response.response == "This document is about testing."
+            assert response.reply == "This document is about testing."
 
     @pytest.mark.asyncio
     async def test_submit_ask_success_with_parameters(self):
@@ -787,16 +790,15 @@ class TestAsyncHippoAskManagement:
             "https://dev.cerevox.ai/v1/chats/chat123/asks",
             payload={
                 "ask_index": 1,
-                "datetime": "2024-01-01T00:00:00Z",
                 "query": "What is this document about?",
-                "response": "This document is about testing.",
+                "reply": "This document is about testing.",
                 "source_data": [
                     {
                         "citation": "Document 1, Page 1",
                         "name": "test.pdf",
                         "type": "pdf",
                         "page": 1,
-                        "text_blocks": ["Sample text"],
+                        "text_blocks": [{"data": "Sample text", "index": 0, "score": 1}],
                     }
                 ],
             },
@@ -811,7 +813,7 @@ class TestAsyncHippoAskManagement:
                 sources=["file1", "file2"],
             )
 
-            assert isinstance(response, AskItem)
+            assert isinstance(response, AskSubmitResponse)
             assert response.source_data is not None
             assert len(response.source_data) == 1
 
@@ -821,18 +823,19 @@ class TestAsyncHippoAskManagement:
         self.mock.get(
             "https://dev.cerevox.ai/v1/chats/chat123/asks?msg_maxlen=120",
             payload={
+                "ask_count": 2,
                 "asks": [
                     {
                         "ask_index": 1,
-                        "datetime": "2024-01-01T00:00:00Z",
+                        "ask_ts": 1704067200,
                         "query": "Question 1",
-                        "response": "Answer 1",
+                        "reply": "Answer 1",
                     },
                     {
                         "ask_index": 2,
-                        "datetime": "2024-01-01T01:00:00Z",
+                        "ask_ts": 1704070800,
                         "query": "Question 2",
-                        "response": "Answer 2",
+                        "reply": "Answer 2",
                     },
                 ]
             },
@@ -843,7 +846,7 @@ class TestAsyncHippoAskManagement:
 
             assert isinstance(response, list)
             assert len(response) == 2
-            assert all(isinstance(ask, AskItem) for ask in response)
+            assert all(isinstance(ask, AskListItem) for ask in response)
             assert response[0].ask_index == 1
 
     @pytest.mark.asyncio
@@ -852,12 +855,13 @@ class TestAsyncHippoAskManagement:
         self.mock.get(
             "https://dev.cerevox.ai/v1/chats/chat123/asks?msg_maxlen=50",
             payload={
+                "ask_count": 1,
                 "asks": [
                     {
                         "ask_index": 1,
-                        "datetime": "2024-01-01T00:00:00Z",
+                        "ask_ts": 1704067200,
                         "query": "Short question",
-                        "response": "Short answer",
+                        "reply": "Short answer",
                     }
                 ]
             },
@@ -876,9 +880,9 @@ class TestAsyncHippoAskManagement:
             "https://dev.cerevox.ai/v1/chats/chat123/asks/1",
             payload={
                 "ask_index": 1,
-                "datetime": "2024-01-01T00:00:00Z",
+                "ask_ts": 1704067200,
                 "query": "What is this document about?",
-                "response": "This document is about testing.",
+                "reply": "This document is about testing.",
             },
         )
 
@@ -895,9 +899,9 @@ class TestAsyncHippoAskManagement:
             "https://dev.cerevox.ai/v1/chats/chat123/asks/1?show_files=true&show_source=true",
             payload={
                 "ask_index": 1,
-                "datetime": "2024-01-01T00:00:00Z",
+                "ask_ts": 1704067200,
                 "query": "What is this document about?",
-                "response": "This document is about testing.",
+                "reply": "This document is about testing.",
                 "filenames": ["test.pdf", "doc.docx"],
                 "source_data": [
                     {
@@ -975,9 +979,10 @@ class TestAsyncHippoConvenienceMethods:
         self.mock.get(
             "https://dev.cerevox.ai/v1/chats/chat123/asks?msg_maxlen=120",
             payload={
+                "ask_count": 2,
                 "asks": [
-                    {"ask_index": 1, "query": "Q1", "response": "A1"},
-                    {"ask_index": 2, "query": "Q2", "response": "A2"},
+                    {"ask_index": 1, "ask_ts": 1704067200, "query": "Q1", "reply": "A1"},
+                    {"ask_index": 2, "ask_ts": 1704070800, "query": "Q2", "reply": "A2"},
                 ]
             },
         )

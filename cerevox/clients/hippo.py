@@ -8,8 +8,10 @@ from typing import Any, Dict, List, Optional
 
 from ..core import (
     AskItem,
+    AskListItem,
     AsksListResponse,
     AskSubmitRequest,
+    AskSubmitResponse,
     BaseClient,
     ChatCreate,
     ChatCreatedResponse,
@@ -360,7 +362,7 @@ class Hippo(BaseClient):
         is_qna: bool = True,
         citation_style: Optional[str] = None,
         sources: Optional[List[str]] = None,
-    ) -> AskItem:
+    ) -> AskSubmitResponse:
         """
         Submit a question to get RAG response
 
@@ -372,7 +374,7 @@ class Hippo(BaseClient):
             sources: Optional list of specific files to query against
 
         Returns:
-            AskItem containing ask response with answer and sources
+            AskSubmitResponse containing ask response with answer and sources
         """
         request = AskSubmitRequest(
             query=query,
@@ -383,9 +385,9 @@ class Hippo(BaseClient):
         response_data = self._request(
             "POST", f"/chats/{chat_id}/asks", json_data=request.model_dump()
         )
-        return AskItem(**response_data)
+        return AskSubmitResponse(**response_data)
 
-    def get_asks(self, chat_id: str, msg_maxlen: int = 120) -> List[AskItem]:
+    def get_asks(self, chat_id: str, msg_maxlen: int = 120) -> List[AskListItem]:
         """
         List all asks in a chat with truncated content
 
@@ -394,7 +396,7 @@ class Hippo(BaseClient):
             msg_maxlen: Maximum length of truncated query and response content
 
         Returns:
-            List of AskItem objects with truncated content
+            List of AskListItem objects with truncated content
         """
         params = {"msg_maxlen": msg_maxlen}
         response_data = self._request("GET", f"/chats/{chat_id}/asks", params=params)

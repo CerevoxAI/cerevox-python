@@ -10,8 +10,10 @@ import aiohttp
 
 from ..core import (
     AskItem,
+    AskListItem,
     AsksListResponse,
     AskSubmitRequest,
+    AskSubmitResponse,
     AsyncBaseClient,
     ChatCreate,
     ChatCreatedResponse,
@@ -367,7 +369,7 @@ class AsyncHippo(AsyncBaseClient):
         is_qna: bool = True,
         citation_style: Optional[str] = None,
         sources: Optional[List[str]] = None,
-    ) -> AskItem:
+    ) -> AskSubmitResponse:
         """
         Submit a question to get RAG response
 
@@ -379,7 +381,7 @@ class AsyncHippo(AsyncBaseClient):
             sources: Optional list of specific files to query against
 
         Returns:
-            AskItem containing ask response with answer and sources
+            AskSubmitResponse containing ask response with answer and sources
         """
         request = AskSubmitRequest(
             query=query,
@@ -390,9 +392,9 @@ class AsyncHippo(AsyncBaseClient):
         response_data = await self._request(
             "POST", f"/chats/{chat_id}/asks", json_data=request.model_dump()
         )
-        return AskItem(**response_data)
+        return AskSubmitResponse(**response_data)
 
-    async def get_asks(self, chat_id: str, msg_maxlen: int = 120) -> List[AskItem]:
+    async def get_asks(self, chat_id: str, msg_maxlen: int = 120) -> List[AskListItem]:
         """
         List all asks in a chat with truncated content
 
@@ -401,7 +403,7 @@ class AsyncHippo(AsyncBaseClient):
             msg_maxlen: Maximum length of truncated query and response content
 
         Returns:
-            List of AskItem objects with truncated content
+            List of AskListItem objects with truncated content
         """
         params = {"msg_maxlen": msg_maxlen}
         response_data = await self._request(
