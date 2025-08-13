@@ -39,7 +39,6 @@ class BaseClient:
     def __init__(
         self,
         *,
-        email: Optional[str] = None,
         api_key: Optional[str] = None,
         base_url: str = "https://dev.cerevox.ai/v1",
         max_retries: int = 3,
@@ -51,17 +50,15 @@ class BaseClient:
         Initialize the base client
 
         Args:
-            email: User email address for authentication
-            api_key: User password for authentication
+            api_key: User Personal Access Token (PAT) for authentication
             base_url: Base URL for the Cerevox API
             timeout: Request timeout in seconds
             max_retries: Maximum number of retry attempts for failed requests
             session_kwargs: Additional arguments to pass to requests.Session
         """
-        self.email = email
         self.api_key = api_key or os.getenv("CEREVOX_API_KEY")
-        if not self.email or not self.api_key:
-            raise ValueError("Both email and api_key are required for authentication")
+        if not self.api_key:
+            raise ValueError("api_key is required for authentication")
 
         # Validate base_url format
         if not base_url or not isinstance(base_url, str):
@@ -106,7 +103,7 @@ class BaseClient:
             setattr(self.session, key, value)
 
         # Automatically authenticate using email and password
-        self.login(self.email, self.api_key)
+        self.login(self.api_key)
 
     def _request(
         self,
@@ -211,13 +208,12 @@ class BaseClient:
 
     # Authentication Methods
 
-    def login(self, email: str, password: str) -> TokenResponse:
+    def login(self, api_key: str) -> TokenResponse:
         """
-        Authenticate with email and password to get access tokens
+        Authenticate with api_key to get access tokens
 
         Args:
-            email: User email address
-            password: User password
+            api_key: Personal Access Token scoped to User/Account
 
         Returns:
             TokenResponse containing access_token, refresh_token, etc.
@@ -226,8 +222,7 @@ class BaseClient:
             LexaAuthError: If authentication fails
         """
         # Use Basic Auth for login
-        credentials = f"{email}:{password}"
-        encoded_credentials = base64.b64encode(credentials.encode()).decode()
+        encoded_credentials = base64.b64encode(api_key.encode()).decode()
 
         headers = {"Authorization": f"Basic {encoded_credentials}"}
 

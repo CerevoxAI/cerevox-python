@@ -419,77 +419,77 @@ class LiveAPITester:
             except Exception as e:
                 self.result.add_fail("Hippo.get_folder_file_count", str(e))
 
-            # # Test create_chat
-            # try:
-            #     chat_response = client.create_chat(self.test_folder_id)
-            #     self.test_chat_id = chat_response.chat_id
-            #     self.created_resources["chats"].append(self.test_chat_id)
-            #     self.result.add_pass("Hippo.create_chat")
-            #     logger.info(f"Created chat: {self.test_chat_id}")
-            # except Exception as e:
-            #     self.result.add_fail("Hippo.create_chat", str(e))
-            #     return
+            # Test create_chat
+            try:
+                chat_response = client.create_chat(self.test_folder_id)
+                self.test_chat_id = chat_response.chat_id
+                self.created_resources["chats"].append(self.test_chat_id)
+                self.result.add_pass("Hippo.create_chat")
+                logger.info(f"Created chat: {self.test_chat_id}")
+            except Exception as e:
+                self.result.add_fail("Hippo.create_chat", str(e))
+                return
 
-            # # Test get_chats
-            # try:
-            #     chats = client.get_chats()
-            #     self.result.add_pass("Hippo.get_chats")
-            #     logger.info(f"Found {len(chats)} chats")
-            # except Exception as e:
-            #     self.result.add_fail("Hippo.get_chats", str(e))
+            # Test get_chats
+            try:
+                chats = client.get_chats()
+                self.result.add_pass("Hippo.get_chats")
+                logger.info(f"Found {len(chats)} chats")
+            except Exception as e:
+                self.result.add_fail("Hippo.get_chats", str(e))
 
-            # # Test get_chat_by_id
-            # try:
-            #     chat = client.get_chat_by_id(self.test_chat_id)
-            #     self.result.add_pass("Hippo.get_chat_by_id")
-            # except Exception as e:
-            #     self.result.add_fail("Hippo.get_chat_by_id", str(e))
+            # Test get_chat_by_id
+            try:
+                chat = client.get_chat_by_id(self.test_chat_id)
+                self.result.add_pass("Hippo.get_chat_by_id")
+            except Exception as e:
+                self.result.add_fail("Hippo.get_chat_by_id", str(e))
 
-            # # Test update_chat
-            # try:
-            #     client.update_chat(self.test_chat_id, "Updated Test Chat")
-            #     self.result.add_pass("Hippo.update_chat")
-            # except Exception as e:
-            #     self.result.add_fail("Hippo.update_chat", str(e))
+            # Test update_chat
+            try:
+                client.update_chat(self.test_chat_id, "Updated Test Chat")
+                self.result.add_pass("Hippo.update_chat")
+            except Exception as e:
+                self.result.add_fail("Hippo.update_chat", str(e))
 
-            # # Test submit_ask (core RAG functionality)
-            # try:
-            #     ask_response = client.submit_ask(
-            #         self.test_chat_id,
-            #         "What is this document about and when was the test conducted?",
-            #         is_qna=True,
-            #     )
-            #     self.result.add_pass("Hippo.submit_ask")
-            #     logger.info(f"Ask response length: {len(ask_response.reply or '')}")
-            # except Exception as e:
-            #     self.result.add_fail("Hippo.submit_ask", str(e))
+            # Test submit_ask (core RAG functionality)
+            try:
+                ask_response = client.submit_ask(
+                    self.test_chat_id,
+                    "What is this document about and when was the test conducted?",
+                    is_qna=True,
+                )
+                self.result.add_pass("Hippo.submit_ask")
+                logger.info(f"Ask response length: {len(ask_response.reply or '')}")
+            except Exception as e:
+                self.result.add_fail("Hippo.submit_ask", str(e))
 
-            # # Test get_asks
-            # try:
-            #     asks = client.get_asks(self.test_chat_id)
-            #     self.result.add_pass("Hippo.get_asks")
-            #     logger.info(f"Found {len(asks)} asks")
+            # Test get_asks
+            try:
+                asks = client.get_asks(self.test_chat_id)
+                self.result.add_pass("Hippo.get_asks")
+                logger.info(f"Found {len(asks)} asks")
 
-            #     if asks:
-            #         # Test get_ask_by_index
-            #         try:
-            #             ask = client.get_ask_by_index(
-            #                 self.test_chat_id, 0, show_files=True, show_source=True
-            #             )
-            #             self.result.add_pass("Hippo.get_ask_by_index")
-            #         except Exception as e:
-            #             self.result.add_fail("Hippo.get_ask_by_index", str(e))
+                if asks:
+                    # Test get_ask_by_index
+                    try:
+                        ask = client.get_ask_by_index(
+                            self.test_chat_id, 0, show_files=True, show_source=True
+                        )
+                        self.result.add_pass("Hippo.get_ask_by_index")
+                    except Exception as e:
+                        self.result.add_fail("Hippo.get_ask_by_index", str(e))
 
-            # except Exception as e:
-            #     self.result.add_fail("Hippo.get_asks", str(e))
+            except Exception as e:
+                self.result.add_fail("Hippo.get_asks", str(e))
 
-            # # Test get_chat_ask_count
-            # try:
-            #     count = client.get_chat_ask_count(self.test_chat_id)
-            #     self.result.add_pass("Hippo.get_chat_ask_count")
-            #     logger.info(f"Ask count: {count}")
-            # except Exception as e:
-            #     self.result.add_fail("Hippo.get_chat_ask_count", str(e))
+            # Test get_chat_ask_count
+            try:
+                count = client.get_chat_ask_count(self.test_chat_id)
+                self.result.add_pass("Hippo.get_chat_ask_count")
+                logger.info(f"Ask count: {count}")
+            except Exception as e:
+                self.result.add_fail("Hippo.get_chat_ask_count", str(e))
 
         except Exception as e:
             self.result.add_fail("Hippo client initialization", str(e))
@@ -639,12 +639,12 @@ class LiveAPITester:
 
         try:
             # Test sync clients
-            # self.test_sync_account_client()
+            self.test_sync_account_client()
             self.test_sync_hippo_client()
 
             # Test async clients
-            # await self.test_async_account_client()
-            # await self.test_async_hippo_client()
+            await self.test_async_account_client()
+            await self.test_async_hippo_client()
 
         finally:
             # Always cleanup
