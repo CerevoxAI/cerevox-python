@@ -81,7 +81,7 @@ def demonstrate_authentication(client: Account) -> Optional[str]:
             print("   Set these environment variables to test authentication")
             return None
 
-        tokens = client.login(email, password)
+        tokens = client._login(email, password)
         print(f"✅ Login successful!")
         print(f"   Access Token: {tokens.access_token[:20]}...")
         print(f"   Token Type: {tokens.token_type}")
@@ -89,12 +89,12 @@ def demonstrate_authentication(client: Account) -> Optional[str]:
         print(f"   Refresh Token: {tokens.refresh_token[:20]}...")
 
         print_sub_header("Refresh Token")
-        new_tokens = client.refresh_token(tokens.refresh_token)
+        new_tokens = client._refresh_token(tokens.refresh_token)
         print(f"✅ Token refresh successful!")
         print(f"   New Access Token: {new_tokens.access_token[:20]}...")
 
         print_sub_header("Revoke Token")
-        revoke_response = client.revoke_token()
+        revoke_response = client._revoke_token()
         print(f"✅ Token revocation: {revoke_response.message}")
 
         return None  # Would return account_id in real scenario
@@ -240,7 +240,7 @@ def demonstrate_error_handling(client: Account) -> None:
 
     print_sub_header("Invalid Authentication")
     try:
-        client.login("invalid@example.com", "wrong-password")
+        client._login("invalid@example.com", "wrong-password")
     except LexaAuthError as e:
         print(f"✅ Caught authentication error: {e}")
         print(f"   Status Code: {e.status_code}")

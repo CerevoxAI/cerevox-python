@@ -145,7 +145,7 @@ class TestAccountAuthentication:
             client.session = requests.Session()
             client.base_url = "https://dev.cerevox.ai/v1"
             client.timeout = 30.0
-            result = client.login("user@example.com", "password123")
+            result = client._login("user@example.com", "password123")
 
         assert isinstance(result, TokenResponse)
         assert result.access_token == "access_123"
@@ -175,7 +175,7 @@ class TestAccountAuthentication:
             client.base_url = "https://dev.cerevox.ai/v1"
             client.timeout = 30.0
             with pytest.raises(LexaAuthError):
-                client.login("user@example.com", "wrong-password")
+                client._login("user@example.com", "wrong-password")
 
     @responses.activate
     def test_refresh_token_success(self):
@@ -197,7 +197,7 @@ class TestAccountAuthentication:
             client.session = requests.Session()
             client.base_url = "https://dev.cerevox.ai/v1"
             client.timeout = 30.0
-            result = client.refresh_token("refresh_456")
+            result = client._refresh_token("refresh_456")
 
         assert isinstance(result, TokenResponse)
         assert result.access_token == "new_access_123"
@@ -217,7 +217,7 @@ class TestAccountAuthentication:
             client.session = requests.Session()
             client.base_url = "https://dev.cerevox.ai/v1"
             client.timeout = 30.0
-            result = client.revoke_token()
+            result = client._revoke_token()
 
         assert isinstance(result, MessageResponse)
         assert result.message == "Token revoked successfully"

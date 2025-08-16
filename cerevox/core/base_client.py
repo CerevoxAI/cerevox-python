@@ -5,6 +5,7 @@ Base classes for Cerevox SDK clients to reduce code duplication
 import base64
 import logging
 import os
+import time
 from typing import Any, Dict, Optional
 
 import requests
@@ -32,7 +33,7 @@ class BaseClient:
     Provides common functionality including:
     - Session management with connection pooling
     - HTTP request handling with retries
-    - Authentication (login, refresh_token, revoke_token)
+    - Authentication (_login, _refresh_token, _revoke_token)
     - Context manager support
     """
 
@@ -102,8 +103,13 @@ class BaseClient:
         for key, value in kwargs.items():
             setattr(self.session, key, value)
 
-        # Automatically authenticate using email and password
-        self.login(self.api_key)
+        # Token management attributes
+        self.access_token: Optional[str] = None
+        self.refresh_token: Optional[str] = None
+        self.token_expires_at: Optional[float] = None
+
+        # Automatically authenticate using api_key
+        self._login(self.api_key)
 
     def _request(
         self,
@@ -113,6 +119,7 @@ class BaseClient:
         params: Optional[Dict[str, Any]] = None,
         headers: Optional[Dict[str, str]] = None,
         files: Optional[Dict[str, Any]] = None,
+        skip_auth: bool = False,
         **kwargs: Any,
     ) -> Dict[str, Any]:
         """
@@ -125,6 +132,7 @@ class BaseClient:
             params: Query parameters to send in the request
             headers: Additional headers to send with the request
             files: Files to upload (for multipart requests)
+            skip_auth: If True, skip token validation (used for auth endpoints)
             **kwargs: Additional arguments to pass to the request
 
         Returns:
@@ -136,6 +144,10 @@ class BaseClient:
             LexaTimeoutError: If the request times out
             Various other LexaError subclasses: Based on response status and content
         """
+        # Check if token needs refresh before making request (unless this is an auth request)
+        if not skip_auth:
+            self._ensure_valid_token()
+
         url = f"{self.base_url}{endpoint}"
 
         # Merge additional headers
@@ -206,9 +218,50 @@ class BaseClient:
         """Context manager exit"""
         self.close()
 
+    # Token Management Methods
+
+    def _ensure_valid_token(self) -> None:
+        """
+        Ensure the access token is valid, refreshing if necessary
+
+        Raises:
+            LexaError: If token refresh fails
+        """
+        if not self.access_token or not self.token_expires_at:
+            # No token available, this shouldn't happen after initialization
+            raise LexaError("No access token available", request_id=FAILED_ID)
+
+        # Check if token is expired or will expire in the next 60 seconds
+        current_time = time.time()
+        if current_time >= (self.token_expires_at - 60):
+            logger.info("Access token expired or expiring soon, refreshing...")
+            if self.refresh_token:
+                self._refresh_token(self.refresh_token)
+            else:
+                raise LexaError("No refresh token available", request_id=FAILED_ID)
+
+    def _store_token_info(self, token_response: TokenResponse) -> None:
+        """
+        Store token information from authentication response
+
+        Args:
+            token_response: Token response containing access token, refresh token, and expiry
+        """
+        self.access_token = token_response.access_token
+        self.refresh_token = token_response.refresh_token
+
+        # Calculate expiration timestamp
+        current_time = time.time()
+        self.token_expires_at = current_time + token_response.expires_in
+
+        # Update session headers with new access token
+        self.session.headers.update(
+            {"Authorization": f"Bearer {token_response.access_token}"}
+        )
+
     # Authentication Methods
 
-    def login(self, api_key: str) -> TokenResponse:
+    def _login(self, api_key: str) -> TokenResponse:
         """
         Authenticate with api_key to get access tokens
 
@@ -226,17 +279,19 @@ class BaseClient:
 
         headers = {"Authorization": f"Basic {encoded_credentials}"}
 
-        response_data = self._request("POST", "/token/login", headers=headers)
+        # Skip token validation for login request
+        response_data = self._request(
+            "POST", "/token/login", headers=headers, skip_auth=True
+        )
 
         token_response = TokenResponse(**response_data)
 
-        self.session.headers.update(
-            {"Authorization": f"Bearer {token_response.access_token}"}
-        )
+        # Store all token information
+        self._store_token_info(token_response)
 
         return token_response
 
-    def refresh_token(self, refresh_token: str) -> TokenResponse:
+    def _refresh_token(self, refresh_token: str) -> TokenResponse:
         """
         Refresh access token using refresh token
 
@@ -246,19 +301,28 @@ class BaseClient:
         Returns:
             TokenResponse with new tokens
         """
+        # Use Basic Auth with API key for refresh (not expired Bearer token)
+        if not self.api_key:
+            raise LexaError("API key is required for token refresh", request_id=FAILED_ID)
+        encoded_credentials = base64.b64encode(self.api_key.encode()).decode()
+        headers = {"Authorization": f"Basic {encoded_credentials}"}
+
         request = TokenRefreshRequest(refresh_token=refresh_token)
         response_data = self._request(
-            "POST", "/token/refresh", json_data=request.model_dump()
+            "POST",
+            "/token/refresh",
+            json_data=request.model_dump(),
+            headers=headers,
+            skip_auth=True,
         )
         token_response = TokenResponse(**response_data)
 
-        self.session.headers.update(
-            {"Authorization": f"Bearer {token_response.access_token}"}
-        )
+        # Store all new token information (including new refresh token)
+        self._store_token_info(token_response)
 
         return token_response
 
-    def revoke_token(self) -> MessageResponse:
+    def _revoke_token(self) -> MessageResponse:
         """
         Revoke the current access token
 
@@ -267,7 +331,12 @@ class BaseClient:
         """
         response_data = self._request("POST", "/token/revoke")
 
-        # Remove the authorization header since the token is now revoked
+        # Clear all token information since the token is now revoked
+        self.access_token = None
+        self.refresh_token = None
+        self.token_expires_at = None
+
+        # Remove the authorization header
         if "Authorization" in self.session.headers:
             del self.session.headers["Authorization"]
 

@@ -6,6 +6,7 @@ import asyncio
 import base64
 import logging
 import os
+import time
 from typing import Any, Dict, Optional
 
 import aiohttp
@@ -29,14 +30,13 @@ class AsyncBaseClient:
     Provides common functionality including:
     - Async session management
     - HTTP request handling with proper error handling
-    - Authentication (login, refresh_token, revoke_token)
+    - Authentication (_login, _refresh_token, _revoke_token)
     - Async context manager support
     """
 
     def __init__(
         self,
         *,
-        email: Optional[str] = None,
         api_key: Optional[str] = None,
         base_url: str = "https://dev.cerevox.ai/v1",
         max_retries: int = 3,
@@ -47,17 +47,15 @@ class AsyncBaseClient:
         Initialize the async base client
 
         Args:
-            email: User email address for authentication
-            api_key: User password for authentication
+            api_key: User Personal Access Token (PAT) for authentication
             base_url: Base URL for the Cerevox API
             timeout: Request timeout in seconds
             max_retries: Maximum number of retry attempts for failed requests
             **kwargs: Additional aiohttp ClientSession arguments
         """
-        self.email = email
         self.api_key = api_key or os.getenv("CEREVOX_API_KEY")
-        if not self.email or not self.api_key:
-            raise ValueError("Both email and api_key are required for authentication")
+        if not self.api_key:
+            raise ValueError("api_key is required for authentication")
 
         # Validate base_url format
         if not base_url or not isinstance(base_url, str):
@@ -89,6 +87,11 @@ class AsyncBaseClient:
 
         self.session: Optional[aiohttp.ClientSession] = None
 
+        # Token management attributes
+        self.access_token: Optional[str] = None
+        self.refresh_token: Optional[str] = None
+        self.token_expires_at: Optional[float] = None
+
     async def __aenter__(self) -> "AsyncBaseClient":
         """Async context manager entry"""
         await self.start_session()
@@ -107,8 +110,10 @@ class AsyncBaseClient:
         """Start the aiohttp session"""
         if self.session is None:
             self.session = aiohttp.ClientSession(**self.session_kwargs)
-            # Automatically authenticate using email and password
-            await self.login(self.email, self.api_key)
+            # Automatically authenticate using api_key
+            if not self.api_key:
+                raise ValueError("API key is required for authentication")
+            await self._login(self.api_key)
 
     async def close_session(self) -> None:
         """Close the aiohttp session"""
@@ -124,6 +129,7 @@ class AsyncBaseClient:
         params: Optional[Dict[str, Any]] = None,
         headers: Optional[Dict[str, str]] = None,
         data: Optional[Any] = None,
+        skip_auth: bool = False,
         **kwargs: Any,
     ) -> Dict[str, Any]:
         """
@@ -136,6 +142,7 @@ class AsyncBaseClient:
             params: Query parameters to send in the request
             headers: Additional headers to send with the request
             data: Raw data to send (for file uploads)
+            skip_auth: If True, skip token validation (used for auth endpoints)
             **kwargs: Additional arguments to pass to the request
 
         Returns:
@@ -149,6 +156,10 @@ class AsyncBaseClient:
         """
         if not self.session:
             await self.start_session()
+
+        # Check if token needs refresh before making request (unless this is an auth request)
+        if not skip_auth:
+            await self._ensure_valid_token()
 
         url = f"{self.base_url}{endpoint}"
 
@@ -206,17 +217,55 @@ class AsyncBaseClient:
             logger.error(f"Request failed for {method} {url}: {e}")
             raise LexaError(f"Request failed: {e}", request_id=FAILED_ID) from e
 
-    # Authentication Methods
+    # Token Management Methods
 
-    async def login(
-        self, email: Optional[str] = None, password: Optional[str] = None
-    ) -> TokenResponse:
+    async def _ensure_valid_token(self) -> None:
         """
-        Authenticate with email and password to get access tokens
+        Ensure the access token is valid, refreshing if necessary
+
+        Raises:
+            LexaError: If token refresh fails
+        """
+        if not self.access_token or not self.token_expires_at:
+            # No token available, this shouldn't happen after initialization
+            raise LexaError("No access token available", request_id=FAILED_ID)
+
+        # Check if token is expired or will expire in the next 60 seconds
+        current_time = time.time()
+        if current_time >= (self.token_expires_at - 60):
+            logger.info("Access token expired or expiring soon, refreshing...")
+            if self.refresh_token:
+                await self._refresh_token(self.refresh_token)
+            else:
+                raise LexaError("No refresh token available", request_id=FAILED_ID)
+
+    def _store_token_info(self, token_response: TokenResponse) -> None:
+        """
+        Store token information from authentication response
 
         Args:
-            email: User email address
-            password: User password
+            token_response: Token response containing access token, refresh token, and expiry
+        """
+        self.access_token = token_response.access_token
+        self.refresh_token = token_response.refresh_token
+
+        # Calculate expiration timestamp
+        current_time = time.time()
+        self.token_expires_at = current_time + token_response.expires_in
+
+        # Update session headers with new access token
+        self.session_kwargs["headers"][
+            "Authorization"
+        ] = f"Bearer {token_response.access_token}"
+
+    # Authentication Methods
+
+    async def _login(self, api_key: str) -> TokenResponse:
+        """
+        Authenticate with api_key to get access tokens
+
+        Args:
+            api_key: Personal Access Token scoped to User/Account
 
         Returns:
             TokenResponse containing access_token, refresh_token, etc.
@@ -225,24 +274,23 @@ class AsyncBaseClient:
             LexaAuthError: If authentication fails
         """
         # Use Basic Auth for login
-        credentials = f"{email}:{password}"
-        encoded_credentials = base64.b64encode(credentials.encode()).decode()
+        encoded_credentials = base64.b64encode(api_key.encode()).decode()
 
         headers = {"Authorization": f"Basic {encoded_credentials}"}
 
+        # Skip token validation for login request
         response_data = await self._request(
-            "POST", "/token/login", json_data={}, headers=headers
+            "POST", "/token/login", headers=headers, skip_auth=True
         )
 
         token_response = TokenResponse(**response_data)
 
-        self.session_kwargs["headers"][
-            "Authorization"
-        ] = f"Bearer {token_response.access_token}"
+        # Store all token information
+        self._store_token_info(token_response)
 
         return token_response
 
-    async def refresh_token(self, refresh_token: str) -> TokenResponse:
+    async def _refresh_token(self, refresh_token: str) -> TokenResponse:
         """
         Refresh access token using refresh token
 
@@ -252,19 +300,28 @@ class AsyncBaseClient:
         Returns:
             TokenResponse with new tokens
         """
+        # Use Basic Auth with API key for refresh (not expired Bearer token)
+        if not self.api_key:
+            raise LexaError("API key is required for token refresh", request_id=FAILED_ID)
+        encoded_credentials = base64.b64encode(self.api_key.encode()).decode()
+        headers = {"Authorization": f"Basic {encoded_credentials}"}
+
         request = TokenRefreshRequest(refresh_token=refresh_token)
         response_data = await self._request(
-            "POST", "/token/refresh", json_data=request.model_dump()
+            "POST",
+            "/token/refresh",
+            json_data=request.model_dump(),
+            headers=headers,
+            skip_auth=True,
         )
         token_response = TokenResponse(**response_data)
 
-        self.session_kwargs["headers"][
-            "Authorization"
-        ] = f"Bearer {token_response.access_token}"
+        # Store all new token information (including new refresh token)
+        self._store_token_info(token_response)
 
         return token_response
 
-    async def revoke_token(self) -> MessageResponse:
+    async def _revoke_token(self) -> MessageResponse:
         """
         Revoke the current access token
 
@@ -273,7 +330,12 @@ class AsyncBaseClient:
         """
         response_data = await self._request("POST", "/token/revoke")
 
-        # Remove the authorization header since the token is now revoked
+        # Clear all token information since the token is now revoked
+        self.access_token = None
+        self.refresh_token = None
+        self.token_expires_at = None
+
+        # Remove the authorization header
         if "Authorization" in self.session_kwargs["headers"]:
             del self.session_kwargs["headers"]["Authorization"]
 

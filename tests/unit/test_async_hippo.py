@@ -186,7 +186,7 @@ class TestAsyncHippoAuthentication:
         )
 
         async with AsyncHippo(email="test@example.com", api_key="test-key") as client:
-            response = await client.login("test@example.com", "password")
+            response = await client._login("test@example.com", "password")
 
             assert isinstance(response, TokenResponse)
             assert response.access_token == "test-access-token"
@@ -206,7 +206,7 @@ class TestAsyncHippoAuthentication:
 
         async with AsyncHippo(email="test@example.com", api_key="test-key") as client:
             with pytest.raises(LexaAuthError):
-                await client.login("test@example.com", "wrong-password")
+                await client._login("test@example.com", "wrong-password")
 
     @pytest.mark.asyncio
     async def test_refresh_token_success(self):
@@ -223,7 +223,7 @@ class TestAsyncHippoAuthentication:
         )
 
         async with AsyncHippo(email="test@example.com", api_key="test-key") as client:
-            response = await client.refresh_token("old-refresh-token")
+            response = await client._refresh_token("old-refresh-token")
 
             assert isinstance(response, TokenResponse)
             assert response.access_token == "refreshed-access-token"
@@ -242,7 +242,7 @@ class TestAsyncHippoAuthentication:
         )
 
         async with AsyncHippo(email="test@example.com", api_key="test-key") as client:
-            response = await client.revoke_token()
+            response = await client._revoke_token()
 
             assert isinstance(response, MessageResponse)
             assert response.message == "Token revoked successfully"
@@ -258,7 +258,7 @@ class TestAsyncHippoAuthentication:
 
         async with AsyncHippo(email="test@example.com", api_key="test-key") as client:
             del client.session_kwargs["headers"]["Authorization"]
-            response = await client.revoke_token()
+            response = await client._revoke_token()
 
             assert isinstance(response, MessageResponse)
             assert response.message == "Token revoked successfully"
@@ -286,7 +286,7 @@ class TestAsyncHippoAuthentication:
                 # This will trigger the condition at line 280 to be False
                 client.session = None
 
-                response = await client.refresh_token("old-refresh-token")
+                response = await client._refresh_token("old-refresh-token")
 
                 # Should still return a valid TokenResponse
                 assert isinstance(response, TokenResponse)
@@ -321,7 +321,7 @@ class TestAsyncHippoAuthentication:
                 # This will trigger the condition at line 280 to be False
                 client.session = None
 
-                response = await client.login("test@example.com", "password")
+                response = await client._login("test@example.com", "password")
 
                 # Should still return a valid TokenResponse
                 assert isinstance(response, TokenResponse)
@@ -798,7 +798,9 @@ class TestAsyncHippoAskManagement:
                         "name": "test.pdf",
                         "type": "pdf",
                         "page": 1,
-                        "text_blocks": [{"data": "Sample text", "index": 0, "score": 1}],
+                        "text_blocks": [
+                            {"data": "Sample text", "index": 0, "score": 1}
+                        ],
                     }
                 ],
             },
@@ -837,7 +839,7 @@ class TestAsyncHippoAskManagement:
                         "query": "Question 2",
                         "reply": "Answer 2",
                     },
-                ]
+                ],
             },
         )
 
@@ -863,7 +865,7 @@ class TestAsyncHippoAskManagement:
                         "query": "Short question",
                         "reply": "Short answer",
                     }
-                ]
+                ],
             },
         )
 
@@ -981,9 +983,19 @@ class TestAsyncHippoConvenienceMethods:
             payload={
                 "ask_count": 2,
                 "asks": [
-                    {"ask_index": 1, "ask_ts": 1704067200, "query": "Q1", "reply": "A1"},
-                    {"ask_index": 2, "ask_ts": 1704070800, "query": "Q2", "reply": "A2"},
-                ]
+                    {
+                        "ask_index": 1,
+                        "ask_ts": 1704067200,
+                        "query": "Q1",
+                        "reply": "A1",
+                    },
+                    {
+                        "ask_index": 2,
+                        "ask_ts": 1704070800,
+                        "query": "Q2",
+                        "reply": "A2",
+                    },
+                ],
             },
         )
 

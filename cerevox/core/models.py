@@ -558,6 +558,7 @@ class ChatsListResponse(BaseModel):
 
 class TextBlock(BaseModel):
     """Text block data structure"""
+
     data: str = Field(..., description="Text content")
     index: int = Field(..., description="Block index")
     score: int = Field(..., description="Relevance score")
@@ -567,6 +568,7 @@ class TextBlock(BaseModel):
 
 class TableInfo(BaseModel):
     """Table information structure"""
+
     block_rows: int = Field(..., description="Number of block rows")
     context_rows: int = Field(..., description="Number of context rows")
     headers: List[str] = Field(..., description="Table headers")
@@ -584,7 +586,9 @@ class SourceData(BaseModel):
     type: Optional[str] = Field(None, description="Source type (mime type)")
     page: Optional[int] = Field(None, description="Source page number")
     url: Optional[str] = Field(None, description="Source URL")
-    text_blocks: Optional[List[TextBlock]] = Field(None, description="Source text blocks")
+    text_blocks: Optional[List[TextBlock]] = Field(
+        None, description="Source text blocks"
+    )
     text_context: Optional[List[str]] = Field(None, description="Text context")
     table_blocks: Optional[List[str]] = Field(None, description="Table blocks")
     table_context: Optional[List[str]] = Field(None, description="Table context")
@@ -612,6 +616,7 @@ class AskSubmitRequest(BaseModel):
 
 class SimpleSourceData(BaseModel):
     """Simplified source data structure (for GET /asks/{index} responses)"""
+
     citation: Optional[str] = Field(None, description="Citation information")
     name: Optional[str] = Field(None, description="Source name")
     type: Optional[str] = Field(None, description="Source type (mime type)")
@@ -626,12 +631,14 @@ class AskSubmitResponse(BaseModel):
     ask_index: int = Field(..., description="Index of the created ask")
     query: Optional[str] = Field(None, description="The question asked")
     reply: Optional[str] = Field(None, description="The response received")
-    source_data: Optional[List[SourceData]] = Field(None, description="Full source data")
+    source_data: Optional[List[SourceData]] = Field(
+        None, description="Full source data"
+    )
 
     model_config = ConfigDict(populate_by_name=True)
 
 
-# For GET /asks list responses  
+# For GET /asks list responses
 class AskListItem(BaseModel):
     ask_index: int = Field(..., description="Index of the ask")
     ask_ts: int = Field(..., description="Ask timestamp (Unix timestamp)")
@@ -647,8 +654,12 @@ class AskItem(BaseModel):
     ask_ts: int = Field(..., description="Ask timestamp (Unix timestamp)")
     query: Optional[str] = Field(None, description="The question asked")
     reply: Optional[str] = Field(None, description="The response received")
-    filenames: Optional[List[str]] = Field(None, description="Source filenames (if show_files=true)")
-    source_data: Optional[List[SimpleSourceData]] = Field(None, description="Simplified source data (if show_source=true)")
+    filenames: Optional[List[str]] = Field(
+        None, description="Source filenames (if show_files=true)"
+    )
+    source_data: Optional[List[SimpleSourceData]] = Field(
+        None, description="Simplified source data (if show_source=true)"
+    )
 
     model_config = ConfigDict(populate_by_name=True)
 

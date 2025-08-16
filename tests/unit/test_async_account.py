@@ -197,7 +197,7 @@ class TestAsyncAccountAuthentication:
         )
 
         async with AsyncAccount(email="test@example.com", api_key="test-key") as client:
-            result = await client.login("user@example.com", "password123")
+            result = await client._login("user@example.com", "password123")
 
             assert isinstance(result, TokenResponse)
             assert result.access_token == "access_123"
@@ -218,7 +218,7 @@ class TestAsyncAccountAuthentication:
 
         async with AsyncAccount(email="test@example.com", api_key="test-key") as client:
             with pytest.raises(LexaAuthError):
-                await client.login("test@example.com", "wrong-password")
+                await client._login("test@example.com", "wrong-password")
 
     @pytest.mark.asyncio
     async def test_refresh_token_success(self):
@@ -235,7 +235,7 @@ class TestAsyncAccountAuthentication:
         )
 
         async with AsyncAccount(email="test@example.com", api_key="test-key") as client:
-            result = await client.refresh_token("refresh_456")
+            result = await client._refresh_token("refresh_456")
 
             assert isinstance(result, TokenResponse)
             assert result.access_token == "new_access_123"
@@ -250,7 +250,7 @@ class TestAsyncAccountAuthentication:
         )
 
         async with AsyncAccount(email="test@example.com", api_key="test-key") as client:
-            result = await client.revoke_token()
+            result = await client._revoke_token()
 
             assert isinstance(result, MessageResponse)
             assert result.message == "Token revoked successfully"
