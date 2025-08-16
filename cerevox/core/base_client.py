@@ -42,6 +42,7 @@ class BaseClient:
         *,
         api_key: Optional[str] = None,
         base_url: str = "https://dev.cerevox.ai/v1",
+        auth_url: Optional[str] = None,
         max_retries: int = 3,
         session_kwargs: Optional[Dict[str, Any]] = None,
         timeout: float = 30.0,
@@ -52,7 +53,8 @@ class BaseClient:
 
         Args:
             api_key: User Personal Access Token (PAT) for authentication
-            base_url: Base URL for the Cerevox API
+            base_url: Base URL for the Cerevox API (used for data requests)
+            auth_url: Base URL for authentication (defaults to base_url if not provided)
             timeout: Request timeout in seconds
             max_retries: Maximum number of retry attempts for failed requests
             session_kwargs: Additional arguments to pass to requests.Session
@@ -70,6 +72,18 @@ class BaseClient:
             raise ValueError(f"base_url must start with {HTTP} or {HTTPS}")
 
         self.base_url = base_url.rstrip("/")  # Remove trailing slash
+
+        # Set auth_url - defaults to base_url if not provided
+        if auth_url:
+            # Validate auth_url format
+            if not auth_url or not isinstance(auth_url, str):
+                raise ValueError("auth_url must be a non-empty string")
+            if not (auth_url.startswith(HTTP) or auth_url.startswith(HTTPS)):
+                raise ValueError(f"auth_url must start with {HTTP} or {HTTPS}")
+            self.auth_url = auth_url.rstrip("/")
+        else:
+            self.auth_url = self.base_url
+
         self.timeout = timeout
         self.max_retries = max_retries
 
@@ -119,7 +133,7 @@ class BaseClient:
         params: Optional[Dict[str, Any]] = None,
         headers: Optional[Dict[str, str]] = None,
         files: Optional[Dict[str, Any]] = None,
-        skip_auth: bool = False,
+        is_auth: bool = False,
         **kwargs: Any,
     ) -> Dict[str, Any]:
         """
@@ -132,7 +146,7 @@ class BaseClient:
             params: Query parameters to send in the request
             headers: Additional headers to send with the request
             files: Files to upload (for multipart requests)
-            skip_auth: If True, skip token validation (used for auth endpoints)
+            is_auth: If True, use auth_url and skip token validation (for auth endpoints)
             **kwargs: Additional arguments to pass to the request
 
         Returns:
@@ -144,11 +158,14 @@ class BaseClient:
             LexaTimeoutError: If the request times out
             Various other LexaError subclasses: Based on response status and content
         """
-        # Check if token needs refresh before making request (unless this is an auth request)
-        if not skip_auth:
-            self._ensure_valid_token()
+        base_url = self.auth_url
 
-        url = f"{self.base_url}{endpoint}"
+        # Check if token needs refresh before making request
+        if not is_auth:
+            self._ensure_valid_token()
+            base_url = self.base_url
+
+        url = f"{base_url}{endpoint}"
 
         # Merge additional headers
         request_headers = dict(self.session.headers)
@@ -196,14 +213,16 @@ class BaseClient:
             )
 
         except requests.exceptions.Timeout as e:
-            logger.error(f"Request timeout for {method} {url}: {e}")
-            raise LexaTimeoutError(
-                "Request timed out", timeout_duration=self.timeout
-            ) from e
+            request_type = "Auth request" if is_auth else "Request"
+            logger.error(f"{request_type} timeout for {method} {url}: {e}")
+            timeout_msg = "Auth request timed out" if is_auth else "Request timed out"
+            raise LexaTimeoutError(timeout_msg, timeout_duration=self.timeout) from e
 
         except requests.exceptions.RequestException as e:
-            logger.error(f"Request failed for {method} {url}: {e}")
-            raise LexaError(f"Request failed: {e}", request_id=FAILED_ID) from e
+            request_type = "Auth request" if is_auth else "Request"
+            logger.error(f"{request_type} failed for {method} {url}: {e}")
+            error_msg = "Auth request failed" if is_auth else "Request failed"
+            raise LexaError(f"{error_msg}: {e}", request_id=FAILED_ID) from e
 
     def close(self) -> None:
         """Close the HTTP session"""
@@ -279,9 +298,9 @@ class BaseClient:
 
         headers = {"Authorization": f"Basic {encoded_credentials}"}
 
-        # Skip token validation for login request
+        # Skip token validation for login request and use auth_url
         response_data = self._request(
-            "POST", "/token/login", headers=headers, skip_auth=True
+            "POST", "/token/login", headers=headers, is_auth=True
         )
 
         token_response = TokenResponse(**response_data)
@@ -303,7 +322,9 @@ class BaseClient:
         """
         # Use Basic Auth with API key for refresh (not expired Bearer token)
         if not self.api_key:
-            raise LexaError("API key is required for token refresh", request_id=FAILED_ID)
+            raise LexaError(
+                "API key is required for token refresh", request_id=FAILED_ID
+            )
         encoded_credentials = base64.b64encode(self.api_key.encode()).decode()
         headers = {"Authorization": f"Basic {encoded_credentials}"}
 
@@ -313,7 +334,7 @@ class BaseClient:
             "/token/refresh",
             json_data=request.model_dump(),
             headers=headers,
-            skip_auth=True,
+            is_auth=True,
         )
         token_response = TokenResponse(**response_data)
 
@@ -329,7 +350,7 @@ class BaseClient:
         Returns:
             MessageResponse with revocation confirmation
         """
-        response_data = self._request("POST", "/token/revoke")
+        response_data = self._request("POST", "/token/revoke", is_auth=True)
 
         # Clear all token information since the token is now revoked
         self.access_token = None

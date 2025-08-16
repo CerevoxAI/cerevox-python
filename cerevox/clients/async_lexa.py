@@ -35,6 +35,7 @@ except ImportError:
 
 from ..core import (
     VALID_MODES,
+    AsyncBaseClient,
     BucketListResponse,
     DriveListResponse,
     FileInfo,
@@ -58,7 +59,7 @@ from ..utils import DocumentBatch
 FAILED_ID = "Failed to get request ID from upload"
 
 
-class AsyncLexa:
+class AsyncLexa(AsyncBaseClient):
     """
     Official Async Python Client for Lexa
 
@@ -102,45 +103,27 @@ class AsyncLexa:
             timeout: Request timeout in seconds
             **kwargs: Additional aiohttp ClientSession arguments
         """
-        self.api_key = api_key or os.getenv("CEREVOX_API_KEY")
-        if not self.api_key:
-            raise ValueError(
-                "API key is required. Provide it via"
-                + " api_key parameter or CEREVOX_API_KEY environment variable."
-            )
+        # Initialize the async base client with dual URL support
+        # Lexa uses https://www.data.cerevox.ai for data requests
+        # but https://dev.cerevox.ai/v1 for authentication
+        super().__init__(
+            api_key=api_key,
+            base_url=base_url,  # This will be the data URL
+            auth_url="https://dev.cerevox.ai/v1",  # This is for authentication
+            max_retries=max_retries,
+            timeout=timeout,
+            **kwargs,
+        )
 
-        # Validate base_url format
-        if not base_url or not isinstance(base_url, str):
-            raise ValueError("base_url must be a non-empty string")
-
-        # Basic URL validation
-        if not (base_url.startswith("http://") or base_url.startswith("https://")):
-            raise ValueError("base_url must start with http:// or https://")
-
-        # Validate max_retries
-        if not isinstance(max_retries, int):
-            raise TypeError("max_retries must be an integer")
-        if max_retries < 0:
-            raise ValueError("max_retries must be a non-negative integer")
-
-        self.base_url = base_url.rstrip("/")
-        self.timeout = aiohttp.ClientTimeout(total=timeout)
+        # Lexa-specific configuration
         self.max_concurrent = max_concurrent
         self.max_poll_time = max_poll_time
-        self.max_retries = max_retries
         self.poll_interval = poll_interval
 
-        # Session configuration
-        self.session_kwargs = {
-            "timeout": self.timeout,
-            "headers": {
-                "cerevox-api-key": self.api_key,
-                "User-Agent": "cerevox-python-async/0.1.0",
-            },
-            **kwargs,
-        }
+        # Update User-Agent for Lexa
+        self.session_kwargs["headers"]["User-Agent"] = "cerevox-python-async/0.1.0"
 
-        self.session: Optional[aiohttp.ClientSession] = None
+        # Lexa-specific semaphore and executor
         self._semaphore = asyncio.Semaphore(max_concurrent)
         self._executor = ThreadPoolExecutor(max_workers=max_concurrent)
 
@@ -170,126 +153,6 @@ class AsyncLexa:
             self.session = None
 
         self._executor.shutdown(wait=True)
-
-    async def _request(
-        self,
-        method: str,
-        endpoint: str,
-        json_data: Optional[Dict[str, Any]] = None,
-        data: Optional[aiohttp.FormData] = None,
-        params: Optional[Dict[str, Any]] = None,
-        **kwargs: Any,
-    ) -> Dict[str, Any]:
-        """
-        All requests to Lexa API are handled by this method
-
-        Args:
-            method: The HTTP method to use
-            endpoint: The API endpoint to call
-            json_data: JSON data to send in the request body
-            files: Files to send in the request
-            params: Query parameters to send in the request
-            **kwargs: Additional arguments to pass to the request
-
-        Returns:
-            The response from the API
-
-        Raises:
-            LexaAuthError: If the API key is invalid
-            LexaError: If the request fails
-            LexaRateLimitError: If the request rate limit is exceeded
-            LexaTimeoutError: If the request times out
-            LexaValidationError: If the request validation fails
-        """
-        if not self.session:
-            await self.start_session()
-
-        # Final check - if session is still None after start_session, raise error
-        if self.session is None:
-            raise LexaError("Session not initialized")
-
-        # Runtime validation for max_retries
-        try:
-            max_retries_int = int(self.max_retries)
-            if max_retries_int < 0:
-                raise ValueError("Negative value")
-            if max_retries_int != self.max_retries:  # Catch float/decimal cases
-                raise ValueError("Non-integer value")
-        except (TypeError, ValueError, OverflowError):
-            raise LexaError("max_retries must be a non-negative integer")
-
-        url = f"{self.base_url}{endpoint}"
-
-        for attempt in range(max_retries_int + 1):
-            try:
-                async with self.session.request(
-                    method=method,
-                    url=url,
-                    json=json_data,
-                    data=data,
-                    params=params,
-                    **kwargs,
-                ) as response:
-
-                    # Handle authentication errors
-                    if response.status == 401:
-                        error_data = await self._safe_json(response)
-                        raise LexaAuthError(
-                            "Invalid API key or authentication failed",
-                            status_code=401,
-                            response_data=error_data,
-                        )
-
-                    # Handle rate limit errors
-                    if response.status == 429:
-                        error_data = await self._safe_json(response)
-                        raise LexaRateLimitError(
-                            error_data.get("error", "Rate limit exceeded"),
-                            status_code=429,
-                            response_data=error_data,
-                        )
-
-                    # Handle validation errors
-                    if response.status == 400:
-                        error_data = await self._safe_json(response)
-                        raise LexaValidationError(
-                            error_data.get("error", "Request validation failed"),
-                            status_code=400,
-                            response_data=error_data,
-                        )
-
-                    # Handle other API errors
-                    if response.status >= 400:
-                        error_data = await self._safe_json(response)
-                        raise LexaError(
-                            error_data.get(
-                                "error",
-                                f"API request failed with status {response.status}",
-                            ),
-                            status_code=response.status,
-                            response_data=error_data,
-                        )
-
-                    return await self._safe_json(response)
-
-            except (aiohttp.ClientError, asyncio.TimeoutError) as e:
-                if attempt == max_retries_int:
-                    raise LexaError(
-                        f"Request failed after {max_retries_int + 1} attempts: {str(e)}"
-                    )
-
-                # Exponential backoff
-                wait_time = min(2**attempt, 30)
-                await asyncio.sleep(wait_time)
-        return {}
-
-    async def _safe_json(self, response: aiohttp.ClientResponse) -> Dict[str, Any]:
-        """Safely parse JSON response"""
-        try:
-            json_data: Dict[str, Any] = await response.json()
-            return json_data
-        except (aiohttp.ContentTypeError, json.JSONDecodeError):
-            return {}
 
     # Private Async Methods
 

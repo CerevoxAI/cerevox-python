@@ -22,11 +22,6 @@ from typing import (
 )
 from urllib.parse import unquote, urlparse
 
-# Sync Request Handling
-import requests
-from requests.adapters import HTTPAdapter
-from urllib3.util.retry import Retry
-
 # Optional tqdm import for progress bars
 try:
     from tqdm import tqdm
@@ -37,6 +32,7 @@ except ImportError:
 
 from ..core import (
     VALID_MODES,
+    BaseClient,
     BucketListResponse,
     DriveListResponse,
     FileInfo,
@@ -46,12 +42,9 @@ from ..core import (
     IngestionResult,
     JobResponse,
     JobStatus,
-    LexaAuthError,
     LexaError,
     LexaJobFailedError,
-    LexaRateLimitError,
     LexaTimeoutError,
-    LexaValidationError,
     ProcessingMode,
     SiteListResponse,
 )
@@ -64,7 +57,7 @@ HTTPS = "https://"
 FAILED_ID = "Failed to get request ID from upload"
 
 
-class Lexa:
+class Lexa(BaseClient):
     """
     Official Synchronous Python Client for Lexa
 
@@ -107,176 +100,27 @@ class Lexa:
             max_poll_time: Maximum time to wait for job completion in seconds
             session_kwargs: Additional arguments to pass to requests.Session
         """
-        self.api_key = api_key or os.getenv("CEREVOX_API_KEY")
-        if not self.api_key:
-            raise ValueError(
-                "API key is required. Provide it via"
-                + " api_key parameter or CEREVOX_API_KEY environment variable."
-            )
-
-        # Validate base_url format
-        if not base_url or not isinstance(base_url, str):
-            raise ValueError("base_url must be a non-empty string")
-
-        # Basic URL validation
-        if not (base_url.startswith(HTTP) or base_url.startswith(HTTPS)):
-            raise ValueError(f"base_url must start with {HTTP} or {HTTPS}")
-
-        self.base_url = base_url.rstrip("/")  # Remove trailing slash
-        self.timeout = timeout
-        self.max_poll_time = max_poll_time
-        self.max_retries = max_retries
-
-        # Initialize session
-        self.session = requests.Session()
-
-        # Configure retry strategy
-        retry_strategy = Retry(
-            total=max_retries,
-            status_forcelist=[500, 501, 502, 503, 504],
-            allowed_methods=["HEAD", "GET", "OPTIONS", "POST"],
-            backoff_factor=0.1,
+        # Initialize the base client with dual URL support
+        # Lexa uses https://www.data.cerevox.ai for data requests
+        # but https://dev.cerevox.ai/v1 for authentication
+        super().__init__(
+            api_key=api_key,
+            base_url=base_url,  # This will be the data URL
+            auth_url="https://dev.cerevox.ai/v1",  # This is for authentication
+            max_retries=max_retries,
+            session_kwargs=session_kwargs,
+            timeout=timeout,
+            **kwargs,
         )
-        adapter = HTTPAdapter(max_retries=retry_strategy)
-        self.session.mount(HTTP, adapter)
-        self.session.mount(HTTPS, adapter)
 
-        # Set default headers
+        # Lexa-specific configuration
+        self.max_poll_time = max_poll_time
+
         self.session.headers.update(
             {
-                "cerevox-api-key": self.api_key,
                 "User-Agent": "cerevox-python/0.1.0",
             }
         )
-
-        # Apply session configuration
-        if session_kwargs:
-            for key, value in session_kwargs.items():
-                setattr(self.session, key, value)
-
-        # Apply any additional session configuration for backward compatibility
-        for key, value in kwargs.items():
-            setattr(self.session, key, value)
-
-    def _request(
-        self,
-        method: str,
-        endpoint: str,
-        json_data: Optional[Dict[str, Any]] = None,
-        files: Optional[Dict[str, Any]] = None,
-        params: Optional[Dict[str, Any]] = None,
-        **kwargs: Any,
-    ) -> Dict[str, Any]:
-        """
-        All requests to Lexa API are handled by this method
-
-        Args:
-            method: The HTTP method to use
-            endpoint: The API endpoint to call
-            json_data: JSON data to send in the request body
-            files: Files to send in the request
-            params: Query parameters to send in the request
-            **kwargs: Additional arguments to pass to the request
-
-        Returns:
-            The response from the API
-
-        Raises:
-            LexaAuthError: If the API key is invalid
-            LexaError: If the request fails
-            LexaRateLimitError: If the request rate limit is exceeded
-            LexaTimeoutError: If the request times out
-            LexaValidationError: If the request validation fails
-        """
-        url = f"{self.base_url}{endpoint}"
-
-        try:
-            response = self.session.request(
-                method=method,
-                url=url,
-                json=json_data,
-                files=files,
-                params=params,
-                timeout=self.timeout,
-                **kwargs,
-            )
-
-            # Handle authentication errors
-            if response.status_code == 401:
-                auth_error_data = response.json() if response.content else {}
-                raise LexaAuthError(
-                    "Invalid API key or authentication failed",
-                    status_code=401,
-                    response=auth_error_data,
-                )
-
-            # Handle rate limit errors
-            if response.status_code == 429:
-                rate_limit_error_data = response.json() if response.content else {}
-                raise LexaRateLimitError(
-                    rate_limit_error_data.get("error", "Rate limit exceeded"),
-                    status_code=429,
-                    response=rate_limit_error_data,
-                )
-
-            # Handle validation errors
-            if response.status_code == 400:
-                validation_error_data = response.json() if response.content else {}
-                raise LexaValidationError(
-                    validation_error_data.get("error", "Request validation failed"),
-                    status_code=400,
-                    response=validation_error_data,
-                )
-
-            # Handle other API errors
-            if response.status_code >= 400:
-                general_error_data: Dict[str, Any] = {}
-                content_type = response.headers.get("content-type", "")
-                if content_type.startswith("application/json"):
-                    general_error_data = response.json()
-                raise LexaError(
-                    general_error_data.get(
-                        "error",
-                        f"API request failed with status {response.status_code}",
-                    ),
-                    status_code=response.status_code,
-                    response=general_error_data,
-                )
-
-            try:
-                response_data: Dict[str, Any] = response.json()
-                return response_data
-            except json.JSONDecodeError:
-                # For tests that expect this to be handled gracefully
-                return {}
-
-        except requests.exceptions.Timeout as e:
-            raise LexaTimeoutError(f"Request timed out: {str(e)}")
-        except requests.exceptions.ConnectionError as e:
-            raise LexaError(f"Connection failed: {str(e)}")
-        except requests.exceptions.RetryError as e:
-            # Handle retry exhaustion - try to extract original server error
-            if hasattr(e, "response") and e.response and hasattr(e.response, "json"):
-                try:
-                    retry_error_data = e.response.json()
-                    raise LexaError(
-                        retry_error_data.get(
-                            "error", f"Request failed after retries: {str(e)}"
-                        ),
-                        status_code=getattr(e.response, "status_code", None),
-                        response=retry_error_data,
-                    )
-                except (ValueError, AttributeError):
-                    pass
-
-            # Check if this is a 500 error that was retried
-            error_str = str(e)
-            if "500 error responses" in error_str:
-                raise LexaError("Internal server error")
-
-            raise LexaError(f"Request failed after retries: {str(e)}")
-        except requests.exceptions.RequestException as e:
-            raise LexaError(f"Request failed: {str(e)}")
 
     # Private methods
 
