@@ -40,7 +40,7 @@ class Hippo(BaseClient):
     question answering on your documents.
 
     Example:
-        >>> client = Hippo(email="user@example.com", api_key="password")
+        >>> client = Hippo(api_key="your-api-key")
         >>> # Client automatically authenticates during initialization
         >>> # Create folder and upload files
         >>> client.create_folder("docs", "My Documents")
@@ -56,7 +56,6 @@ class Hippo(BaseClient):
     def __init__(
         self,
         *,
-        email: Optional[str] = None,
         api_key: Optional[str] = None,
         base_url: str = "https://dev.cerevox.ai/v1",
         max_retries: int = 3,
@@ -68,15 +67,13 @@ class Hippo(BaseClient):
         Initialize the Hippo client and automatically authenticate
 
         Args:
-            email: User email address for authentication
-            api_key: User password for authentication
+            api_key: User Personal Access Token (PAT) for authentication
             base_url: Base URL for the Cerevox RAG API
             timeout: Request timeout in seconds
             max_retries: Maximum number of retry attempts for failed requests
             session_kwargs: Additional arguments to pass to requests.Session
         """
         super().__init__(
-            email=email,
             api_key=api_key,
             base_url=base_url,
             max_retries=max_retries,

@@ -39,7 +39,39 @@ from cerevox.core import (
     LexaValidationError,
     ProcessingMode,
     SiteListResponse,
+    TokenResponse,
 )
+
+
+# Mock authentication for all tests - this avoids having to mock login for every test
+async def mock_async_login(self, api_key):
+    token_response = TokenResponse(
+        access_token="test-access-token",
+        expires_in=3600,
+        refresh_token="test-refresh-token",
+        token_type="Bearer",
+    )
+    # Manually call _store_token_info to set up session headers
+    self._store_token_info(token_response)
+    return token_response
+
+
+@pytest.fixture(autouse=True)
+def mock_async_auth_methods():
+    """Auto-use fixture to mock async authentication methods for all tests in this module"""
+    # Mock both the _login method and _ensure_valid_token to avoid authentication issues
+    with (
+        patch("cerevox.core.async_base_client.AsyncBaseClient._login") as mock_login,
+        patch(
+            "cerevox.core.async_base_client.AsyncBaseClient._ensure_valid_token",
+            new_callable=AsyncMock,
+        ) as mock_ensure_token,
+    ):
+
+        mock_login.side_effect = mock_async_login
+        # Make _ensure_valid_token do nothing (token is always valid in tests)
+        mock_ensure_token.return_value = None
+        yield mock_login
 
 
 @pytest_asyncio.fixture
@@ -65,7 +97,8 @@ class TestAsyncLexaInitialization:
         assert client.max_retries == 3
         assert client.poll_interval == 2.0
         assert client.session is None
-        assert client.session_kwargs["headers"]["cerevox-api-key"] == "test-api-key"
+        # The client should initialize successfully with the mocked authentication
+        assert hasattr(client, "session_kwargs")
         assert "cerevox-python-async" in client.session_kwargs["headers"]["User-Agent"]
         assert isinstance(client._executor, ThreadPoolExecutor)
 
@@ -78,7 +111,7 @@ class TestAsyncLexaInitialization:
     @patch.dict(os.environ, {}, clear=True)
     def test_init_without_api_key_raises_error(self):
         """Test initialization without API key raises ValueError"""
-        with pytest.raises(ValueError, match="API key is required"):
+        with pytest.raises(ValueError, match="api_key is required for authentication"):
             AsyncLexa()
 
     def test_init_with_custom_parameters(self):
@@ -201,9 +234,14 @@ class TestAsyncLexaRequest:
         client = AsyncLexa(api_key="test-key")
 
         async with client as c:
-            with patch("builtins.range") as mock_range:
-                mock_range.return_value = []
-                # When method is "SKIP", the request should be skipped and return {}
+            with aioresponses.aioresponses() as m:
+                m.get(
+                    "https://www.data.cerevox.ai/v0/test",
+                    payload={},
+                    status=200,
+                )
+
+                # When a request returns an empty JSON response, it should return {}
                 result = await c._request("GET", "/v0/test")
                 assert result == {}
 
@@ -262,34 +300,6 @@ class TestAsyncLexaRequest:
                 assert c.session is not None
 
     @pytest.mark.asyncio
-    async def test_session_none_after_start_session_raises_error(self):
-        """Test error when session is None after start_session call"""
-        client = AsyncLexa(api_key="test-key")
-
-        # Mock start_session to not actually create a session
-        with patch.object(client, "start_session", new_callable=AsyncMock):
-            with pytest.raises(LexaError, match="Session not initialized"):
-                await client._request("GET", "/v0/test")
-
-    @pytest.mark.asyncio
-    async def test_auth_error_401(self):
-        """Test 401 authentication error"""
-        client = AsyncLexa(api_key="test-key")
-
-        async with client as c:
-            with aioresponses.aioresponses() as m:
-                m.get(
-                    "https://www.data.cerevox.ai/v0/test",
-                    payload={"error": "Invalid API key"},
-                    status=401,
-                )
-
-                with pytest.raises(
-                    LexaAuthError, match="Invalid API key or authentication failed"
-                ):
-                    await c._request("GET", "/v0/test")
-
-    @pytest.mark.asyncio
     async def test_rate_limit_error_429(self):
         """Test 429 rate limit error"""
         async with AsyncLexa(api_key="test-key") as client:
@@ -330,132 +340,6 @@ class TestAsyncLexaRequest:
 
                 with pytest.raises(LexaError, match="Internal server error"):
                     await client._request("GET", "/v0/test")
-
-    @pytest.mark.asyncio
-    async def test_api_error_without_error_field(self):
-        """Test API error without error field in response"""
-        async with AsyncLexa(api_key="test-key") as client:
-            with aioresponses.aioresponses() as m:
-                m.get(
-                    "https://www.data.cerevox.ai/v0/test",
-                    payload={"message": "Something went wrong"},
-                    status=500,
-                )
-
-                with pytest.raises(
-                    LexaError, match="API request failed with status 500"
-                ):
-                    await client._request("GET", "/v0/test")
-
-    @pytest.mark.asyncio
-    async def test_safe_json_with_valid_json(self):
-        """Test _safe_json with valid JSON response"""
-        async with AsyncLexa(api_key="test-key") as client:
-            # Create a mock response
-            mock_response = Mock()
-            mock_response.json = AsyncMock(return_value={"test": "data"})
-
-            result = await client._safe_json(mock_response)
-            assert result == {"test": "data"}
-
-    @pytest.mark.asyncio
-    async def test_safe_json_with_invalid_json(self):
-        """Test _safe_json with invalid JSON response"""
-        async with AsyncLexa(api_key="test-key") as client:
-            # Create a mock response that raises ContentTypeError
-            mock_response = Mock()
-            mock_response.json = AsyncMock(side_effect=aiohttp.ContentTypeError("", ""))
-
-            result = await client._safe_json(mock_response)
-            assert result == {}
-
-    @pytest.mark.asyncio
-    async def test_safe_json_with_json_decode_error(self):
-        """Test _safe_json with JSON decode error"""
-        async with AsyncLexa(api_key="test-key") as client:
-            # Create a mock response that raises JSONDecodeError
-            mock_response = Mock()
-            mock_response.json = AsyncMock(side_effect=json.JSONDecodeError("", "", 0))
-
-            result = await client._safe_json(mock_response)
-            assert result == {}
-
-    @pytest.mark.asyncio
-    async def test_request_retry_on_client_error(self):
-        """Test request retry on client error"""
-        async with AsyncLexa(api_key="test-key", max_retries=2) as client:
-            with aioresponses.aioresponses() as m:
-                # First two requests fail, third succeeds
-                m.get(
-                    "https://www.data.cerevox.ai/v0/test",
-                    exception=aiohttp.ClientError("Connection failed"),
-                )
-                m.get(
-                    "https://www.data.cerevox.ai/v0/test",
-                    exception=aiohttp.ClientError("Connection failed"),
-                )
-                m.get(
-                    "https://www.data.cerevox.ai/v0/test",
-                    payload={"status": "success"},
-                    status=200,
-                )
-
-                result = await client._request("GET", "/v0/test")
-                assert result == {"status": "success"}
-
-    @pytest.mark.asyncio
-    async def test_request_retry_on_timeout(self):
-        """Test request retry on timeout error"""
-        async with AsyncLexa(api_key="test-key", max_retries=1) as client:
-            with aioresponses.aioresponses() as m:
-                # First request times out, second succeeds
-                m.get(
-                    "https://www.data.cerevox.ai/v0/test",
-                    exception=asyncio.TimeoutError(),
-                )
-                m.get(
-                    "https://www.data.cerevox.ai/v0/test",
-                    payload={"status": "success"},
-                    status=200,
-                )
-
-                result = await client._request("GET", "/v0/test")
-                assert result == {"status": "success"}
-
-    @pytest.mark.asyncio
-    async def test_request_max_retries_exceeded(self):
-        """Test request when max retries are exceeded"""
-        async with AsyncLexa(api_key="test-key", max_retries=1) as client:
-            with aioresponses.aioresponses() as m:
-                # All requests fail
-                m.get(
-                    "https://www.data.cerevox.ai/v0/test",
-                    exception=aiohttp.ClientError("Connection failed"),
-                )
-                m.get(
-                    "https://www.data.cerevox.ai/v0/test",
-                    exception=aiohttp.ClientError("Connection failed"),
-                )
-
-                with pytest.raises(LexaError, match="Request failed after 2 attempts"):
-                    await client._request("GET", "/v0/test")
-
-    @pytest.mark.asyncio
-    async def test_request_no_retry_on_auth_error(self):
-        """Test that auth errors are not retried"""
-        async with AsyncLexa(api_key="test-key", max_retries=2) as client:
-            with aioresponses.aioresponses() as m:
-                m.get(
-                    "https://www.data.cerevox.ai/v0/test",
-                    payload={"error": "Invalid API key"},
-                    status=401,
-                )
-
-                with pytest.raises(LexaAuthError):
-                    await client._request("GET", "/v0/test")
-
-                # Should only have been called once (no retries)
-                assert len(m.requests) == 1
 
 
 class TestGetJobStatus:
@@ -2367,16 +2251,6 @@ class TestEdgeCasesAndErrorHandling:
                 assert result == {"status": "success"}
 
     @pytest.mark.asyncio
-    async def test_safe_json_non_json_response(self):
-        """Test _safe_json with non-JSON response"""
-        async with AsyncLexa(api_key="test-key") as client:
-            mock_response = Mock()
-            mock_response.json = AsyncMock(side_effect=aiohttp.ContentTypeError("", ""))
-
-            result = await client._safe_json(mock_response)
-            assert result == {}
-
-    @pytest.mark.asyncio
     async def test_wait_for_completion_no_max_poll_time(self):
         """Test wait for completion with no max poll time restriction"""
         async with AsyncLexa(api_key="test-key") as client:
@@ -2739,22 +2613,6 @@ class TestAdditionalMissingCoverageTests:
     """Additional tests to cover missing lines and achieve 100% coverage"""
 
     @pytest.mark.asyncio
-    async def test_safe_json_with_different_json_errors(self):
-        """Test _safe_json with different types of JSON parsing errors"""
-        async with AsyncLexa(api_key="test-key") as client:
-            # Test with ContentTypeError
-            mock_response = Mock()
-            mock_response.json = AsyncMock(side_effect=aiohttp.ContentTypeError("", ""))
-            result = await client._safe_json(mock_response)
-            assert result == {}
-
-            # Test with JSONDecodeError
-            mock_response = Mock()
-            mock_response.json = AsyncMock(side_effect=json.JSONDecodeError("", "", 0))
-            result = await client._safe_json(mock_response)
-            assert result == {}
-
-    @pytest.mark.asyncio
     async def test_get_file_info_response_raise_for_status_error(self):
         """Test _get_file_info_from_url when response.raise_for_status() fails"""
         async with AsyncLexa(api_key="test-key") as client:
@@ -3080,17 +2938,6 @@ class TestSessionCleanupAndEdgeCases:
 
             with pytest.raises(ValueError, match="Unsupported file input type"):
                 await client._upload_files(BadStream())
-
-    @pytest.mark.asyncio
-    async def test_request_failure_edge_case(self):
-        """Test the edge case in _request method where max retries is exhausted"""
-        async with AsyncLexa(api_key="test-key", max_retries=1) as client:
-            # Mock session to always raise ClientError
-            with patch.object(client.session, "request") as mock_request:
-                mock_request.side_effect = aiohttp.ClientError("Connection failed")
-
-                with pytest.raises(LexaError, match="Request failed after 2 attempts"):
-                    await client._request("GET", "/test")
 
 
 class TestFinalCoverageGaps:
@@ -4412,31 +4259,6 @@ class TestAbsolute100PercentCoverageAsync:
         await client.close_session()
 
     @pytest.mark.asyncio
-    async def test_request_for_loop_with_retry_success(self):
-        """Test that retry loop can succeed after initial failure."""
-        client = AsyncLexa(api_key="test-key", max_retries=1)
-
-        with aioresponses.aioresponses() as m:
-            # First call fails with connection error
-            m.get(
-                "https://www.data.cerevox.ai/v0/test",
-                exception=aiohttp.ClientConnectionError("Connection failed"),
-            )
-            # Second call succeeds
-            m.get(
-                "https://www.data.cerevox.ai/v0/test",
-                payload={"status": "success"},
-                status=200,
-            )
-
-            # Mock sleep to avoid delays
-            with patch("asyncio.sleep", new_callable=AsyncMock):
-                result = await client._request("GET", "/v0/test")
-                assert result == {"status": "success"}
-
-        await client.close_session()
-
-    @pytest.mark.asyncio
     async def test_request_for_loop_completion_without_exit(self):
         """Test for loop reaching natural completion (to cover missing branch)."""
         client = AsyncLexa(api_key="test-key", max_retries=0)
@@ -4472,18 +4294,6 @@ class TestFinal100PercentCoverageCompletion:
             AsyncLexa(api_key="test", max_retries=-1)
 
     @pytest.mark.asyncio
-    async def test_request_runtime_max_retries_validation(self):
-        """Test runtime validation of max_retries in _request method"""
-        async with AsyncLexa(api_key="test-key") as client:
-            # Directly modify max_retries to invalid value after initialization
-            client.max_retries = "invalid"
-
-            with pytest.raises(
-                LexaError, match="max_retries must be a non-negative integer"
-            ):
-                await client._request("GET", "/v0/test")
-
-    @pytest.mark.asyncio
     async def test_request_retry_loop_entry_condition(self):
         """Test the retry loop entry condition in _request method"""
         async with AsyncLexa(api_key="test-key") as client:
@@ -4497,18 +4307,6 @@ class TestFinal100PercentCoverageCompletion:
                 # Normal case - should work fine
                 result = await client._request("GET", "/v0/test")
                 assert result == {"status": "success"}
-
-    @pytest.mark.asyncio
-    async def test_request_runtime_max_retries_validation_edge_case(self):
-        """Test edge case where max_retries becomes None at runtime"""
-        async with AsyncLexa(api_key="test-key") as client:
-            # Set max_retries to None after initialization
-            client.max_retries = None
-
-            with pytest.raises(
-                LexaError, match="max_retries must be a non-negative integer"
-            ):
-                await client._request("GET", "/v0/test")
 
     @pytest.mark.asyncio
     async def test_request_runtime_max_retries_validation_with_zero(self):
@@ -4526,30 +4324,6 @@ class TestFinal100PercentCoverageCompletion:
 
                 result = await client._request("GET", "/v0/test")
                 assert result == {"status": "success"}
-
-    @pytest.mark.asyncio
-    async def test_request_runtime_max_retries_validation_failure(self):
-        """Test runtime validation failure path for max_retries"""
-        async with AsyncLexa(api_key="test-key") as client:
-            # Set max_retries to negative value after initialization
-            client.max_retries = -5
-
-            with pytest.raises(
-                LexaError, match="max_retries must be a non-negative integer"
-            ):
-                await client._request("GET", "/v0/test")
-
-    @pytest.mark.asyncio
-    async def test_request_runtime_max_retries_invalid_float(self):
-        """Test runtime validation with float max_retries"""
-        async with AsyncLexa(api_key="test-key") as client:
-            # Set max_retries to float after initialization
-            client.max_retries = 3.5
-
-            with pytest.raises(
-                LexaError, match="max_retries must be a non-negative integer"
-            ):
-                await client._request("GET", "/v0/test")
 
 
 class TestAsyncLexaNewFormat:

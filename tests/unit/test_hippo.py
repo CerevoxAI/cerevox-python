@@ -38,8 +38,8 @@ from cerevox.core import (
 class TestHippoInitialization:
     """Test Hippo client initialization"""
 
-    def test_init_with_email_and_api_key(self):
-        """Test initialization with email and API key parameters"""
+    def test_init_with_api_key(self):
+        """Test initialization with API key parameter"""
         with responses.RequestsMock() as rsps:
             # Mock login response
             rsps.add(
@@ -54,8 +54,7 @@ class TestHippoInitialization:
                 status=200,
             )
 
-            client = Hippo(email="test@example.com", api_key="test-api-key")
-            assert client.email == "test@example.com"
+            client = Hippo(api_key="test-api-key")
             assert client.api_key == "test-api-key"
             assert client.base_url == "https://dev.cerevox.ai/v1"
             assert client.timeout == 30.0
@@ -78,21 +77,24 @@ class TestHippoInitialization:
                     status=200,
                 )
 
-                client = Hippo(email="test@example.com", api_key=None)
+                client = Hippo(api_key=None)
                 assert client.api_key == "env-api-key"
 
     def test_init_missing_credentials(self):
         """Test initialization fails without credentials"""
-        with pytest.raises(ValueError, match="Both email and api_key are required"):
-            Hippo(email="", api_key="")
+        with patch.dict(os.environ, {}, clear=True):
+            with pytest.raises(
+                ValueError, match="api_key is required for authentication"
+            ):
+                Hippo(api_key=None)
 
     def test_init_invalid_base_url(self):
         """Test initialization with invalid base URL"""
         with pytest.raises(ValueError, match="base_url must be a non-empty string"):
-            Hippo(email="test@example.com", api_key="test-key", base_url="")
+            Hippo(api_key="test-key", base_url="")
 
         with pytest.raises(ValueError, match="base_url must start with"):
-            Hippo(email="test@example.com", api_key="test-key", base_url="invalid-url")
+            Hippo(api_key="test-key", base_url="invalid-url")
 
     def test_init_custom_parameters(self):
         """Test initialization with custom parameters"""
@@ -140,7 +142,7 @@ class TestHippoInitialization:
                 status=200,
             )
 
-            with Hippo(email="test@example.com", api_key="test-key") as client:
+            with Hippo(api_key="test-key") as client:
                 assert client.session is not None
 
             # Session should be closed after context exit
@@ -164,7 +166,7 @@ class TestHippoAuthentication:
                 },
                 status=200,
             )
-            self.client = Hippo(email="test@example.com", api_key="test-key")
+            self.client = Hippo(api_key="test-key")
 
     @responses.activate
     def test_login_success(self):
@@ -181,7 +183,7 @@ class TestHippoAuthentication:
             status=200,
         )
 
-        response = self.client._login("test@example.com", "password")
+        response = self.client._login("test-api-key")
 
         assert isinstance(response, TokenResponse)
         assert response.access_token == "new-access-token"
@@ -198,7 +200,7 @@ class TestHippoAuthentication:
         )
 
         with pytest.raises(LexaAuthError):
-            self.client._login("test@example.com", "wrong-password")
+            self.client._login("wrong-api-key")
 
     @responses.activate
     def test_refresh_token_success(self):
@@ -257,7 +259,7 @@ class TestHippoFolderManagement:
                 },
                 status=200,
             )
-            self.client = Hippo(email="test@example.com", api_key="test-key")
+            self.client = Hippo(api_key="test-key")
 
     @responses.activate
     def test_create_folder_success(self):
@@ -389,7 +391,7 @@ class TestHippoFileManagement:
                 },
                 status=200,
             )
-            self.client = Hippo(email="test@example.com", api_key="test-key")
+            self.client = Hippo(api_key="test-key")
 
     @responses.activate
     def test_upload_file_success(self):
@@ -546,7 +548,7 @@ class TestHippoChatManagement:
                 },
                 status=200,
             )
-            self.client = Hippo(email="test@example.com", api_key="test-key")
+            self.client = Hippo(api_key="test-key")
 
     @responses.activate
     def test_create_chat_success(self):
@@ -687,7 +689,7 @@ class TestHippoAskManagement:
                 },
                 status=200,
             )
-            self.client = Hippo(email="test@example.com", api_key="test-key")
+            self.client = Hippo(api_key="test-key")
 
     @responses.activate
     def test_submit_ask_success_default(self):
@@ -892,7 +894,7 @@ class TestHippoConvenienceMethods:
                 },
                 status=200,
             )
-            self.client = Hippo(email="test@example.com", api_key="test-key")
+            self.client = Hippo(api_key="test-key")
 
     @responses.activate
     def test_get_folder_file_count(self):
@@ -962,7 +964,7 @@ class TestHippoErrorHandling:
                 },
                 status=200,
             )
-            self.client = Hippo(email="test@example.com", api_key="test-key")
+            self.client = Hippo(api_key="test-key")
 
     @responses.activate
     def test_request_timeout_error(self):
@@ -1097,7 +1099,7 @@ class TestHippoErrorHandling:
                 },
                 status=200,
             )
-            client = Hippo(email="test@example.com", api_key="test-key")
+            client = Hippo(api_key="test-key")
 
         # Should not raise any errors
         client.close()
@@ -1124,7 +1126,7 @@ class TestHippoRequestHeaders:
                 },
                 status=200,
             )
-            self.client = Hippo(email="test@example.com", api_key="test-key")
+            self.client = Hippo(api_key="test-key")
 
     @responses.activate
     def test_request_with_custom_headers(self):

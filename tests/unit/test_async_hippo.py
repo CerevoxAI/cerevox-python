@@ -7,6 +7,7 @@ including all methods, error handling, and edge cases.
 
 import asyncio
 import io
+import os
 from unittest.mock import patch
 
 import aiohttp
@@ -77,10 +78,9 @@ class TestAsyncHippoInitialization:
         """Clean up mocks"""
         self.mock_patcher.__exit__(None, None, None)
 
-    def test_init_with_email_and_api_key(self):
-        """Test initialization with email and API key parameters"""
-        client = AsyncHippo(email="test@example.com", api_key="test-api-key")
-        assert client.email == "test@example.com"
+    def test_init_with_api_key(self):
+        """Test initialization with API key parameter"""
+        client = AsyncHippo(api_key="test-api-key")
         assert client.api_key == "test-api-key"
         assert client.base_url == "https://dev.cerevox.ai/v1"
         assert client.timeout.total == 30.0
@@ -91,30 +91,29 @@ class TestAsyncHippoInitialization:
 
     def test_init_missing_credentials(self):
         """Test initialization fails without credentials"""
-        with pytest.raises(ValueError, match="Both email and api_key are required"):
-            AsyncHippo(email="", api_key="")
+        with patch.dict(os.environ, {}, clear=True):
+            with pytest.raises(
+                ValueError, match="api_key is required for authentication"
+            ):
+                AsyncHippo(api_key=None)
 
     def test_init_invalid_base_url(self):
         """Test initialization with invalid base URL"""
         with pytest.raises(ValueError, match="base_url must be a non-empty string"):
-            AsyncHippo(email="test@example.com", api_key="test-key", base_url="")
+            AsyncHippo(api_key="test-key", base_url="")
 
         with pytest.raises(ValueError, match="base_url must start with"):
-            AsyncHippo(
-                email="test@example.com", api_key="test-key", base_url="invalid-url"
-            )
+            AsyncHippo(api_key="test-key", base_url="invalid-url")
 
     def test_init_invalid_max_retries(self):
         """Test initialization with invalid max_retries"""
         with pytest.raises(TypeError, match="max_retries must be an integer"):
-            AsyncHippo(
-                email="test@example.com", api_key="test-key", max_retries="invalid"
-            )
+            AsyncHippo(api_key="test-key", max_retries="invalid")
 
         with pytest.raises(
             ValueError, match="max_retries must be a non-negative integer"
         ):
-            AsyncHippo(email="test@example.com", api_key="test-key", max_retries=-1)
+            AsyncHippo(api_key="test-key", max_retries=-1)
 
     def test_init_custom_parameters(self):
         """Test initialization with custom parameters"""
@@ -136,7 +135,7 @@ class TestAsyncHippoInitialization:
     @pytest.mark.asyncio
     async def test_context_manager(self):
         """Test async context manager functionality"""
-        async with AsyncHippo(email="test@example.com", api_key="test-key") as client:
+        async with AsyncHippo(api_key="test-key") as client:
             assert client.session is not None
             assert isinstance(client.session, aiohttp.ClientSession)
 
@@ -146,7 +145,7 @@ class TestAsyncHippoInitialization:
     @pytest.mark.asyncio
     async def test_start_and_close_session(self):
         """Test manual session management"""
-        client = AsyncHippo(email="test@example.com", api_key="test-key")
+        client = AsyncHippo(api_key="test-key")
 
         # Session should be None initially
         assert client.session is None
@@ -185,8 +184,8 @@ class TestAsyncHippoAuthentication:
             },
         )
 
-        async with AsyncHippo(email="test@example.com", api_key="test-key") as client:
-            response = await client._login("test@example.com", "password")
+        async with AsyncHippo(api_key="test-key") as client:
+            response = await client._login("test-api-key")
 
             assert isinstance(response, TokenResponse)
             assert response.access_token == "test-access-token"
@@ -204,9 +203,9 @@ class TestAsyncHippoAuthentication:
             status=401,
         )
 
-        async with AsyncHippo(email="test@example.com", api_key="test-key") as client:
+        async with AsyncHippo(api_key="test-key") as client:
             with pytest.raises(LexaAuthError):
-                await client._login("test@example.com", "wrong-password")
+                await client._login("wrong-api-key")
 
     @pytest.mark.asyncio
     async def test_refresh_token_success(self):
@@ -222,7 +221,7 @@ class TestAsyncHippoAuthentication:
             },
         )
 
-        async with AsyncHippo(email="test@example.com", api_key="test-key") as client:
+        async with AsyncHippo(api_key="test-key") as client:
             response = await client._refresh_token("old-refresh-token")
 
             assert isinstance(response, TokenResponse)
@@ -241,7 +240,7 @@ class TestAsyncHippoAuthentication:
             payload={"message": "Token revoked successfully", "status": "ok"},
         )
 
-        async with AsyncHippo(email="test@example.com", api_key="test-key") as client:
+        async with AsyncHippo(api_key="test-key") as client:
             response = await client._revoke_token()
 
             assert isinstance(response, MessageResponse)
@@ -256,7 +255,7 @@ class TestAsyncHippoAuthentication:
             payload={"message": "Token revoked successfully", "status": "ok"},
         )
 
-        async with AsyncHippo(email="test@example.com", api_key="test-key") as client:
+        async with AsyncHippo(api_key="test-key") as client:
             del client.session_kwargs["headers"]["Authorization"]
             response = await client._revoke_token()
 
@@ -266,7 +265,7 @@ class TestAsyncHippoAuthentication:
     @pytest.mark.asyncio
     async def test_refresh_token_with_none_session(self):
         """Test refresh_token when self.session is None (for code coverage)"""
-        client = AsyncHippo(email="test@example.com", api_key="test-key")
+        client = AsyncHippo(api_key="test-key")
         await client.start_session()
 
         try:
@@ -301,7 +300,7 @@ class TestAsyncHippoAuthentication:
     @pytest.mark.asyncio
     async def test_login_with_none_session(self):
         """Test login when self.session is None (for code coverage)"""
-        client = AsyncHippo(email="test@example.com", api_key="test-key")
+        client = AsyncHippo(api_key="test-key")
         await client.start_session()
 
         try:
@@ -321,7 +320,7 @@ class TestAsyncHippoAuthentication:
                 # This will trigger the condition at line 280 to be False
                 client.session = None
 
-                response = await client._login("test@example.com", "password")
+                response = await client._login("test-api-key")
 
                 # Should still return a valid TokenResponse
                 assert isinstance(response, TokenResponse)
@@ -362,7 +361,7 @@ class TestAsyncHippoFolderManagement:
             },
         )
 
-        async with AsyncHippo(email="test@example.com", api_key="test-key") as client:
+        async with AsyncHippo(api_key="test-key") as client:
             response = await client.create_folder("test-folder", "Test Folder")
 
             assert isinstance(response, FolderCreatedResponse)
@@ -384,7 +383,7 @@ class TestAsyncHippoFolderManagement:
             },
         )
 
-        async with AsyncHippo(email="test@example.com", api_key="test-key") as client:
+        async with AsyncHippo(api_key="test-key") as client:
             response = await client.get_folders()
 
             assert isinstance(response, list)
@@ -402,7 +401,7 @@ class TestAsyncHippoFolderManagement:
             },
         )
 
-        async with AsyncHippo(email="test@example.com", api_key="test-key") as client:
+        async with AsyncHippo(api_key="test-key") as client:
             response = await client.get_folders(search_name="test")
 
             assert len(response) == 1
@@ -422,7 +421,7 @@ class TestAsyncHippoFolderManagement:
             },
         )
 
-        async with AsyncHippo(email="test@example.com", api_key="test-key") as client:
+        async with AsyncHippo(api_key="test-key") as client:
             response = await client.get_folder_by_id("test-folder")
 
             assert isinstance(response, FolderItem)
@@ -438,7 +437,7 @@ class TestAsyncHippoFolderManagement:
             payload={"updated": True, "status": "ok"},
         )
 
-        async with AsyncHippo(email="test@example.com", api_key="test-key") as client:
+        async with AsyncHippo(api_key="test-key") as client:
             response = await client.update_folder("test-folder", "Updated Folder Name")
 
             assert isinstance(response, UpdatedResponse)
@@ -452,7 +451,7 @@ class TestAsyncHippoFolderManagement:
             payload={"deleted": True, "status": "ok"},
         )
 
-        async with AsyncHippo(email="test@example.com", api_key="test-key") as client:
+        async with AsyncHippo(api_key="test-key") as client:
             response = await client.delete_folder("test-folder")
 
             assert isinstance(response, DeletedResponse)
@@ -481,7 +480,7 @@ class TestAsyncHippoFileManagement:
             payload={"uploaded": True, "status": "ok", "uploads": ["test.txt"]},
         )
 
-        async with AsyncHippo(email="test@example.com", api_key="test-key") as client:
+        async with AsyncHippo(api_key="test-key") as client:
             # Create a real BytesIO object instead of mock_open
             fake_file = io.BytesIO(b"test content")
             with patch("builtins.open", return_value=fake_file):
@@ -506,7 +505,7 @@ class TestAsyncHippoFileManagement:
             },
         )
 
-        async with AsyncHippo(email="test@example.com", api_key="test-key") as client:
+        async with AsyncHippo(api_key="test-key") as client:
             files = [
                 {
                     "url": "https://example.com/file.pdf",
@@ -535,7 +534,7 @@ class TestAsyncHippoFileManagement:
             },
         )
 
-        async with AsyncHippo(email="test@example.com", api_key="test-key") as client:
+        async with AsyncHippo(api_key="test-key") as client:
             response = await client.get_files("test-folder")
 
             assert isinstance(response, list)
@@ -560,7 +559,7 @@ class TestAsyncHippoFileManagement:
             },
         )
 
-        async with AsyncHippo(email="test@example.com", api_key="test-key") as client:
+        async with AsyncHippo(api_key="test-key") as client:
             response = await client.get_files("test-folder", search_name="test")
 
             assert len(response) == 1
@@ -581,7 +580,7 @@ class TestAsyncHippoFileManagement:
             },
         )
 
-        async with AsyncHippo(email="test@example.com", api_key="test-key") as client:
+        async with AsyncHippo(api_key="test-key") as client:
             response = await client.get_file_by_id("test-folder", "file1")
 
             assert isinstance(response, FileItem)
@@ -596,7 +595,7 @@ class TestAsyncHippoFileManagement:
             payload={"deleted": True, "status": "ok"},
         )
 
-        async with AsyncHippo(email="test@example.com", api_key="test-key") as client:
+        async with AsyncHippo(api_key="test-key") as client:
             response = await client.delete_file_by_id("test-folder", "file1")
 
             assert isinstance(response, DeletedResponse)
@@ -610,7 +609,7 @@ class TestAsyncHippoFileManagement:
             payload={"deleted": True, "status": "ok"},
         )
 
-        async with AsyncHippo(email="test@example.com", api_key="test-key") as client:
+        async with AsyncHippo(api_key="test-key") as client:
             response = await client.delete_all_files("test-folder")
 
             assert isinstance(response, DeletedResponse)
@@ -644,7 +643,7 @@ class TestAsyncHippoChatManagement:
             },
         )
 
-        async with AsyncHippo(email="test@example.com", api_key="test-key") as client:
+        async with AsyncHippo(api_key="test-key") as client:
             response = await client.create_chat("test-folder")
 
             assert isinstance(response, ChatCreatedResponse)
@@ -668,7 +667,7 @@ class TestAsyncHippoChatManagement:
             },
         )
 
-        async with AsyncHippo(email="test@example.com", api_key="test-key") as client:
+        async with AsyncHippo(api_key="test-key") as client:
             response = await client.get_chats()
 
             assert isinstance(response, list)
@@ -692,7 +691,7 @@ class TestAsyncHippoChatManagement:
             },
         )
 
-        async with AsyncHippo(email="test@example.com", api_key="test-key") as client:
+        async with AsyncHippo(api_key="test-key") as client:
             response = await client.get_chats(folder_id="test-folder")
 
             assert len(response) == 1
@@ -711,7 +710,7 @@ class TestAsyncHippoChatManagement:
             },
         )
 
-        async with AsyncHippo(email="test@example.com", api_key="test-key") as client:
+        async with AsyncHippo(api_key="test-key") as client:
             response = await client.get_chat_by_id("chat123")
 
             assert isinstance(response, ChatItem)
@@ -726,7 +725,7 @@ class TestAsyncHippoChatManagement:
             payload={"updated": True, "status": "ok"},
         )
 
-        async with AsyncHippo(email="test@example.com", api_key="test-key") as client:
+        async with AsyncHippo(api_key="test-key") as client:
             response = await client.update_chat("chat123", "Updated Chat Name")
 
             assert isinstance(response, UpdatedResponse)
@@ -740,7 +739,7 @@ class TestAsyncHippoChatManagement:
             payload={"deleted": True, "status": "ok"},
         )
 
-        async with AsyncHippo(email="test@example.com", api_key="test-key") as client:
+        async with AsyncHippo(api_key="test-key") as client:
             response = await client.delete_chat("chat123")
 
             assert isinstance(response, DeletedResponse)
@@ -774,7 +773,7 @@ class TestAsyncHippoAskManagement:
             },
         )
 
-        async with AsyncHippo(email="test@example.com", api_key="test-key") as client:
+        async with AsyncHippo(api_key="test-key") as client:
             response = await client.submit_ask(
                 "chat123", "What is this document about?"
             )
@@ -806,7 +805,7 @@ class TestAsyncHippoAskManagement:
             },
         )
 
-        async with AsyncHippo(email="test@example.com", api_key="test-key") as client:
+        async with AsyncHippo(api_key="test-key") as client:
             response = await client.submit_ask(
                 "chat123",
                 "What is this document about?",
@@ -843,7 +842,7 @@ class TestAsyncHippoAskManagement:
             },
         )
 
-        async with AsyncHippo(email="test@example.com", api_key="test-key") as client:
+        async with AsyncHippo(api_key="test-key") as client:
             response = await client.get_asks("chat123")
 
             assert isinstance(response, list)
@@ -869,7 +868,7 @@ class TestAsyncHippoAskManagement:
             },
         )
 
-        async with AsyncHippo(email="test@example.com", api_key="test-key") as client:
+        async with AsyncHippo(api_key="test-key") as client:
             response = await client.get_asks("chat123", msg_maxlen=50)
 
             assert len(response) == 1
@@ -888,7 +887,7 @@ class TestAsyncHippoAskManagement:
             },
         )
 
-        async with AsyncHippo(email="test@example.com", api_key="test-key") as client:
+        async with AsyncHippo(api_key="test-key") as client:
             response = await client.get_ask_by_index("chat123", 1)
 
             assert isinstance(response, AskItem)
@@ -917,7 +916,7 @@ class TestAsyncHippoAskManagement:
             },
         )
 
-        async with AsyncHippo(email="test@example.com", api_key="test-key") as client:
+        async with AsyncHippo(api_key="test-key") as client:
             response = await client.get_ask_by_index(
                 "chat123", 1, show_files=True, show_source=True
             )
@@ -935,7 +934,7 @@ class TestAsyncHippoAskManagement:
             payload={"deleted": True, "status": "ok"},
         )
 
-        async with AsyncHippo(email="test@example.com", api_key="test-key") as client:
+        async with AsyncHippo(api_key="test-key") as client:
             response = await client.delete_ask_by_index("chat123", 1)
 
             assert isinstance(response, DeletedResponse)
@@ -970,7 +969,7 @@ class TestAsyncHippoConvenienceMethods:
             },
         )
 
-        async with AsyncHippo(email="test@example.com", api_key="test-key") as client:
+        async with AsyncHippo(api_key="test-key") as client:
             count = await client.get_folder_file_count("test-folder")
 
             assert count == 3
@@ -999,7 +998,7 @@ class TestAsyncHippoConvenienceMethods:
             },
         )
 
-        async with AsyncHippo(email="test@example.com", api_key="test-key") as client:
+        async with AsyncHippo(api_key="test-key") as client:
             count = await client.get_chat_ask_count("chat123")
 
             assert count == 2
@@ -1022,7 +1021,7 @@ class TestAsyncHippoErrorHandling:
     @pytest.mark.asyncio
     async def test_request_timeout_error(self):
         """Test timeout error handling"""
-        async with AsyncHippo(email="test@example.com", api_key="test-key") as client:
+        async with AsyncHippo(api_key="test-key") as client:
             # Mock timeout
             with patch.object(client.session, "request") as mock_request:
                 mock_request.side_effect = asyncio.TimeoutError("Request timed out")
@@ -1033,7 +1032,7 @@ class TestAsyncHippoErrorHandling:
     @pytest.mark.asyncio
     async def test_request_connection_error(self):
         """Test connection error handling"""
-        async with AsyncHippo(email="test@example.com", api_key="test-key") as client:
+        async with AsyncHippo(api_key="test-key") as client:
             # Mock connection error
             with patch.object(client.session, "request") as mock_request:
                 mock_request.side_effect = aiohttp.ClientError("Connection failed")
@@ -1053,7 +1052,7 @@ class TestAsyncHippoErrorHandling:
             status=404,
         )
 
-        async with AsyncHippo(email="test@example.com", api_key="test-key") as client:
+        async with AsyncHippo(api_key="test-key") as client:
             with pytest.raises(LexaError):
                 await client.get_folder_by_id("nonexistent")
 
@@ -1067,7 +1066,7 @@ class TestAsyncHippoErrorHandling:
             content_type="text/plain",
         )
 
-        async with AsyncHippo(email="test@example.com", api_key="test-key") as client:
+        async with AsyncHippo(api_key="test-key") as client:
             # This should not raise an error and return a basic success response
             response_data = await client._request("DELETE", "/folders/test-folder")
             assert response_data == {"status": "success"}
@@ -1082,7 +1081,7 @@ class TestAsyncHippoErrorHandling:
             content_type="text/plain",
         )
 
-        async with AsyncHippo(email="test@example.com", api_key="test-key") as client:
+        async with AsyncHippo(api_key="test-key") as client:
             with pytest.raises(LexaError) as exc_info:
                 await client.get_folder_by_id("error")
 
@@ -1111,7 +1110,7 @@ class TestAsyncHippoRequestHeaders:
         """Test request with custom headers"""
         self.mock.get("https://dev.cerevox.ai/v1/folders", payload={"folders": []})
 
-        async with AsyncHippo(email="test@example.com", api_key="test-key") as client:
+        async with AsyncHippo(api_key="test-key") as client:
             # Make request with custom headers - just verify it doesn't error
             response = await client._request(
                 "GET", "/folders", headers={"X-Custom-Header": "custom-value"}
@@ -1126,7 +1125,7 @@ class TestAsyncHippoRequestHeaders:
             payload={"uploaded": True, "status": "ok", "uploads": ["test.txt"]},
         )
 
-        async with AsyncHippo(email="test@example.com", api_key="test-key") as client:
+        async with AsyncHippo(api_key="test-key") as client:
             # Create a real BytesIO object instead of mock_open
             fake_file = io.BytesIO(b"test content")
             with patch("builtins.open", return_value=fake_file):
@@ -1153,7 +1152,7 @@ class TestAsyncHippoRequestHeaders:
             payload={"uploaded": True, "status": "ok", "uploads": ["test.txt"]},
         )
 
-        async with AsyncHippo(email="test@example.com", api_key="test-key") as client:
+        async with AsyncHippo(api_key="test-key") as client:
             # Test JSON request
             response1 = await client.create_folder("test", "Test")
             assert response1.created is True

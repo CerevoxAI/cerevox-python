@@ -42,7 +42,7 @@ class AsyncHippo(AsyncBaseClient):
     question answering on your documents.
 
     Example:
-        >>> async with AsyncHippo(email="user@example.com", api_key="password") as client:
+        >>> async with AsyncHippo(api_key="your-api-key") as client:
         ...     # Client automatically authenticates during context entry
         ...     # Create folder and upload files
         ...     await client.create_folder("docs", "My Documents")
@@ -58,7 +58,6 @@ class AsyncHippo(AsyncBaseClient):
     def __init__(
         self,
         *,
-        email: Optional[str] = None,
         api_key: Optional[str] = None,
         base_url: str = "https://dev.cerevox.ai/v1",
         max_retries: int = 3,
@@ -69,15 +68,13 @@ class AsyncHippo(AsyncBaseClient):
         Initialize the AsyncHippo client
 
         Args:
-            email: User email address for authentication
-            api_key: User password for authentication
+            api_key: User Personal Access Token (PAT) for authentication
             base_url: Base URL for the Cerevox RAG API
             timeout: Request timeout in seconds
             max_retries: Maximum number of retry attempts for failed requests
             **kwargs: Additional aiohttp ClientSession arguments
         """
         super().__init__(
-            email=email,
             api_key=api_key,
             base_url=base_url,
             max_retries=max_retries,

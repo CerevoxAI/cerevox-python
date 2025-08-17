@@ -32,7 +32,7 @@ class AsyncAccount(AsyncBaseClient):
     supporting user authentication, account management, and user administration.
 
     Example:
-        >>> async with AsyncAccount(email="user@example.com", api_key="password") as client:
+        >>> async with AsyncAccount(api_key="your-api-key") as client:
         ...     # Client automatically authenticates during context entry
         ...     # Get account information
         ...     account = await client.get_account_info()
@@ -47,7 +47,6 @@ class AsyncAccount(AsyncBaseClient):
     def __init__(
         self,
         *,
-        email: Optional[str] = None,
         api_key: Optional[str] = None,
         base_url: str = "https://dev.cerevox.ai/v1",
         max_retries: int = 3,
@@ -58,15 +57,13 @@ class AsyncAccount(AsyncBaseClient):
         Initialize the AsyncAccount client
 
         Args:
-            email: User email address for authentication
-            api_key: User password for authentication
+            api_key: User Personal Access Token (PAT) for authentication
             base_url: Base URL for the Cerevox Account API
             timeout: Request timeout in seconds
             max_retries: Maximum number of retry attempts for failed requests
             **kwargs: Additional aiohttp ClientSession arguments
         """
         super().__init__(
-            email=email,
             api_key=api_key,
             base_url=base_url,
             max_retries=max_retries,

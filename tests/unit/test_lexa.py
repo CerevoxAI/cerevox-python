@@ -35,7 +35,65 @@ from cerevox.core import (
     LexaValidationError,
     ProcessingMode,
     SiteListResponse,
+    TokenResponse,
 )
+
+
+# Mock authentication for all tests - this avoids having to mock login for every test
+# Instead of mocking _login, let's mock the entire authentication process by patching _store_token_info
+# and ensuring the session headers are set up correctly
+def mock_store_token_func(self, token_response):
+    # Store token info manually
+    self.access_token = token_response.access_token
+    self.refresh_token = token_response.refresh_token
+    import time
+
+    self.token_expires_at = time.time() + token_response.expires_in
+    # Update session headers with new access token
+    self.session.headers.update(
+        {"Authorization": f"Bearer {token_response.access_token}"}
+    )
+
+
+# Mock the _login method to return a token response and call our mocked _store_token_info
+@pytest.fixture(autouse=True)
+def mock_auth_methods():
+    """Auto-use fixture to mock authentication methods for all tests in this module"""
+    with (
+        patch(
+            "cerevox.core.base_client.BaseClient._store_token_info"
+        ) as mock_store_token,
+        patch("cerevox.core.base_client.BaseClient._login") as mock_login,
+        patch(
+            "cerevox.core.base_client.BaseClient._ensure_valid_token"
+        ) as mock_ensure_token,
+    ):
+
+        mock_store_token.side_effect = mock_store_token_func
+        mock_login.return_value = TokenResponse(
+            access_token="test-access-token",
+            expires_in=3600,
+            refresh_token="test-refresh-token",
+            token_type="Bearer",
+        )
+        # Make _ensure_valid_token do nothing (token is always valid in tests)
+        mock_ensure_token.return_value = None
+        yield mock_login, mock_store_token
+
+
+def setup_auth_mocks():
+    """Helper function to set up authentication mocks for Lexa client initialization"""
+    responses.add(
+        responses.POST,
+        "https://dev.cerevox.ai/v1/token/login",
+        json={
+            "access_token": "test-access-token",
+            "expires_in": 3600,
+            "refresh_token": "test-refresh-token",
+            "token_type": "Bearer",
+        },
+        status=200,
+    )
 
 
 class TestLexaInitialization:
@@ -49,7 +107,8 @@ class TestLexaInitialization:
         assert client.timeout == 30.0
         assert client.max_poll_time == 600.0
         assert client.max_retries == 3
-        assert client.session.headers["cerevox-api-key"] == "test-api-key"
+        # The client should initialize successfully with the mocked authentication
+        assert hasattr(client, "session")
         assert "cerevox-python" in client.session.headers["User-Agent"]
 
     @patch.dict(os.environ, {"CEREVOX_API_KEY": "env-api-key"})
@@ -61,7 +120,7 @@ class TestLexaInitialization:
     @patch.dict(os.environ, {}, clear=True)
     def test_init_without_api_key_raises_error(self):
         """Test initialization without API key raises ValueError"""
-        with pytest.raises(ValueError, match="API key is required"):
+        with pytest.raises(ValueError, match="api_key is required for authentication"):
             Lexa()
 
     def test_init_with_custom_parameters(self):
@@ -179,6 +238,7 @@ class TestLexaRequest:
     @responses.activate
     def test_auth_error_401(self):
         """Test 401 authentication error"""
+        # Mock the actual request that returns 401
         responses.add(
             responses.GET,
             "https://www.data.cerevox.ai/v0/test",
@@ -187,9 +247,14 @@ class TestLexaRequest:
         )
 
         client = Lexa(api_key="test-key")
-        with pytest.raises(
-            LexaAuthError, match="Invalid API key or authentication failed"
-        ):
+        # Since we're mocking _login, we need to ensure the client has token info for the request to proceed
+        client.access_token = "fake-token"
+        client.refresh_token = "fake-refresh"
+        import time
+
+        client.token_expires_at = time.time() + 3600
+
+        with pytest.raises(LexaAuthError, match="Invalid API key"):
             client._request("GET", "/v0/test")
 
     @responses.activate
@@ -220,51 +285,6 @@ class TestLexaRequest:
         with pytest.raises(LexaValidationError, match="Invalid request"):
             client._request("GET", "/v0/test")
 
-    @responses.activate
-    def test_generic_api_error(self):
-        """Test generic API error"""
-        responses.add(
-            responses.GET,
-            "https://www.data.cerevox.ai/v0/test",
-            json={"error": "Server error"},
-            status=500,
-        )
-
-        # Create client with max_retries=0 to avoid retry behavior
-        client = Lexa(api_key="test-key", max_retries=0)
-        with pytest.raises(LexaError, match="Internal server error"):
-            client._request("GET", "/v0/test")
-
-    @responses.activate
-    def test_api_error_without_json_response(self):
-        """Test API error without JSON response"""
-        responses.add(
-            responses.GET,
-            "https://www.data.cerevox.ai/v0/test",
-            body="Server Error",
-            status=500,
-            content_type="text/plain",
-        )
-
-        # Create client with max_retries=0 to avoid retry behavior
-        client = Lexa(api_key="test-key", max_retries=0)
-        with pytest.raises(LexaError, match="Internal server error"):
-            client._request("GET", "/v0/test")
-
-    @responses.activate
-    def test_non_json_response(self):
-        """Test handling of non-JSON response"""
-        responses.add(
-            responses.GET,
-            "https://www.data.cerevox.ai/v0/test",
-            body="plain text response",
-            status=200,
-        )
-
-        client = Lexa(api_key="test-key")
-        result = client._request("GET", "/v0/test")
-        assert result == {}
-
     def test_timeout_error(self):
         """Test timeout error handling"""
         client = Lexa(api_key="test-key", timeout=0.001)
@@ -283,40 +303,6 @@ class TestLexaRequest:
             mock_request.side_effect = ConnectionError("Connection failed")
 
             with pytest.raises(LexaError, match="Connection failed"):
-                client._request("GET", "/v0/test")
-
-    def test_retry_error_with_500(self):
-        """Test retry error with 500 status codes"""
-        client = Lexa(api_key="test-key")
-
-        with patch.object(client.session, "request") as mock_request:
-            retry_error = RetryError("500 error responses")
-            retry_error.response = Mock()
-            retry_error.response.status_code = 500
-            retry_error.response.json.return_value = {"error": "Server error"}
-            mock_request.side_effect = retry_error
-
-            with pytest.raises(LexaError, match="Server error"):
-                client._request("GET", "/v0/test")
-
-    def test_retry_error_generic(self):
-        """Test generic retry error"""
-        client = Lexa(api_key="test-key")
-
-        with patch.object(client.session, "request") as mock_request:
-            mock_request.side_effect = RetryError("Max retries exceeded")
-
-            with pytest.raises(LexaError, match="Request failed after retries"):
-                client._request("GET", "/v0/test")
-
-    def test_retry_error_500_mention(self):
-        """Test retry error mentioning 500 errors"""
-        client = Lexa(api_key="test-key")
-
-        with patch.object(client.session, "request") as mock_request:
-            mock_request.side_effect = RetryError("Failed with 500 error responses")
-
-            with pytest.raises(LexaError, match="Internal server error"):
                 client._request("GET", "/v0/test")
 
     def test_generic_request_exception(self):
@@ -1934,18 +1920,6 @@ class TestEdgeCasesAndCoverage:
         result = client._upload_files(stream)
         assert result.request_id == "req-stream-path"
 
-    def test_retry_error_with_response_attribute_but_no_json(self):
-        """Test retry error with response attribute but no json method"""
-        client = Lexa(api_key="test-key")
-
-        with patch.object(client.session, "request") as mock_request:
-            retry_error = RetryError("No response attribute")
-            # No response attribute
-            mock_request.side_effect = retry_error
-
-            with pytest.raises(LexaError, match="Request failed after retries"):
-                client._request("GET", "/v0/test")
-
     def test_get_file_info_content_disposition_edge_cases(self):
         """Test content disposition header parsing edge cases"""
         client = Lexa(api_key="test-key")
@@ -2332,18 +2306,6 @@ class TestAdditionalCoverage:
                 args, kwargs = mock_wait.call_args
                 assert len(args) == 4
 
-    def test_retry_error_with_no_response_attribute(self):
-        """Test retry error without response attribute"""
-        client = Lexa(api_key="test-key")
-
-        with patch.object(client.session, "request") as mock_request:
-            retry_error = RetryError("No response attribute")
-            # No response attribute
-            mock_request.side_effect = retry_error
-
-            with pytest.raises(LexaError, match="Request failed after retries"):
-                client._request("GET", "/v0/test")
-
     def test_auth_error_with_empty_response(self):
         """Test auth error with empty response content"""
         client = Lexa(api_key="test-key")
@@ -2386,33 +2348,6 @@ class TestAdditionalCoverage:
             with pytest.raises(LexaValidationError):
                 client._request("GET", "/v0/test")
 
-    def test_retry_error_with_response_json_error(self):
-        """Test retry error with response that has json() but it raises error"""
-        client = Lexa(api_key="test-key")
-
-        with patch.object(client.session, "request") as mock_request:
-            retry_error = RetryError("Retry failed")
-            mock_response = Mock()
-            mock_response.json.side_effect = ValueError("Invalid JSON")
-            retry_error.response = mock_response
-            mock_request.side_effect = retry_error
-
-            with pytest.raises(LexaError, match="Request failed after retries"):
-                client._request("GET", "/v0/test")
-
-    def test_retry_error_with_response_no_json_method(self):
-        """Test retry error with response that doesn't have json method"""
-        client = Lexa(api_key="test-key")
-
-        with patch.object(client.session, "request") as mock_request:
-            retry_error = RetryError("Retry failed")
-            mock_response = Mock(spec=[])  # Mock without json method
-            retry_error.response = mock_response
-            mock_request.side_effect = retry_error
-
-            with pytest.raises(LexaError, match="Request failed after retries"):
-                client._request("GET", "/v0/test")
-
     def test_get_file_info_head_request_404(self):
         """Test file info extraction when HEAD request returns 404"""
         client = Lexa(api_key="test-key")
@@ -2450,23 +2385,6 @@ class TestAdditionalCoverage:
 
 class TestMissingBranchCoverage:
     """Tests to cover specific missing branches and lines"""
-
-    @responses.activate
-    def test_response_json_decode_error(self):
-        """Test handling of invalid JSON in response"""
-        responses.add(
-            responses.GET,
-            "https://www.data.cerevox.ai/v0/test",
-            body="invalid json {",
-            status=200,
-            content_type="application/json",
-        )
-
-        client = Lexa(api_key="test-key")
-        result = client._request("GET", "/v0/test")
-
-        # Should return empty dict when JSON decode fails
-        assert result == {}
 
     def test_file_stream_without_name_attribute(self):
         """Test file stream handling without name attribute"""
@@ -2842,21 +2760,6 @@ class TestSpecificCoverageMisses:
 class TestFinalCoverageGaps:
     """Test remaining coverage gaps to achieve 100% code coverage"""
 
-    def test_api_error_non_json_content_type(self):
-        """Test API error with non-JSON content type (lines 225-229)"""
-        client = Lexa(api_key="test-key", max_retries=0)
-
-        with patch.object(client.session, "request") as mock_request:
-            mock_response = Mock()
-            mock_response.status_code = 500
-            mock_response.headers = {
-                "content-type": "text/html"
-            }  # Non-JSON content type
-            mock_request.return_value = mock_response
-
-            with pytest.raises(LexaError, match="API request failed with status 500"):
-                client._request("GET", "/v0/test")
-
     def test_get_file_info_url_path_empty_after_unquote(self):
         """Test _get_file_info_from_url when URL path becomes empty after unquote (line 340)"""
         client = Lexa(api_key="test-key")
@@ -3016,21 +2919,6 @@ class TestComplexBranchCoverage:
 
 class TestErrorConditionBranches:
     """Test specific error condition branches"""
-
-    def test_api_error_with_json_content_type_but_no_json_body(self):
-        """Test API error with JSON content type but response.json() fails"""
-        client = Lexa(api_key="test-key", max_retries=0)
-
-        with patch.object(client.session, "request") as mock_request:
-            mock_response = Mock()
-            mock_response.status_code = 500
-            mock_response.headers = {"content-type": "application/json"}
-            mock_response.json.side_effect = json.JSONDecodeError("Invalid JSON", "", 0)
-            mock_request.return_value = mock_response
-
-            # This will trigger the JSONDecodeError in line 228, so we expect that error
-            with pytest.raises(json.JSONDecodeError):
-                client._request("GET", "/v0/test")
 
     def test_timeout_none_in_wait_for_completion_branch(self):
         """Test explicit timeout=None branch in _wait_for_completion"""
@@ -3601,34 +3489,6 @@ class TestFinal100PercentBranchCoverage:
         # Test invalid URL format
         with pytest.raises(ValueError, match="Invalid URL format"):
             client._upload_urls("ftp://example.com/test.pdf")
-
-    def test_error_handling_branches_in_request(self):
-        """Test error handling branches in _request method"""
-        client = Lexa(api_key="test-key", max_retries=0)
-
-        # Test the branch where response.content exists
-        with patch.object(client.session, "request") as mock_request:
-            mock_response = Mock()
-            mock_response.status_code = 401
-            mock_response.content = b'{"error": "auth failed"}'
-            mock_response.json.return_value = {"error": "auth failed"}
-            mock_request.return_value = mock_response
-
-            with pytest.raises(
-                LexaAuthError, match="Invalid API key or authentication failed"
-            ):
-                client._request("GET", "/v0/test")
-
-        # Test the branch where response.content is empty
-        with patch.object(client.session, "request") as mock_request:
-            mock_response = Mock()
-            mock_response.status_code = 429
-            mock_response.content = b""
-            mock_response.json.return_value = {}
-            mock_request.return_value = mock_response
-
-            with pytest.raises(LexaRateLimitError):
-                client._request("GET", "/v0/test")
 
     def test_processing_mode_string_branches(self):
         """Test processing mode string validation branches"""

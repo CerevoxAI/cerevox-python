@@ -75,46 +75,32 @@ class TestAsyncAccountInitialization:
         """Clean up mocks"""
         self.mock_patcher.__exit__(None, None, None)
 
-    def test_init_with_email_and_api_key(self):
-        """Test initialization with email and API key parameters"""
-        client = AsyncAccount(email="test@example.com", api_key="test-api-key")
-        assert client.email == "test@example.com"
+    def test_init_with_api_key(self):
+        """Test initialization with API key parameter"""
+        client = AsyncAccount(api_key="test-api-key")
         assert client.api_key == "test-api-key"
         assert client.base_url == "https://dev.cerevox.ai/v1"
         assert client.timeout.total == 30.0
         assert client.max_retries == 3
 
-    def test_init_without_email_or_api_key(self):
-        """Test initialization without email or API key raises error"""
+    def test_init_without_api_key(self):
+        """Test initialization without API key raises error"""
         with patch.dict(os.environ, {}, clear=True):
             with pytest.raises(
                 ValueError,
-                match="Both email and api_key are required for authentication",
+                match="api_key is required for authentication",
             ):
                 AsyncAccount()
-
-            with pytest.raises(
-                ValueError,
-                match="Both email and api_key are required for authentication",
-            ):
-                AsyncAccount(email="test@example.com")
-
-            with pytest.raises(
-                ValueError,
-                match="Both email and api_key are required for authentication",
-            ):
-                AsyncAccount(api_key="test-key")
 
     def test_init_with_env_var(self):
         """Test initialization with environment variable"""
         with patch.dict(os.environ, {"CEREVOX_API_KEY": "env-api-key"}):
-            client = AsyncAccount(email="test@example.com", api_key=None)
+            client = AsyncAccount(api_key=None)
             assert client.api_key == "env-api-key"
 
     def test_init_with_custom_base_url(self):
         """Test initialization with custom base URL"""
         client = AsyncAccount(
-            email="test@example.com",
             api_key="test-key",
             base_url="https://custom.api.com",
         )
@@ -123,38 +109,34 @@ class TestAsyncAccountInitialization:
     def test_init_invalid_base_url(self):
         """Test initialization with invalid base URL"""
         with pytest.raises(ValueError, match="base_url must start with"):
-            AsyncAccount(
-                email="test@example.com", api_key="test-key", base_url="invalid-url"
-            )
+            AsyncAccount(api_key="test-key", base_url="invalid-url")
 
     def test_init_empty_base_url(self):
         """Test initialization with empty base URL"""
         with pytest.raises(ValueError, match="base_url must be a non-empty string"):
-            AsyncAccount(email="test@example.com", api_key="test-key", base_url="")
+            AsyncAccount(api_key="test-key", base_url="")
 
     def test_init_invalid_max_retries(self):
         """Test initialization with invalid max_retries"""
         with pytest.raises(TypeError, match="max_retries must be an integer"):
-            AsyncAccount(
-                email="test@example.com", api_key="test-key", max_retries="invalid"
-            )
+            AsyncAccount(api_key="test-key", max_retries="invalid")
 
         with pytest.raises(
             ValueError, match="max_retries must be a non-negative integer"
         ):
-            AsyncAccount(email="test@example.com", api_key="test-key", max_retries=-1)
+            AsyncAccount(api_key="test-key", max_retries=-1)
 
     @pytest.mark.asyncio
     async def test_context_manager(self):
         """Test async context manager functionality"""
-        async with AsyncAccount(email="test@example.com", api_key="test-key") as client:
+        async with AsyncAccount(api_key="test-key") as client:
             assert client.api_key == "test-key"
             assert client.session is not None
 
     @pytest.mark.asyncio
     async def test_session_lifecycle(self):
         """Test session start and close lifecycle"""
-        client = AsyncAccount(email="test@example.com", api_key="test-key")
+        client = AsyncAccount(api_key="test-key")
 
         # Session should be None initially
         assert client.session is None
@@ -196,8 +178,8 @@ class TestAsyncAccountAuthentication:
             headers={"x-request-id": "req-123"},
         )
 
-        async with AsyncAccount(email="test@example.com", api_key="test-key") as client:
-            result = await client._login("user@example.com", "password123")
+        async with AsyncAccount(api_key="test-key") as client:
+            result = await client._login("test-api-key")
 
             assert isinstance(result, TokenResponse)
             assert result.access_token == "access_123"
@@ -216,9 +198,9 @@ class TestAsyncAccountAuthentication:
             headers={"x-request-id": "req-123"},
         )
 
-        async with AsyncAccount(email="test@example.com", api_key="test-key") as client:
+        async with AsyncAccount(api_key="test-key") as client:
             with pytest.raises(LexaAuthError):
-                await client._login("test@example.com", "wrong-password")
+                await client._login("wrong-api-key")
 
     @pytest.mark.asyncio
     async def test_refresh_token_success(self):
@@ -234,7 +216,7 @@ class TestAsyncAccountAuthentication:
             status=200,
         )
 
-        async with AsyncAccount(email="test@example.com", api_key="test-key") as client:
+        async with AsyncAccount(api_key="test-key") as client:
             result = await client._refresh_token("refresh_456")
 
             assert isinstance(result, TokenResponse)
@@ -249,7 +231,7 @@ class TestAsyncAccountAuthentication:
             status=200,
         )
 
-        async with AsyncAccount(email="test@example.com", api_key="test-key") as client:
+        async with AsyncAccount(api_key="test-key") as client:
             result = await client._revoke_token()
 
             assert isinstance(result, MessageResponse)
@@ -283,7 +265,7 @@ class TestAsyncAccountManagement:
             status=200,
         )
 
-        async with AsyncAccount(email="test@example.com", api_key="test-key") as client:
+        async with AsyncAccount(api_key="test-key") as client:
             result = await client.get_account_info()
 
             assert isinstance(result, AccountInfo)
@@ -307,7 +289,7 @@ class TestAsyncAccountManagement:
             status=200,
         )
 
-        async with AsyncAccount(email="test@example.com", api_key="test-key") as client:
+        async with AsyncAccount(api_key="test-key") as client:
             result = await client.get_account_plan("acc-123")
 
             assert isinstance(result, AccountPlan)
@@ -330,7 +312,7 @@ class TestAsyncAccountManagement:
             status=200,
         )
 
-        async with AsyncAccount(email="test@example.com", api_key="test-key") as client:
+        async with AsyncAccount(api_key="test-key") as client:
             result = await client.get_account_usage("acc-123")
 
             assert isinstance(result, UsageMetrics)
@@ -362,7 +344,7 @@ class TestAsyncUserManagement:
             status=201,
         )
 
-        async with AsyncAccount(email="test@example.com", api_key="test-key") as client:
+        async with AsyncAccount(api_key="test-key") as client:
             result = await client.create_user("new@example.com", "New User")
 
             assert isinstance(result, CreatedResponse)
@@ -378,7 +360,7 @@ class TestAsyncUserManagement:
             status=403,
         )
 
-        async with AsyncAccount(email="test@example.com", api_key="test-key") as client:
+        async with AsyncAccount(api_key="test-key") as client:
             with pytest.raises(InsufficientPermissionsError):
                 await client.create_user("new@example.com", "New User")
 
@@ -410,7 +392,7 @@ class TestAsyncUserManagement:
             status=200,
         )
 
-        async with AsyncAccount(email="test@example.com", api_key="test-key") as client:
+        async with AsyncAccount(api_key="test-key") as client:
             result = await client.get_users()
 
             assert isinstance(result, list)
@@ -439,7 +421,7 @@ class TestAsyncUserManagement:
             status=200,
         )
 
-        async with AsyncAccount(email="test@example.com", api_key="test-key") as client:
+        async with AsyncAccount(api_key="test-key") as client:
             result = await client.get_users()
 
             assert isinstance(result, list)
@@ -462,7 +444,7 @@ class TestAsyncUserManagement:
             status=200,
         )
 
-        async with AsyncAccount(email="test@example.com", api_key="test-key") as client:
+        async with AsyncAccount(api_key="test-key") as client:
             result = await client.get_user_me()
 
             assert isinstance(result, User)
@@ -479,7 +461,7 @@ class TestAsyncUserManagement:
             status=200,
         )
 
-        async with AsyncAccount(email="test@example.com", api_key="test-key") as client:
+        async with AsyncAccount(api_key="test-key") as client:
             result = await client.update_user_me("Updated Name")
 
             assert isinstance(result, UpdatedResponse)
@@ -502,7 +484,7 @@ class TestAsyncUserManagement:
             status=200,
         )
 
-        async with AsyncAccount(email="test@example.com", api_key="test-key") as client:
+        async with AsyncAccount(api_key="test-key") as client:
             result = await client.get_user_by_id("user-456")
 
             assert isinstance(result, User)
@@ -518,7 +500,7 @@ class TestAsyncUserManagement:
             status=403,
         )
 
-        async with AsyncAccount(email="test@example.com", api_key="test-key") as client:
+        async with AsyncAccount(api_key="test-key") as client:
             with pytest.raises(InsufficientPermissionsError):
                 await client.get_user_by_id("user-456")
 
@@ -531,7 +513,7 @@ class TestAsyncUserManagement:
             status=200,
         )
 
-        async with AsyncAccount(email="test@example.com", api_key="test-key") as client:
+        async with AsyncAccount(api_key="test-key") as client:
             result = await client.update_user_by_id("user-456", "New Name")
 
             assert isinstance(result, UpdatedResponse)
@@ -546,7 +528,7 @@ class TestAsyncUserManagement:
             status=200,
         )
 
-        async with AsyncAccount(email="test@example.com", api_key="test-key") as client:
+        async with AsyncAccount(api_key="test-key") as client:
             result = await client.delete_user_by_id("user-456", "confirm@example.com")
 
             assert isinstance(result, DeletedResponse)
@@ -575,7 +557,7 @@ class TestAsyncAccountErrorHandling:
             exception=asyncio.TimeoutError(),
         )
 
-        async with AsyncAccount(email="test@example.com", api_key="test-key") as client:
+        async with AsyncAccount(api_key="test-key") as client:
             with pytest.raises(LexaTimeoutError):
                 await client.get_account_info()
 
@@ -587,7 +569,7 @@ class TestAsyncAccountErrorHandling:
             exception=aiohttp.ClientError("Connection failed"),
         )
 
-        async with AsyncAccount(email="test@example.com", api_key="test-key") as client:
+        async with AsyncAccount(api_key="test-key") as client:
             with pytest.raises(LexaError):
                 await client.get_account_info()
 
@@ -601,7 +583,7 @@ class TestAsyncAccountErrorHandling:
             headers={"x-request-id": "req-123"},
         )
 
-        async with AsyncAccount(email="test@example.com", api_key="test-key") as client:
+        async with AsyncAccount(api_key="test-key") as client:
             with pytest.raises(LexaRateLimitError) as exc_info:
                 await client.get_account_info()
 
@@ -619,7 +601,7 @@ class TestAsyncAccountErrorHandling:
             status=400,
         )
 
-        async with AsyncAccount(email="test@example.com", api_key="test-key") as client:
+        async with AsyncAccount(api_key="test-key") as client:
             with pytest.raises(LexaValidationError) as exc_info:
                 await client.create_user("invalid-email", "Test User")
 
@@ -635,7 +617,7 @@ class TestAsyncAccountErrorHandling:
             content_type="text/plain",
         )
 
-        async with AsyncAccount(email="test@example.com", api_key="test-key") as client:
+        async with AsyncAccount(api_key="test-key") as client:
             # Use the _request method directly to test non-JSON handling
             result = await client._request("GET", "/users/me")
             # Should return basic success response for non-JSON 200 responses
@@ -651,7 +633,7 @@ class TestAsyncAccountErrorHandling:
             # No x-request-id header
         )
 
-        async with AsyncAccount(email="test@example.com", api_key="test-key") as client:
+        async with AsyncAccount(api_key="test-key") as client:
             with pytest.raises(LexaError) as exc_info:
                 await client.get_account_info()
 
@@ -667,7 +649,7 @@ class TestAsyncAccountErrorHandling:
             status=200,
         )
 
-        client = AsyncAccount(email="test@example.com", api_key="test-key")
+        client = AsyncAccount(api_key="test-key")
         # Don't use context manager to test auto-start
         assert client.session is None
 
@@ -695,7 +677,7 @@ class TestAsyncAccountSessionManagement:
     @pytest.mark.asyncio
     async def test_close_session_when_none(self):
         """Test closing session when it's None"""
-        client = AsyncAccount(email="test@example.com", api_key="test-key")
+        client = AsyncAccount(api_key="test-key")
         assert client.session is None
         # Should not raise an error
         await client.close_session()
@@ -704,7 +686,7 @@ class TestAsyncAccountSessionManagement:
     @pytest.mark.asyncio
     async def test_multiple_session_starts(self):
         """Test multiple session start calls"""
-        client = AsyncAccount(email="test@example.com", api_key="test-key")
+        client = AsyncAccount(api_key="test-key")
 
         await client.start_session()
         session1 = client.session
@@ -742,7 +724,7 @@ class TestAsyncAccountFullCoverage:
             content_type="text/plain",
         )
 
-        client = AsyncAccount(email="test@example.com", api_key="test-key")
+        client = AsyncAccount(api_key="test-key")
         await client.start_session()
         # Should raise LexaValidationError with error data
         with pytest.raises(LexaValidationError) as exc_info:
@@ -768,7 +750,7 @@ class TestAsyncAccountFullCoverage:
             status=401,
         )
 
-        client = AsyncAccount(email="test@example.com", api_key="test-key")
+        client = AsyncAccount(api_key="test-key")
         await client.start_session()
         # This should trigger the LexaAuthError with 401 status, which will hit line 357
         # (the raise statement that re-raises when status_code != 403)
@@ -794,7 +776,7 @@ class TestAsyncAccountFullCoverage:
             status=401,
         )
 
-        client = AsyncAccount(email="test@example.com", api_key="test-key")
+        client = AsyncAccount(api_key="test-key")
         await client.start_session()
         # This should trigger the LexaAuthError with 401 status, which will hit line 357
         # (the raise statement that re-raises when status_code != 403)
@@ -820,7 +802,7 @@ class TestAsyncAccountFullCoverage:
             status=401,
         )
 
-        client = AsyncAccount(email="test@example.com", api_key="test-key")
+        client = AsyncAccount(api_key="test-key")
         await client.start_session()
         with pytest.raises(LexaAuthError) as exc_info:
             await client.update_user_by_id("user-456", "New Name")
@@ -841,7 +823,7 @@ class TestAsyncAccountFullCoverage:
             status=403,
         )
 
-        client = AsyncAccount(email="test@example.com", api_key="test-key")
+        client = AsyncAccount(api_key="test-key")
         await client.start_session()
         with pytest.raises(InsufficientPermissionsError) as exc_info:
             await client.update_user_by_id("user-456", "New Name")
@@ -865,7 +847,7 @@ class TestAsyncAccountFullCoverage:
             status=401,
         )
 
-        client = AsyncAccount(email="test@example.com", api_key="test-key")
+        client = AsyncAccount(api_key="test-key")
         await client.start_session()
         with pytest.raises(LexaAuthError) as exc_info:
             await client.delete_user_by_id("user-456", "confirm@example.com")
@@ -886,7 +868,7 @@ class TestAsyncAccountFullCoverage:
             status=403,
         )
 
-        client = AsyncAccount(email="test@example.com", api_key="test-key")
+        client = AsyncAccount(api_key="test-key")
         await client.start_session()
         with pytest.raises(InsufficientPermissionsError) as exc_info:
             await client.delete_user_by_id("user-456", "confirm@example.com")
