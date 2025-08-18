@@ -143,8 +143,10 @@ python examples/document_vector_db_preparation.py  # Vector DB integration
 
 ## 📚 Documentation
 
+### 📖 **API References**
+- **[API Reference](docs/apis)** - Complete API documentation
+
 ### 📖 **Guides & Tutorials**
-- **[API Reference](docs/api-reference.md)** - Complete API documentation
 - **[Vector Database Integration](docs/vector-database-integration.md)** - RAG and vector DB setup
 - **[Advanced Examples](docs/advanced-examples.md)** - Real-world usage patterns
 - **[Migration Guide](docs/migration-guide.md)** - Migrate from other tools
