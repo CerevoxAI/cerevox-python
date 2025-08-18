@@ -20,17 +20,21 @@
   <a href="https://github.com/cerevoxAI/cerevox-python/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License"></a>
 </p>
 
+**Official Python SDK for:**
+- **[Lexa](https://cerevox.ai/lexa) - Parse documents into structured data**
+  - > 🎯 **Perfect for**: RAG applications, document analysis, data extraction, and vector database preparation
+- **[Hippo](https://cerevox.ai/) - Make intelligent queries on data loaded into Cerevox**
+  - > 🎯 **Perfect for**: all-in-one system for drawing useful conclusions from mountains of data
+
+### Table of Contents
 - <a href="#-installation">Installation</a>
-- <a href="#-quick-start">Quick Start</a>  
-- <a href="#-features">Features</a> 
+- <a href="#-lexa-quick-start">Lexa Quick Start</a>
+- <a href="#-hippo-getting-started">Hippo Getting Started</a>
+- <a href="#-features">Features</a>
 - <a href="#-examples">Examples</a>
 - <a href="#-documentation">Documentation</a>
 - <a href="#-support--community">Support</a>
----
 
-**Official Python SDK for [Lexa](https://cerevox.ai/lexa) - Parse documents into structured data**
-
-> 🎯 **Perfect for**: RAG applications, document analysis, data extraction, and vector database preparation
 
 ## 📦 Installation
 
@@ -38,12 +42,12 @@
 pip install cerevox
 ```
 
-## 📋 Requirements
+### 📋 Requirements
 
 - Python 3.9+
 - API key from [Cerevox](https://cerevox.ai/lexa)
 
-## 🚀 Quick Start
+## 🚀 Lexa Quick Start
 
 ### Basic Usage
 
@@ -74,6 +78,13 @@ async def main():
 
 asyncio.run(main())
 ```
+
+## 🚀 Hippo Getting Started
+
+- Create Folder and Upload Files
+- Start Chat to Ask Questions on the Folder Data
+
+See guide [hippo-getting-started.md](docs/hippo-getting-started.md)
 
 ## ✨ Features
 
@@ -121,8 +132,6 @@ python examples/async_examples.py         # Async features
 python examples/document_examples.py      # Document analysis
 python examples/cloud_integrations.py     # Cloud Integrations Coming Soon!
 ```
-
-
 
 ## 📚 Documentation
 
