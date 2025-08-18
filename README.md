@@ -108,13 +108,20 @@ See guide [hippo-getting-started.md](docs/hippo-getting-started.md)
 
 Explore comprehensive examples in the `examples/` directory:
 
+### Lexa
+
 | Example | Description |
 |---------|-------------|
 | **[`lexa_examples.py`](examples/lexa_examples.py)** | Complete SDK functionality demonstration |
-| **[`vector_db_preparation.py`](examples/vector_db_preparation.py)** | Vector database chunking and integration patterns |
-| **[`async_examples.py`](examples/async_examples.py)** | Advanced async processing techniques |
+| **[`lexa_async_examples.py`](examples/lexa_async_examples.py)** | Advanced async processing techniques |
+| **[`lexa_cloud_integrations.py`](examples/lexa_cloud_integrations.py)** | Cloud storage service integrations |
+
+### Document
+
+| Example | Description |
+|---------|-------------|
 | **[`document_examples.py`](examples/document_examples.py)** | Document analysis and manipulation features |
-| **[`cloud_integrations.py`](examples/cloud_integrations.py)** | Cloud storage service integrations |
+| **[`document_vector_db_preparation.py`](examples/document_vector_db_preparation.py)** | Vector database chunking and integration patterns |
 
 ### 🚀 Run Examples
 
@@ -126,11 +133,12 @@ cd cerevox-python
 export CEREVOX_API_KEY="your-api-key"
 
 # Run demos
-python examples/lexa_examples.py          # Basic usage
-python examples/vector_db_preparation.py  # Vector DB integration
-python examples/async_examples.py         # Async features
-python examples/document_examples.py      # Document analysis
-python examples/cloud_integrations.py     # Cloud Integrations Coming Soon!
+python examples/lexa_examples.py            # Basic usage
+python examples/lexa_async_examples.py      # Async features
+python examples/lexa_cloud_integrations.py  # Cloud Integrations Coming Soon!
+
+python examples/document_examples.py               # Document analysis
+python examples/document_vector_db_preparation.py  # Vector DB integration
 ```
 
 ## 📚 Documentation
