@@ -6,12 +6,14 @@ focusing on the auth_url validation and initialization logic.
 """
 
 import os
+import time
 from unittest.mock import patch
 
 import pytest
 
 from cerevox.core.base_client import BaseClient
 from cerevox.core.exceptions import LexaError
+from cerevox.core.models import TokenResponse
 
 
 class TestBaseClientAuthUrl:
@@ -367,4 +369,211 @@ class TestBaseClientInitialization:
         # Verify the error details
         error = exc_info.value
         assert error.message == "No access token available"
+        assert error.request_id == "Failed to get request ID from response"
+
+    def test_ensure_valid_token_expired_with_refresh_token_success(
+        self, valid_base_url
+    ):
+        """Test _ensure_valid_token refreshes token when expired and refresh token is available"""
+        # Create client with API key initially to pass __init__ validation
+        with patch.object(BaseClient, "_login") as mock_login:
+            mock_login.return_value = None
+            client = BaseClient(
+                api_key="test-api-key",
+                base_url=valid_base_url,
+                auth_url="https://auth.dev.cerevox.ai/v1",
+            )
+
+        # Set up expired token scenario
+        current_time = time.time()
+        client.access_token = "expired-token"
+        client.refresh_token = "valid-refresh-token"
+        client.token_expires_at = current_time - 10  # Token expired 10 seconds ago
+
+        # Mock the _refresh_token method to simulate successful refresh
+        mock_token_response = TokenResponse(
+            access_token="new-access-token",
+            refresh_token="new-refresh-token",
+            expires_in=3600,
+            token_type="Bearer",
+        )
+
+        with patch.object(client, "_refresh_token") as mock_refresh:
+            mock_refresh.return_value = mock_token_response
+
+            # This should not raise an error and should refresh the token
+            client._ensure_valid_token()
+
+            # Verify _refresh_token was called with the correct refresh token
+            mock_refresh.assert_called_once_with("valid-refresh-token")
+
+    def test_ensure_valid_token_expiring_soon_with_refresh_token_success(
+        self, valid_base_url
+    ):
+        """Test _ensure_valid_token refreshes token when expiring within 60 seconds"""
+        # Create client with API key initially to pass __init__ validation
+        with patch.object(BaseClient, "_login") as mock_login:
+            mock_login.return_value = None
+            client = BaseClient(
+                api_key="test-api-key",
+                base_url=valid_base_url,
+                auth_url="https://auth.dev.cerevox.ai/v1",
+            )
+
+        # Set up token expiring soon scenario (expires in 30 seconds)
+        current_time = time.time()
+        client.access_token = "expiring-token"
+        client.refresh_token = "valid-refresh-token"
+        client.token_expires_at = current_time + 30  # Token expires in 30 seconds
+
+        # Mock the _refresh_token method to simulate successful refresh
+        mock_token_response = TokenResponse(
+            access_token="new-access-token",
+            refresh_token="new-refresh-token",
+            expires_in=3600,
+            token_type="Bearer",
+        )
+
+        with patch.object(client, "_refresh_token") as mock_refresh:
+            mock_refresh.return_value = mock_token_response
+
+            # This should not raise an error and should refresh the token
+            client._ensure_valid_token()
+
+            # Verify _refresh_token was called with the correct refresh token
+            mock_refresh.assert_called_once_with("valid-refresh-token")
+
+    def test_ensure_valid_token_expired_no_refresh_token_raises_error(
+        self, valid_base_url
+    ):
+        """Test _ensure_valid_token raises LexaError when token is expired and no refresh token available"""
+        # Create client with API key initially to pass __init__ validation
+        with patch.object(BaseClient, "_login") as mock_login:
+            mock_login.return_value = None
+            client = BaseClient(
+                api_key="test-api-key",
+                base_url=valid_base_url,
+                auth_url="https://auth.dev.cerevox.ai/v1",
+            )
+
+        # Set up expired token scenario without refresh token
+        current_time = time.time()
+        client.access_token = "expired-token"
+        client.refresh_token = None  # No refresh token available
+        client.token_expires_at = current_time - 10  # Token expired 10 seconds ago
+
+        # Test that _ensure_valid_token raises LexaError with expected message
+        with pytest.raises(LexaError, match="No refresh token available") as exc_info:
+            client._ensure_valid_token()
+
+        # Verify the error details
+        error = exc_info.value
+        assert error.message == "No refresh token available"
+        assert error.request_id == "Failed to get request ID from response"
+
+    def test_ensure_valid_token_expiring_soon_no_refresh_token_raises_error(
+        self, valid_base_url
+    ):
+        """Test _ensure_valid_token raises LexaError when token is expiring soon and no refresh token available"""
+        # Create client with API key initially to pass __init__ validation
+        with patch.object(BaseClient, "_login") as mock_login:
+            mock_login.return_value = None
+            client = BaseClient(
+                api_key="test-api-key",
+                base_url=valid_base_url,
+                auth_url="https://auth.dev.cerevox.ai/v1",
+            )
+
+        # Set up token expiring soon scenario without refresh token
+        current_time = time.time()
+        client.access_token = "expiring-token"
+        client.refresh_token = None  # No refresh token available
+        client.token_expires_at = (
+            current_time + 30
+        )  # Token expires in 30 seconds (within 60 second threshold)
+
+        # Test that _ensure_valid_token raises LexaError with expected message
+        with pytest.raises(LexaError, match="No refresh token available") as exc_info:
+            client._ensure_valid_token()
+
+        # Verify the error details
+        error = exc_info.value
+        assert error.message == "No refresh token available"
+        assert error.request_id == "Failed to get request ID from response"
+
+    def test_ensure_valid_token_valid_token_no_refresh_needed(self, valid_base_url):
+        """Test _ensure_valid_token does not refresh when token is still valid"""
+        # Create client with API key initially to pass __init__ validation
+        with patch.object(BaseClient, "_login") as mock_login:
+            mock_login.return_value = None
+            client = BaseClient(
+                api_key="test-api-key",
+                base_url=valid_base_url,
+                auth_url="https://auth.dev.cerevox.ai/v1",
+            )
+
+        # Set up valid token scenario (expires in 2 hours)
+        current_time = time.time()
+        client.access_token = "valid-token"
+        client.refresh_token = "refresh-token"
+        client.token_expires_at = current_time + 7200  # Token expires in 2 hours
+
+        # Mock the _refresh_token method to ensure it's not called
+        with patch.object(client, "_refresh_token") as mock_refresh:
+            # This should not raise an error and should not refresh the token
+            client._ensure_valid_token()
+
+            # Verify _refresh_token was NOT called
+            mock_refresh.assert_not_called()
+
+    def test_refresh_token_no_api_key_raises_error(self, valid_base_url):
+        """Test _refresh_token raises LexaError when API key is None"""
+
+        # Create client with API key initially to pass __init__ validation
+        with patch.object(BaseClient, "_login") as mock_login:
+            mock_login.return_value = None
+            client = BaseClient(
+                api_key="temp-key",
+                base_url=valid_base_url,
+                auth_url="https://auth.dev.cerevox.ai/v1",
+            )
+
+        # Clear the API key to simulate the scenario where it's missing during refresh
+        client.api_key = None
+
+        # Test that _refresh_token raises LexaError with expected message
+        with pytest.raises(
+            LexaError, match="API key is required for token refresh"
+        ) as exc_info:
+            client._refresh_token("some-refresh-token")
+
+        # Verify the error details
+        error = exc_info.value
+        assert error.message == "API key is required for token refresh"
+        assert error.request_id == "Failed to get request ID from response"
+
+    def test_refresh_token_empty_api_key_raises_error(self, valid_base_url):
+        """Test _refresh_token raises LexaError when API key is empty string"""
+
+        # Create client with API key initially to pass __init__ validation
+        with patch.object(BaseClient, "_login") as mock_login:
+            mock_login.return_value = None
+            client = BaseClient(
+                api_key="temp-key",
+                base_url=valid_base_url,
+                auth_url="https://auth.dev.cerevox.ai/v1",
+            )
+
+        # Set API key to empty string to simulate the scenario
+        client.api_key = ""
+
+        # Test that _refresh_token raises LexaError with expected message
+        with pytest.raises(
+            LexaError, match="API key is required for token refresh"
+        ) as exc_info:
+            client._refresh_token("some-refresh-token")
+
+        # Verify the error details
+        error = exc_info.value
+        assert error.message == "API key is required for token refresh"
         assert error.request_id == "Failed to get request ID from response"
