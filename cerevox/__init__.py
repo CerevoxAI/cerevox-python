@@ -2,15 +2,15 @@
 Cerevox - The Data Layer
 """
 
-from .clients import Account  # Account management client
-from .clients import AsyncAccount  # Account management client
-from .clients import AsyncHippo  # RAG client
-from .clients import AsyncLexa  # Document parsing client
-from .clients import Hippo  # RAG client
-from .clients import Lexa  # Document parsing client
+from .apis import Account  # Account Management API
+from .apis import AsyncAccount  # Async Account Management API
+from .apis import AsyncHippo  # Async RAG API
+from .apis import AsyncLexa  # Async Document Processing API
+from .apis import Hippo  # RAG API
+from .apis import Lexa  # Document Processing API
 
 # Core models and exceptions
-from .core import (  # Account models; Lexa (Document Processing) models; Exceptions
+from .core import (
     AccountInfo,
     AccountPlan,
     BucketListResponse,
@@ -53,7 +53,7 @@ from .utils import (
 )
 
 # Version info
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 __title__ = "cerevox"
 __description__ = (
     "Cerevox - The Data Layer, Lexa - parse documents with enterprise-grade reliability"
@@ -62,13 +62,13 @@ __author__ = "Cerevox Team"
 __license__ = "MIT"
 
 __all__ = [
-    # Account management clients
+    # Account Management API
     "Account",
     "AsyncAccount",
-    # Document parsing clients
+    # Document Processing API
     "Lexa",
     "AsyncLexa",
-    # RAG clients
+    # RAG API
     "Hippo",
     "AsyncHippo",
     # Document processing

@@ -19,7 +19,7 @@ class TestPackageInitialization:
         import cerevox
 
         assert hasattr(cerevox, "__version__")
-        assert cerevox.__version__ == "0.1.0"
+        assert cerevox.__version__ == "0.2.0"
         assert isinstance(cerevox.__version__, str)
 
     def test_package_metadata(self):
@@ -403,7 +403,7 @@ class TestImportResilience:
 
         assert first_version == third_version
 
-    @patch("cerevox.clients.lexa")
+    @patch("cerevox.apis.lexa")
     def test_import_with_missing_submodule(self, mock_lexa):
         """Test behavior when a submodule import fails."""
         # This test ensures that if a submodule has issues, we handle it gracefully

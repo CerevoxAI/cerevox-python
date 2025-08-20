@@ -1,7 +1,5 @@
 """
-Cerevox SDK Clients
-
-This module contains all the client classes for interacting with Cerevox APIs.
+Cerevox API clients
 """
 
 from .account import Account

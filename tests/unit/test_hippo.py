@@ -1,5 +1,5 @@
 """
-Test suite for cerevox.clients.hippo
+Test suite for cerevox.apis.hippo
 
 Comprehensive tests to achieve 100% code coverage for the Hippo class,
 including all methods, error handling, and edge cases.
@@ -26,10 +26,12 @@ from cerevox.core import (
     FileUploadResponse,
     FolderCreatedResponse,
     FolderItem,
+    IngestionResult,
     LexaAuthError,
     LexaError,
     LexaTimeoutError,
     MessageResponse,
+    ProcessingMode,
     TokenResponse,
     UpdatedResponse,
 )
@@ -56,7 +58,7 @@ class TestHippoInitialization:
 
             client = Hippo(api_key="test-api-key")
             assert client.api_key == "test-api-key"
-            assert client.base_url == "https://dev.cerevox.ai/v1"
+            assert client.data_url == "https://dev.cerevox.ai/v1"
             assert client.timeout == 30.0
             assert client.max_retries == 3
             assert "Authorization" in client.session.headers
@@ -88,20 +90,17 @@ class TestHippoInitialization:
             ):
                 Hippo(api_key=None)
 
-    def test_init_invalid_base_url(self):
+    def test_init_invalid_data_url(self):
         """Test initialization with invalid base URL"""
-        with pytest.raises(ValueError, match="base_url must be a non-empty string"):
-            Hippo(api_key="test-key", base_url="")
-
-        with pytest.raises(ValueError, match="base_url must start with"):
-            Hippo(api_key="test-key", base_url="invalid-url")
+        with pytest.raises(ValueError, match="data_url must start with"):
+            Hippo(api_key="test-key", data_url="invalid-url")
 
     def test_init_custom_parameters(self):
         """Test initialization with custom parameters"""
         with responses.RequestsMock() as rsps:
             rsps.add(
                 responses.POST,
-                "http://localhost:8000/v1/token/login",
+                "https://dev.cerevox.ai/v1/token/login",
                 json={
                     "access_token": "test-access-token",
                     "expires_in": 3600,
@@ -115,14 +114,14 @@ class TestHippoInitialization:
             client = Hippo(
                 email="test@example.com",
                 api_key="test-key",
-                base_url="http://localhost:8000/v1",
+                data_url="https://dev.cerevox.ai/v1",
                 timeout=60.0,
                 max_retries=5,
                 session_kwargs=session_kwargs,
                 custom_param="test",
             )
 
-            assert client.base_url == "http://localhost:8000/v1"
+            assert client.data_url == "https://dev.cerevox.ai/v1"
             assert client.timeout == 60.0
             assert client.max_retries == 5
             assert not client.session.verify
@@ -393,39 +392,38 @@ class TestHippoFileManagement:
             )
             self.client = Hippo(api_key="test-key")
 
-    @responses.activate
     def test_upload_file_success(self):
         """Test successful file upload"""
-        responses.add(
-            responses.POST,
-            "https://dev.cerevox.ai/v1/folders/test-folder/files",
-            json={"uploaded": True, "status": "ok", "uploads": ["test.txt"]},
-            status=200,
+        # Mock the ingest service method instead of direct API call
+        mock_result = IngestionResult(
+            message="Files uploaded successfully",
+            request_id="test-req-456",
+            uploads=["test.txt"],
         )
 
-        with patch("builtins.open", mock_open(read_data=b"test content")):
-            with patch("os.path.basename", return_value="test.txt"):
-                response = self.client.upload_file("test-folder", "/path/to/test.txt")
+        with patch.object(self.client, "_upload_files", return_value=mock_result):
+            response = self.client.upload_file("test-folder", "/path/to/test.txt")
 
-        assert isinstance(response, FileUploadResponse)
-        assert response.uploaded is True
+        assert isinstance(response, IngestionResult)
+        assert response.request_id == "test-req-456"
         assert "test.txt" in response.uploads
 
-    @responses.activate
     def test_upload_file_from_url_success(self):
         """Test successful file upload from URL"""
-        responses.add(
-            responses.POST,
-            "https://dev.cerevox.ai/v1/folders/test-folder/files/url",
-            json={"uploaded": True, "status": "ok", "uploads": ["remote-file.pdf"]},
-            status=200,
+        # Mock the ingest service method instead of direct API call
+        mock_result = IngestionResult(
+            message="Files uploaded successfully",
+            request_id="test-req-101",
+            uploads=["remote-file.pdf"],
         )
 
-        files = [{"url": "https://example.com/file.pdf", "filename": "remote-file.pdf"}]
-        response = self.client.upload_file_from_url("test-folder", files)
+        with patch.object(self.client, "_upload_urls", return_value=mock_result):
+            files = ["https://example.com/file.pdf"]
+            response = self.client.upload_file_from_url("test-folder", files)
 
-        assert isinstance(response, FileUploadResponse)
-        assert response.uploaded is True
+        assert isinstance(response, IngestionResult)
+        assert response.request_id == "test-req-101"
+        assert "remote-file.pdf" in response.uploads
 
     @responses.activate
     def test_get_files_success(self):
@@ -529,6 +527,282 @@ class TestHippoFileManagement:
 
         assert isinstance(response, DeletedResponse)
         assert response.deleted is True
+
+    def test_upload_s3_folder_success(self):
+        """Test successful S3 folder upload"""
+        # Mock the ingest service method instead of direct API call
+        mock_result = IngestionResult(
+            message="S3 folder uploaded successfully",
+            request_id="test-req-s3-123",
+            uploads=["file1.pdf", "file2.docx"],
+        )
+
+        with patch.object(self.client, "_upload_s3_folder", return_value=mock_result):
+            response = self.client.upload_s3_folder(
+                "test-folder", "my-s3-bucket", "documents/", ProcessingMode.DEFAULT
+            )
+
+        assert isinstance(response, IngestionResult)
+        assert response.request_id == "test-req-s3-123"
+        assert response.message == "S3 folder uploaded successfully"
+        assert "file1.pdf" in response.uploads
+        assert "file2.docx" in response.uploads
+
+    def test_upload_box_folder_success(self):
+        """Test successful Box folder upload"""
+        mock_result = IngestionResult(
+            message="Box folder uploaded successfully",
+            request_id="test-req-box-456",
+            uploads=["presentation.pptx", "report.docx"],
+        )
+
+        with patch.object(
+            self.client, "_upload_box_folder", return_value=mock_result
+        ) as mock_upload:
+            response = self.client.upload_box_folder(
+                "test-folder", "box-folder-123", ProcessingMode.DEFAULT
+            )
+
+            # Verify the private method was called with correct parameters
+            mock_upload.assert_called_once_with(
+                "box-folder-123", mode=ProcessingMode.DEFAULT, folder_id="test-folder"
+            )
+
+        assert isinstance(response, IngestionResult)
+        assert response.request_id == "test-req-box-456"
+        assert response.message == "Box folder uploaded successfully"
+        assert "presentation.pptx" in response.uploads
+        assert "report.docx" in response.uploads
+
+    def test_upload_box_folder_with_root(self):
+        """Test Box folder upload with root folder (folder_id='0')"""
+        mock_result = IngestionResult(
+            message="Box root folder uploaded successfully",
+            request_id="test-req-box-root",
+            uploads=["file1.pdf"],
+        )
+
+        with patch.object(
+            self.client, "_upload_box_folder", return_value=mock_result
+        ) as mock_upload:
+            response = self.client.upload_box_folder(
+                "test-folder", "0", ProcessingMode.ADVANCED  # Root folder
+            )
+
+            mock_upload.assert_called_once_with(
+                "0", mode=ProcessingMode.ADVANCED, folder_id="test-folder"
+            )
+
+        assert isinstance(response, IngestionResult)
+        assert response.request_id == "test-req-box-root"
+
+    def test_upload_dropbox_folder_success(self):
+        """Test successful Dropbox folder upload"""
+        mock_result = IngestionResult(
+            message="Dropbox folder uploaded successfully",
+            request_id="test-req-dropbox-789",
+            uploads=["invoice.pdf", "contract.docx"],
+        )
+
+        with patch.object(
+            self.client, "_upload_dropbox_folder", return_value=mock_result
+        ) as mock_upload:
+            response = self.client.upload_dropbox_folder(
+                "test-folder", "/Documents/Reports", ProcessingMode.DEFAULT
+            )
+
+            # Verify the private method was called with correct parameters
+            mock_upload.assert_called_once_with(
+                "/Documents/Reports",
+                mode=ProcessingMode.DEFAULT,
+                folder_id="test-folder",
+            )
+
+        assert isinstance(response, IngestionResult)
+        assert response.request_id == "test-req-dropbox-789"
+        assert response.message == "Dropbox folder uploaded successfully"
+        assert "invoice.pdf" in response.uploads
+        assert "contract.docx" in response.uploads
+
+    def test_upload_dropbox_folder_root(self):
+        """Test Dropbox folder upload with root path"""
+        mock_result = IngestionResult(
+            message="Dropbox root uploaded successfully",
+            request_id="test-req-dropbox-root",
+            uploads=["root-file.txt"],
+        )
+
+        with patch.object(
+            self.client, "_upload_dropbox_folder", return_value=mock_result
+        ) as mock_upload:
+            response = self.client.upload_dropbox_folder(
+                "test-folder", "/", ProcessingMode.DEFAULT  # Root folder
+            )
+
+            mock_upload.assert_called_once_with(
+                "/", mode=ProcessingMode.DEFAULT, folder_id="test-folder"
+            )
+
+        assert isinstance(response, IngestionResult)
+        assert response.request_id == "test-req-dropbox-root"
+
+    def test_upload_sharepoint_folder_success(self):
+        """Test successful SharePoint folder upload"""
+        mock_result = IngestionResult(
+            message="SharePoint folder uploaded successfully",
+            request_id="test-req-sp-101",
+            uploads=["policy.pdf", "guidelines.docx", "template.xlsx"],
+        )
+
+        with patch.object(
+            self.client, "_upload_sharepoint_folder", return_value=mock_result
+        ) as mock_upload:
+            response = self.client.upload_sharepoint_folder(
+                "test-folder", "drive-abc123", "folder-def456", ProcessingMode.DEFAULT
+            )
+
+            # Verify the private method was called with correct parameters
+            mock_upload.assert_called_once_with(
+                "drive-abc123",
+                "folder-def456",
+                mode=ProcessingMode.DEFAULT,
+                folder_id="test-folder",
+            )
+
+        assert isinstance(response, IngestionResult)
+        assert response.request_id == "test-req-sp-101"
+        assert response.message == "SharePoint folder uploaded successfully"
+        assert "policy.pdf" in response.uploads
+        assert "guidelines.docx" in response.uploads
+        assert "template.xlsx" in response.uploads
+
+    def test_upload_sharepoint_folder_root(self):
+        """Test SharePoint folder upload with root folder"""
+        mock_result = IngestionResult(
+            message="SharePoint root uploaded successfully",
+            request_id="test-req-sp-root",
+            uploads=["root-document.pdf"],
+        )
+
+        with patch.object(
+            self.client, "_upload_sharepoint_folder", return_value=mock_result
+        ) as mock_upload:
+            response = self.client.upload_sharepoint_folder(
+                "test-folder",
+                "drive-xyz789",
+                "root",  # Root folder
+                ProcessingMode.ADVANCED,
+            )
+
+            mock_upload.assert_called_once_with(
+                "drive-xyz789",
+                "root",
+                mode=ProcessingMode.ADVANCED,
+                folder_id="test-folder",
+            )
+
+        assert isinstance(response, IngestionResult)
+        assert response.request_id == "test-req-sp-root"
+
+    def test_upload_salesforce_folder_success(self):
+        """Test successful Salesforce folder upload"""
+        mock_result = IngestionResult(
+            message="Salesforce documents uploaded successfully",
+            request_id="test-req-sf-202",
+            uploads=["opportunity.pdf", "lead-notes.docx"],
+        )
+
+        with patch.object(
+            self.client, "_upload_salesforce_folder", return_value=mock_result
+        ) as mock_upload:
+            response = self.client.upload_salesforce_folder(
+                "test-folder", "Customer Documents", ProcessingMode.DEFAULT
+            )
+
+            # Verify the private method was called with correct parameters
+            mock_upload.assert_called_once_with(
+                "Customer Documents",
+                mode=ProcessingMode.DEFAULT,
+                folder_id="test-folder",
+            )
+
+        assert isinstance(response, IngestionResult)
+        assert response.request_id == "test-req-sf-202"
+        assert response.message == "Salesforce documents uploaded successfully"
+        assert "opportunity.pdf" in response.uploads
+        assert "lead-notes.docx" in response.uploads
+
+    def test_upload_salesforce_folder_with_custom_mode(self):
+        """Test Salesforce folder upload with custom processing mode"""
+        mock_result = IngestionResult(
+            message="Salesforce data processed",
+            request_id="test-req-sf-custom",
+            uploads=["case-study.pdf"],
+        )
+
+        with patch.object(
+            self.client, "_upload_salesforce_folder", return_value=mock_result
+        ) as mock_upload:
+            response = self.client.upload_salesforce_folder(
+                "test-folder", "Case Studies", ProcessingMode.DEFAULT
+            )
+
+            mock_upload.assert_called_once_with(
+                "Case Studies", mode=ProcessingMode.DEFAULT, folder_id="test-folder"
+            )
+
+        assert isinstance(response, IngestionResult)
+        assert response.request_id == "test-req-sf-custom"
+
+    def test_upload_sendme_files_success(self):
+        """Test successful Sendme files upload"""
+        mock_result = IngestionResult(
+            message="Sendme files uploaded successfully",
+            request_id="test-req-sendme-303",
+            uploads=["secure-doc.pdf", "confidential.docx"],
+        )
+
+        with patch.object(
+            self.client, "_upload_sendme_files", return_value=mock_result
+        ) as mock_upload:
+            response = self.client.upload_sendme_files(
+                "test-folder", "ticket-abc123xyz", ProcessingMode.DEFAULT
+            )
+
+            # Verify the private method was called with correct parameters
+            mock_upload.assert_called_once_with(
+                "ticket-abc123xyz", mode=ProcessingMode.DEFAULT, folder_id="test-folder"
+            )
+
+        assert isinstance(response, IngestionResult)
+        assert response.request_id == "test-req-sendme-303"
+        assert response.message == "Sendme files uploaded successfully"
+        assert "secure-doc.pdf" in response.uploads
+        assert "confidential.docx" in response.uploads
+
+    def test_upload_sendme_files_with_advanced_mode(self):
+        """Test Sendme files upload with advanced processing mode"""
+        mock_result = IngestionResult(
+            message="Sendme files processed with advanced mode",
+            request_id="test-req-sendme-advanced",
+            uploads=["analysis-report.pdf"],
+        )
+
+        with patch.object(
+            self.client, "_upload_sendme_files", return_value=mock_result
+        ) as mock_upload:
+            response = self.client.upload_sendme_files(
+                "test-folder", "ticket-def456ghi", ProcessingMode.ADVANCED
+            )
+
+            mock_upload.assert_called_once_with(
+                "ticket-def456ghi",
+                mode=ProcessingMode.ADVANCED,
+                folder_id="test-folder",
+            )
+
+        assert isinstance(response, IngestionResult)
+        assert response.request_id == "test-req-sendme-advanced"
 
 
 class TestHippoChatManagement:
@@ -1149,27 +1423,23 @@ class TestHippoRequestHeaders:
             "GET", "/folders", headers={"X-Custom-Header": "custom-value"}
         )
 
-    @responses.activate
     def test_file_upload_headers(self):
-        """Test that Content-Type header is removed for file uploads"""
-
-        def request_callback(request):
-            # Content-Type should not be manually set for file uploads
-            # It should be set by requests library with boundary
-            content_type = request.headers.get("Content-Type", "")
-            assert "multipart/form-data" in content_type or content_type == ""
-            return (
-                200,
-                {},
-                json.dumps({"uploaded": True, "status": "ok", "uploads": ["test.txt"]}),
-            )
-
-        responses.add_callback(
-            responses.POST,
-            "https://dev.cerevox.ai/v1/folders/test-folder/files",
-            callback=request_callback,
+        """Test that upload_file calls the ingest service properly"""
+        # Mock the ingest service method to test that it's called correctly
+        mock_result = IngestionResult(
+            message="Files uploaded successfully",
+            request_id="test-req-headers",
+            uploads=["test.txt"],
         )
 
-        with patch("builtins.open", mock_open(read_data=b"test content")):
-            with patch("os.path.basename", return_value="test.txt"):
-                self.client.upload_file("test-folder", "/path/to/test.txt")
+        with patch.object(
+            self.client, "_upload_files", return_value=mock_result
+        ) as mock_upload:
+            self.client.upload_file("test-folder", "/path/to/test.txt")
+
+            # Verify the ingest service was called with correct parameters
+            mock_upload.assert_called_once_with(
+                "/path/to/test.txt",
+                mode=ProcessingMode.DEFAULT,
+                folder_id="test-folder",
+            )

@@ -9,6 +9,10 @@ from typing import Any, BinaryIO, Dict, List, Optional, TextIO, Union
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from .constants import core
+
+REQUEST_ID_DESCRIPTION = core.REQUEST_ID_DESCRIPTION
+
 # Supported file inputs
 ## URLs
 FileURLInput = str
@@ -20,8 +24,6 @@ FileContentInput = Union[bytes, bytearray]
 FileStreamInput = Union[BinaryIO, TextIO, BytesIO, StringIO]
 ## Aggregated File Inputs
 FileInput = Union[FilePathInput, FileContentInput, FileStreamInput]
-
-REQUEST_IDENTIFIER = "Request identifier"
 
 
 # Enums
@@ -46,7 +48,6 @@ class ProcessingMode(str, Enum):
 VALID_MODES = [mode.value for mode in ProcessingMode]
 
 
-# New models for richer response structure
 class ElementSourceInfo(BaseModel):
     """Information about extracted element characteristics"""
 
@@ -150,7 +151,7 @@ class BucketInfo(BaseModel):
 class BucketListResponse(BaseModel):
     """Response containing list of S3 buckets"""
 
-    request_id: str = Field(..., description=REQUEST_IDENTIFIER, alias="requestID")
+    request_id: str = Field(..., description=REQUEST_ID_DESCRIPTION, alias="requestID")
     buckets: List[BucketInfo] = Field(..., description="List of available buckets")
 
     model_config = ConfigDict(populate_by_name=True)
@@ -169,7 +170,7 @@ class DriveInfo(BaseModel):
 class DriveListResponse(BaseModel):
     """Response containing list of SharePoint drives"""
 
-    request_id: str = Field(..., description=REQUEST_IDENTIFIER, alias="requestID")
+    request_id: str = Field(..., description=REQUEST_ID_DESCRIPTION, alias="requestID")
     drives: List[DriveInfo] = Field(..., description="List of available drives")
 
     model_config = ConfigDict(populate_by_name=True)
@@ -194,7 +195,7 @@ class FolderInfo(BaseModel):
 class FolderListResponse(BaseModel):
     """Response containing list of folders"""
 
-    request_id: str = Field(..., description=REQUEST_IDENTIFIER, alias="requestID")
+    request_id: str = Field(..., description=REQUEST_ID_DESCRIPTION, alias="requestID")
     folders: List[FolderInfo] = Field(..., description="List of available folders")
 
     model_config = ConfigDict(populate_by_name=True)
@@ -206,8 +207,8 @@ class IngestionResult(BaseModel):
     message: str = Field(..., description="Status message")
     pages: Optional[int] = Field(None, description="Total number of pages processed")
     rejects: Optional[List[str]] = Field(None, description="List of rejected files")
-    request_id: str = Field(
-        ..., description="Job identifier for tracking", alias="requestID"
+    request_id: Optional[str] = Field(
+        None, description=REQUEST_ID_DESCRIPTION, alias="requestID"
     )
     uploads: Optional[List[str]] = Field(
         None, description="List of successfully uploaded files"
@@ -221,7 +222,9 @@ class JobResponse(BaseModel):
 
     # Core status fields
     status: JobStatus = Field(..., description="Current status of the job")
-    request_id: str = Field(..., description="Job identifier", alias="requestID")
+    request_id: Optional[str] = Field(
+        ..., description=REQUEST_ID_DESCRIPTION, alias="requestID"
+    )
 
     # Processing progress fields (for processing jobs)
     age_seconds: Optional[int] = Field(None, description="Age of the job in seconds")
@@ -290,7 +293,7 @@ class SiteInfo(BaseModel):
 class SiteListResponse(BaseModel):
     """Response containing list of SharePoint sites"""
 
-    request_id: str = Field(..., description=REQUEST_IDENTIFIER, alias="requestID")
+    request_id: str = Field(..., description=REQUEST_ID_DESCRIPTION, alias="requestID")
     sites: List[SiteInfo] = Field(..., description="List of available sites")
 
     model_config = ConfigDict(populate_by_name=True)

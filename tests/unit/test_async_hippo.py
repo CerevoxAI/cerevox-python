@@ -1,5 +1,5 @@
 """
-Test suite for cerevox.clients.async_hippo
+Test suite for cerevox.apis.async_hippo
 
 Comprehensive tests to achieve 100% code coverage for the AsyncHippo class,
 including all methods, error handling, and edge cases.
@@ -82,7 +82,7 @@ class TestAsyncHippoInitialization:
         """Test initialization with API key parameter"""
         client = AsyncHippo(api_key="test-api-key")
         assert client.api_key == "test-api-key"
-        assert client.base_url == "https://dev.cerevox.ai/v1"
+        assert client.data_url == "https://dev.cerevox.ai/v1"
         assert client.timeout.total == 30.0
         assert client.max_retries == 3
         assert (
@@ -97,13 +97,10 @@ class TestAsyncHippoInitialization:
             ):
                 AsyncHippo(api_key=None)
 
-    def test_init_invalid_base_url(self):
+    def test_init_invalid_data_url(self):
         """Test initialization with invalid base URL"""
-        with pytest.raises(ValueError, match="base_url must be a non-empty string"):
-            AsyncHippo(api_key="test-key", base_url="")
-
-        with pytest.raises(ValueError, match="base_url must start with"):
-            AsyncHippo(api_key="test-key", base_url="invalid-url")
+        with pytest.raises(ValueError, match="data_url must start with"):
+            AsyncHippo(api_key="test-key", data_url="invalid-url")
 
     def test_init_invalid_max_retries(self):
         """Test initialization with invalid max_retries"""
@@ -121,13 +118,13 @@ class TestAsyncHippoInitialization:
         client = AsyncHippo(
             email="test@example.com",
             api_key="test-key",
-            base_url="http://localhost:8000/v1",
+            data_url="http://localhost:8000/v1",
             timeout=60.0,
             max_retries=5,
             custom_param="test",
         )
 
-        assert client.base_url == "http://localhost:8000/v1"
+        assert client.data_url == "http://localhost:8000/v1"
         assert client.timeout.total == 60.0
         assert client.max_retries == 5
         assert "custom_param" in client.session_kwargs

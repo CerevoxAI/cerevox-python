@@ -1,5 +1,5 @@
 """
-Test suite for cerevox.clients.async_lexa
+Test suite for cerevox.apis.async_lexa
 
 Comprehensive tests to achieve 100% code coverage for the AsyncLexa class,
 including all methods, error handling, and edge cases.
@@ -41,37 +41,36 @@ from cerevox.core import (
     SiteListResponse,
     TokenResponse,
 )
-
-
-# Mock authentication for all tests - this avoids having to mock login for every test
-async def mock_async_login(self, api_key):
-    token_response = TokenResponse(
-        access_token="test-access-token",
-        expires_in=3600,
-        refresh_token="test-refresh-token",
-        token_type="Bearer",
-    )
-    # Manually call _store_token_info to set up session headers
-    self._store_token_info(token_response)
-    return token_response
+from cerevox.utils import DocumentBatch
 
 
 @pytest.fixture(autouse=True)
 def mock_async_auth_methods():
     """Auto-use fixture to mock async authentication methods for all tests in this module"""
+
+    async def mock_login(self, api_key: str):
+        """Mock login function that properly handles the client instance"""
+        token_response = TokenResponse(
+            access_token="test-access-token",
+            expires_in=3600,
+            refresh_token="test-refresh-token",
+            token_type="Bearer",
+        )
+        # Manually call _store_token_info to set up session headers
+        self._store_token_info(token_response)
+        return token_response
+
     # Mock both the _login method and _ensure_valid_token to avoid authentication issues
     with (
-        patch("cerevox.core.async_base_client.AsyncBaseClient._login") as mock_login,
+        patch("cerevox.core.async_client.AsyncClient._login", new=mock_login),
         patch(
-            "cerevox.core.async_base_client.AsyncBaseClient._ensure_valid_token",
+            "cerevox.core.async_client.AsyncClient._ensure_valid_token",
             new_callable=AsyncMock,
         ) as mock_ensure_token,
     ):
-
-        mock_login.side_effect = mock_async_login
         # Make _ensure_valid_token do nothing (token is always valid in tests)
         mock_ensure_token.return_value = None
-        yield mock_login
+        yield
 
 
 @pytest_asyncio.fixture
@@ -91,7 +90,7 @@ class TestAsyncLexaInitialization:
         """Test initialization with API key parameter"""
         client = AsyncLexa(api_key="test-api-key")
         assert client.api_key == "test-api-key"
-        assert client.base_url == "https://www.data.cerevox.ai"
+        assert client.data_url == "https://www.data.cerevox.ai"
         assert client.max_concurrent == 10
         assert client.max_poll_time == 600.0
         assert client.max_retries == 3
@@ -118,35 +117,35 @@ class TestAsyncLexaInitialization:
         """Test initialization with custom parameters"""
         client = AsyncLexa(
             api_key="test-key",
-            base_url="https://custom.api.com",
+            data_url="https://custom.api.com",
             max_concurrent=20,
             max_poll_time=1200.0,
             max_retries=5,
             poll_interval=5.0,
             timeout=60.0,
         )
-        assert client.base_url == "https://custom.api.com"
+        assert client.data_url == "https://custom.api.com"
         assert client.max_concurrent == 20
         assert client.max_poll_time == 1200.0
         assert client.max_retries == 5
         assert client.poll_interval == 5.0
         assert client.timeout.total == 60.0
 
-    def test_init_with_invalid_base_url(self):
+    def test_init_with_invalid_data_url(self):
         """Test initialization with invalid base URL"""
-        with pytest.raises(ValueError, match="base_url must be a non-empty string"):
-            AsyncLexa(api_key="test", base_url="")
+        with pytest.raises(ValueError, match="data_url must be a non-empty string"):
+            AsyncLexa(api_key="test", data_url="")
 
-        with pytest.raises(ValueError, match="base_url must be a non-empty string"):
-            AsyncLexa(api_key="test", base_url=None)
+        with pytest.raises(ValueError, match="data_url must be a non-empty string"):
+            AsyncLexa(api_key="test", data_url=None)
 
-        with pytest.raises(ValueError, match="base_url must start with http"):
-            AsyncLexa(api_key="test", base_url="invalid-url")
+        with pytest.raises(ValueError, match="data_url must start with http"):
+            AsyncLexa(api_key="test", data_url="invalid-url")
 
     def test_init_strips_trailing_slash(self):
-        """Test that trailing slash is stripped from base_url"""
-        client = AsyncLexa(api_key="test", base_url="https://api.com/")
-        assert client.base_url == "https://api.com"
+        """Test that trailing slash is stripped from data_url"""
+        client = AsyncLexa(api_key="test", data_url="https://api.com/")
+        assert client.data_url == "https://api.com"
 
     def test_init_with_kwargs(self):
         """Test initialization with additional kwargs"""
@@ -1160,8 +1159,6 @@ class TestGetDocuments:
                     status=200,
                 )
 
-                from cerevox.utils.document_loader import DocumentBatch
-
                 with patch.object(DocumentBatch, "from_api_response") as mock_from_api:
                     mock_batch = Mock()
                     mock_from_api.return_value = mock_batch
@@ -1187,8 +1184,6 @@ class TestGetDocuments:
                     },
                     status=200,
                 )
-
-                from cerevox.utils.document_loader import DocumentBatch
 
                 result = await client._get_documents("test-request-id")
                 assert isinstance(result, DocumentBatch)
@@ -1257,7 +1252,7 @@ class TestGetDocuments:
         mock_status.result = None
 
         with patch.object(client, "_wait_for_completion", return_value=mock_status):
-            with patch("cerevox.clients.async_lexa.DocumentBatch") as MockDocumentBatch:
+            with patch("cerevox.apis.async_lexa.DocumentBatch") as MockDocumentBatch:
                 mock_batch = Mock()
                 MockDocumentBatch.from_api_response.return_value = mock_batch
 
@@ -1310,7 +1305,7 @@ class TestGetDocuments:
         with patch.object(
             client, "_wait_for_completion", return_value=mock_status_dict
         ):
-            with patch("cerevox.clients.async_lexa.DocumentBatch") as MockDocumentBatch:
+            with patch("cerevox.apis.async_lexa.DocumentBatch") as MockDocumentBatch:
                 mock_batch = Mock()
                 MockDocumentBatch.from_api_response.return_value = mock_batch
 
@@ -1336,7 +1331,7 @@ class TestGetDocuments:
         with patch.object(
             client, "_wait_for_completion", return_value=mock_status_empty
         ):
-            with patch("cerevox.clients.async_lexa.DocumentBatch") as MockDocumentBatch:
+            with patch("cerevox.apis.async_lexa.DocumentBatch") as MockDocumentBatch:
                 mock_empty_batch = Mock()
                 MockDocumentBatch.return_value = mock_empty_batch
 
@@ -1357,7 +1352,7 @@ class TestGetDocuments:
         with patch.object(
             client, "_wait_for_completion", return_value=mock_status_none
         ):
-            with patch("cerevox.clients.async_lexa.DocumentBatch") as MockDocumentBatch:
+            with patch("cerevox.apis.async_lexa.DocumentBatch") as MockDocumentBatch:
                 mock_empty_batch = Mock()
                 MockDocumentBatch.return_value = mock_empty_batch
 
@@ -1402,7 +1397,7 @@ class TestGetDocuments:
         with patch.object(
             client, "_wait_for_completion", return_value=mock_status_mixed
         ):
-            with patch("cerevox.clients.async_lexa.DocumentBatch") as MockDocumentBatch:
+            with patch("cerevox.apis.async_lexa.DocumentBatch") as MockDocumentBatch:
                 mock_batch = Mock()
                 MockDocumentBatch.from_api_response.return_value = mock_batch
 
@@ -1422,7 +1417,7 @@ class TestGetDocuments:
         mock_status_old.result = {"test": "old format data"}
 
         with patch.object(client, "_wait_for_completion", return_value=mock_status_old):
-            with patch("cerevox.clients.async_lexa.DocumentBatch") as MockDocumentBatch:
+            with patch("cerevox.apis.async_lexa.DocumentBatch") as MockDocumentBatch:
                 mock_batch = Mock()
                 MockDocumentBatch.from_api_response.return_value = mock_batch
 
@@ -1442,7 +1437,7 @@ class TestGetDocuments:
         with patch.object(
             client, "_wait_for_completion", return_value=mock_status_no_data
         ):
-            with patch("cerevox.clients.async_lexa.DocumentBatch") as MockDocumentBatch:
+            with patch("cerevox.apis.async_lexa.DocumentBatch") as MockDocumentBatch:
                 mock_empty_batch = Mock()
                 MockDocumentBatch.return_value = mock_empty_batch
 
@@ -1607,8 +1602,6 @@ class TestPublicParseMethods:
                         status=200,
                     )
 
-                    from cerevox.utils.document_loader import DocumentBatch
-
                     with patch.object(
                         DocumentBatch, "from_api_response"
                     ) as mock_from_api:
@@ -1623,8 +1616,6 @@ class TestPublicParseMethods:
     @pytest.mark.asyncio
     async def test_parse_no_request_id(self):
         """Test parse with no request ID returned from API"""
-        from pydantic_core import ValidationError
-
         temp_file = self.create_temp_file(b"test content", ".pdf")
 
         try:
@@ -1636,7 +1627,9 @@ class TestPublicParseMethods:
                         status=200,
                     )
 
-                    with pytest.raises(ValidationError):
+                    with pytest.raises(
+                        LexaError, match="Failed to get request ID from upload"
+                    ):
                         await client.parse(temp_file)
         finally:
             self.cleanup_temp_file(temp_file)
@@ -1674,8 +1667,6 @@ class TestPublicParseMethods:
                     status=200,
                 )
 
-                from cerevox.utils.document_loader import DocumentBatch
-
                 with patch.object(DocumentBatch, "from_api_response") as mock_from_api:
                     mock_batch = Mock()
                     mock_from_api.return_value = mock_batch
@@ -1686,8 +1677,6 @@ class TestPublicParseMethods:
     @pytest.mark.asyncio
     async def test_parse_urls_no_request_id(self):
         """Test parse URLs with no request ID returned from API"""
-        from pydantic_core import ValidationError
-
         async with AsyncLexa(api_key="test-key") as client:
             with aioresponses.aioresponses() as m:
                 # Mock file info response
@@ -1703,7 +1692,9 @@ class TestPublicParseMethods:
                     status=200,
                 )
 
-                with pytest.raises(ValidationError):
+                with pytest.raises(
+                    LexaError, match="Failed to get request ID from upload"
+                ):
                     await client.parse_urls("https://example.com/test.pdf")
 
 
@@ -1920,8 +1911,6 @@ class TestCloudStorageParsingMethods:
                     status=200,
                 )
 
-                from cerevox.utils.document_loader import DocumentBatch
-
                 with patch.object(DocumentBatch, "from_api_response") as mock_from_api:
                     mock_batch = Mock()
                     mock_from_api.return_value = mock_batch
@@ -1932,8 +1921,6 @@ class TestCloudStorageParsingMethods:
     @pytest.mark.asyncio
     async def test_parse_s3_folder_no_request_id(self):
         """Test parsing S3 folder with no request ID returned"""
-        from pydantic_core import ValidationError
-
         async with AsyncLexa(api_key="test-key") as client:
             with aioresponses.aioresponses() as m:
                 m.post(
@@ -1942,7 +1929,9 @@ class TestCloudStorageParsingMethods:
                     status=200,
                 )
 
-                with pytest.raises(ValidationError):
+                with pytest.raises(
+                    LexaError, match="Failed to get request ID from upload"
+                ):
                     await client.parse_s3_folder("test-bucket", "test-folder")
 
     @pytest.mark.asyncio
@@ -1970,8 +1959,6 @@ class TestCloudStorageParsingMethods:
                     },
                     status=200,
                 )
-
-                from cerevox.utils.document_loader import DocumentBatch
 
                 with patch.object(DocumentBatch, "from_api_response") as mock_from_api:
                     mock_batch = Mock()
@@ -2006,8 +1993,6 @@ class TestCloudStorageParsingMethods:
                     status=200,
                 )
 
-                from cerevox.utils.document_loader import DocumentBatch
-
                 with patch.object(DocumentBatch, "from_api_response") as mock_from_api:
                     mock_batch = Mock()
                     mock_from_api.return_value = mock_batch
@@ -2040,8 +2025,6 @@ class TestCloudStorageParsingMethods:
                     },
                     status=200,
                 )
-
-                from cerevox.utils.document_loader import DocumentBatch
 
                 with patch.object(DocumentBatch, "from_api_response") as mock_from_api:
                     mock_batch = Mock()
@@ -2078,8 +2061,6 @@ class TestCloudStorageParsingMethods:
                     status=200,
                 )
 
-                from cerevox.utils.document_loader import DocumentBatch
-
                 with patch.object(DocumentBatch, "from_api_response") as mock_from_api:
                     mock_batch = Mock()
                     mock_from_api.return_value = mock_batch
@@ -2112,8 +2093,6 @@ class TestCloudStorageParsingMethods:
                     },
                     status=200,
                 )
-
-                from cerevox.utils.document_loader import DocumentBatch
 
                 with patch.object(DocumentBatch, "from_api_response") as mock_from_api:
                     mock_batch = Mock()
@@ -2309,7 +2288,7 @@ class TestAdditionalCoverageTests:
         async with AsyncLexa(api_key="test-key") as client:
             # Mock urlparse to raise an exception
             with patch(
-                "cerevox.clients.async_lexa.urlparse",
+                "cerevox.services.async_ingest.urlparse",
                 side_effect=Exception("URL parsing failed"),
             ):
                 with aioresponses.aioresponses() as m:
@@ -2635,7 +2614,7 @@ class TestAdditionalMissingCoverageTests:
         async with AsyncLexa(api_key="test-key") as client:
             # Mock urlparse to raise an exception in the first exception handler
             with patch(
-                "cerevox.clients.async_lexa.urlparse",
+                "cerevox.services.async_ingest.urlparse",
                 side_effect=Exception("URL parse failed"),
             ):
                 with aioresponses.aioresponses() as m:
@@ -2709,8 +2688,6 @@ class TestSessionCleanupAndEdgeCases:
                     status=200,
                 )
 
-                from cerevox.utils.document_loader import DocumentBatch
-
                 with patch.object(
                     DocumentBatch, "from_api_response", return_value=DocumentBatch([])
                 ):
@@ -2743,8 +2720,6 @@ class TestSessionCleanupAndEdgeCases:
                     status=200,
                 )
 
-                from cerevox.utils.document_loader import DocumentBatch
-
                 with patch.object(
                     DocumentBatch, "from_api_response", return_value=DocumentBatch([])
                 ):
@@ -2773,8 +2748,6 @@ class TestSessionCleanupAndEdgeCases:
                     status=200,
                 )
 
-                from cerevox.utils.document_loader import DocumentBatch
-
                 with patch.object(
                     DocumentBatch, "from_api_response", return_value=DocumentBatch([])
                 ):
@@ -2798,8 +2771,6 @@ class TestSessionCleanupAndEdgeCases:
                     },
                     status=200,
                 )
-
-                from cerevox.utils.document_loader import DocumentBatch
 
                 with patch.object(
                     DocumentBatch, "from_api_response", return_value=DocumentBatch([])
@@ -2825,8 +2796,6 @@ class TestSessionCleanupAndEdgeCases:
                     status=200,
                 )
 
-                from cerevox.utils.document_loader import DocumentBatch
-
                 with patch.object(
                     DocumentBatch, "from_api_response", return_value=DocumentBatch([])
                 ):
@@ -2850,8 +2819,6 @@ class TestSessionCleanupAndEdgeCases:
                     },
                     status=200,
                 )
-
-                from cerevox.utils.document_loader import DocumentBatch
 
                 with patch.object(
                     DocumentBatch, "from_api_response", return_value=DocumentBatch([])
@@ -2879,8 +2846,6 @@ class TestSessionCleanupAndEdgeCases:
                     status=200,
                 )
 
-                from cerevox.utils.document_loader import DocumentBatch
-
                 with patch.object(
                     DocumentBatch, "from_api_response", return_value=DocumentBatch([])
                 ):
@@ -2904,8 +2869,6 @@ class TestSessionCleanupAndEdgeCases:
                     },
                     status=200,
                 )
-
-                from cerevox.utils.document_loader import DocumentBatch
 
                 with patch.object(
                     DocumentBatch, "from_api_response", return_value=DocumentBatch([])
@@ -3217,7 +3180,7 @@ class TestCoverageTargetedGaps:
 
                 # Mock urlparse to raise exception in the fallback try block (line 358)
                 with patch(
-                    "cerevox.clients.async_lexa.urlparse",
+                    "cerevox.services.async_ingest.urlparse",
                     side_effect=ValueError("Parse error"),
                 ):
                     file_info = await client._get_file_info_from_url(test_url)
@@ -3427,7 +3390,7 @@ class TestMissingCoverageLines:
 
                 # Mock urlparse to raise exception in the exception handler (line 358)
                 with patch(
-                    "cerevox.clients.async_lexa.urlparse",
+                    "cerevox.services.async_ingest.urlparse",
                     side_effect=ValueError("Parse error"),
                 ):
                     file_info = await client._get_file_info_from_url(test_url)
@@ -3561,7 +3524,7 @@ class TestFinalMissingLinesAsync:
                     def name(self):
                         return self._path.name
 
-                with patch("cerevox.clients.async_lexa.Path", TestPath):
+                with patch("cerevox.services.async_ingest.Path", TestPath):
                     result = await client._upload_files(stream)
                     assert result.request_id == "test-request-id"
         finally:
@@ -3608,7 +3571,7 @@ class TestFinalMissingLinesAsync:
                     def name(self):
                         return self._path.name
 
-                with patch("cerevox.clients.async_lexa.Path", TestPath):
+                with patch("cerevox.services.async_ingest.Path", TestPath):
                     result = await client._upload_files(stream)
                     assert result.request_id == "test-request-id"
         finally:
@@ -3657,7 +3620,7 @@ class TestFinalMissingLinesAsync:
                     def name(self):
                         return self._path.name
 
-                with patch("cerevox.clients.async_lexa.Path", TestPath):
+                with patch("cerevox.services.async_ingest.Path", TestPath):
                     result = await client._upload_files(stream)
                     assert result.request_id == "test-request-id"
         finally:
@@ -3706,7 +3669,7 @@ class TestFinalMissingLinesAsync:
                     def name(self):
                         return self._path.name
 
-                with patch("cerevox.clients.async_lexa.Path", TestPath):
+                with patch("cerevox.services.async_ingest.Path", TestPath):
                     result = await client._upload_files(stream)
                     assert result.request_id == "test-request-id"
         finally:
@@ -3752,7 +3715,7 @@ class TestFinalCoverageTargetedGaps:
 
                 # Mock urlparse to raise exception in the fallback try block (line 358)
                 with patch(
-                    "cerevox.clients.async_lexa.urlparse",
+                    "cerevox.services.async_ingest.urlparse",
                     side_effect=ValueError("Parse error"),
                 ):
                     file_info = await client._get_file_info_from_url(test_url)
@@ -3835,7 +3798,7 @@ class TestFinalMissingLinesAsync:
                     def name(self):
                         return self._path.name
 
-                with patch("cerevox.clients.async_lexa.Path", TestPath):
+                with patch("cerevox.services.async_ingest.Path", TestPath):
                     result = await client._upload_files(stream)
                     assert result.request_id == "test-request-id"
 
@@ -3893,7 +3856,7 @@ class TestComplete100Coverage:
 
                 # Mock urlparse to fail in the exception handler (line 358)
                 with patch(
-                    "cerevox.clients.async_lexa.urlparse",
+                    "cerevox.services.async_ingest.urlparse",
                     side_effect=Exception("Parse failed"),
                 ):
                     file_info = await client._get_file_info_from_url(test_url)
@@ -4079,7 +4042,7 @@ class TestSpecificLine338And358Coverage:
 
                 # Mock urlparse to fail in the exception handler to hit line 358
                 with patch(
-                    "cerevox.clients.async_lexa.urlparse",
+                    "cerevox.services.async_ingest.urlparse",
                     side_effect=Exception("Parse failed"),
                 ):
                     file_info = await client._get_file_info_from_url(test_url)
@@ -4370,7 +4333,7 @@ class TestAsyncLexaNewFormat:
             mock_tqdm_instance = Mock()
             mock_tqdm_class = Mock(return_value=mock_tqdm_instance)
 
-            with patch("cerevox.clients.async_lexa.tqdm", mock_tqdm_class):
+            with patch("cerevox.apis.async_lexa.tqdm", mock_tqdm_class):
                 progress_callback = client._create_progress_callback(show_progress=True)
                 assert progress_callback is not None
 
@@ -4404,7 +4367,7 @@ class TestAsyncLexaNewFormat:
                 mock_tqdm_instance.set_description.assert_called_with(expected_desc)
                 mock_tqdm_instance.refresh.assert_called()
 
-    @patch("cerevox.clients.async_lexa.TQDM_AVAILABLE", True)
+    @patch("cerevox.apis.async_lexa.TQDM_AVAILABLE", True)
     @pytest.mark.asyncio
     async def test_create_progress_callback_with_failed_chunks(self):
         """Test progress callback with failed chunks"""
@@ -4412,7 +4375,7 @@ class TestAsyncLexaNewFormat:
             mock_tqdm_instance = Mock()
             mock_tqdm_class = Mock(return_value=mock_tqdm_instance)
 
-            with patch("cerevox.clients.async_lexa.tqdm", mock_tqdm_class):
+            with patch("cerevox.apis.async_lexa.tqdm", mock_tqdm_class):
                 progress_callback = client._create_progress_callback(show_progress=True)
 
                 # Test with failed chunks
@@ -4433,7 +4396,7 @@ class TestAsyncLexaNewFormat:
                 expected_desc = "Processing | Files: 2/5 | Chunks: 25/50 | Errors: 3"
                 mock_tqdm_instance.set_description.assert_called_with(expected_desc)
 
-    @patch("cerevox.clients.async_lexa.TQDM_AVAILABLE", True)
+    @patch("cerevox.apis.async_lexa.TQDM_AVAILABLE", True)
     @pytest.mark.asyncio
     async def test_create_progress_callback_completion_statuses(self):
         """Test progress callback with completion statuses"""
@@ -4448,7 +4411,7 @@ class TestAsyncLexaNewFormat:
             ]
 
             for status_type in completion_statuses:
-                with patch("cerevox.clients.async_lexa.tqdm", mock_tqdm_class):
+                with patch("cerevox.apis.async_lexa.tqdm", mock_tqdm_class):
                     progress_callback = client._create_progress_callback(
                         show_progress=True
                     )
@@ -4469,7 +4432,7 @@ class TestAsyncLexaNewFormat:
                     # Verify progress bar was closed on completion
                     mock_tqdm_instance.close.assert_called()
 
-    @patch("cerevox.clients.async_lexa.TQDM_AVAILABLE", True)
+    @patch("cerevox.apis.async_lexa.TQDM_AVAILABLE", True)
     @pytest.mark.asyncio
     async def test_create_progress_callback_minimal_status(self):
         """Test progress callback with minimal status information"""
@@ -4477,7 +4440,7 @@ class TestAsyncLexaNewFormat:
             mock_tqdm_instance = Mock()
             mock_tqdm_class = Mock(return_value=mock_tqdm_instance)
 
-            with patch("cerevox.clients.async_lexa.tqdm", mock_tqdm_class):
+            with patch("cerevox.apis.async_lexa.tqdm", mock_tqdm_class):
                 progress_callback = client._create_progress_callback(show_progress=True)
 
                 # Test with only progress information
@@ -4491,7 +4454,7 @@ class TestAsyncLexaNewFormat:
                 assert mock_tqdm_instance.n == 30
                 mock_tqdm_instance.set_description.assert_called_with("Processing")
 
-    @patch("cerevox.clients.async_lexa.TQDM_AVAILABLE", True)
+    @patch("cerevox.apis.async_lexa.TQDM_AVAILABLE", True)
     @pytest.mark.asyncio
     async def test_create_progress_callback_closure_state(self):
         """Test that progress callback maintains closure state correctly"""
@@ -4499,7 +4462,7 @@ class TestAsyncLexaNewFormat:
             mock_tqdm_instance = Mock()
             mock_tqdm_class = Mock(return_value=mock_tqdm_instance)
 
-            with patch("cerevox.clients.async_lexa.tqdm", mock_tqdm_class):
+            with patch("cerevox.apis.async_lexa.tqdm", mock_tqdm_class):
                 progress_callback = client._create_progress_callback(show_progress=True)
 
                 # First call should initialize tqdm
@@ -4522,7 +4485,7 @@ class TestAsyncLexaNewFormat:
                 # Should update progress to new value
                 assert mock_tqdm_instance.n == 50
 
-    @patch("cerevox.clients.async_lexa.TQDM_AVAILABLE", True)
+    @patch("cerevox.apis.async_lexa.TQDM_AVAILABLE", True)
     @pytest.mark.asyncio
     async def test_create_progress_callback_multiple_instances(self):
         """Test that different callback instances are independent"""
@@ -4533,7 +4496,7 @@ class TestAsyncLexaNewFormat:
                 side_effect=[mock_tqdm_instance1, mock_tqdm_instance2]
             )
 
-            with patch("cerevox.clients.async_lexa.tqdm", mock_tqdm_class):
+            with patch("cerevox.apis.async_lexa.tqdm", mock_tqdm_class):
                 # Create two separate progress callbacks
                 callback1 = client._create_progress_callback(show_progress=True)
                 callback2 = client._create_progress_callback(show_progress=True)
@@ -4556,26 +4519,26 @@ class TestAsyncLexaNewFormat:
         import importlib
 
         # Save the original module state for restoration
-        original_async_lexa = sys.modules.get("cerevox.clients.async_lexa")
+        original_async_lexa = sys.modules.get("cerevox.apis.async_lexa")
 
         try:
             # Test successful import case - mock tqdm to be available
             mock_tqdm = Mock()
             with patch.dict("sys.modules", {"tqdm": mock_tqdm}):
                 # Remove the module from cache to force reimport
-                if "cerevox.clients.async_lexa" in sys.modules:
-                    del sys.modules["cerevox.clients.async_lexa"]
+                if "cerevox.apis.async_lexa" in sys.modules:
+                    del sys.modules["cerevox.apis.async_lexa"]
 
                 # Import the module fresh
-                import cerevox.clients.async_lexa
+                import cerevox.apis.async_lexa
 
                 # Verify that TQDM_AVAILABLE is True when import succeeds
-                assert cerevox.clients.async_lexa.TQDM_AVAILABLE is True
+                assert cerevox.apis.async_lexa.TQDM_AVAILABLE is True
 
             # Test ImportError case - cause tqdm import to fail
             with patch.dict("sys.modules", {}, clear=False):
                 # Remove both tqdm and async_lexa from modules
-                modules_to_remove = ["tqdm", "cerevox.clients.async_lexa"]
+                modules_to_remove = ["tqdm", "cerevox.apis.async_lexa"]
                 for module in modules_to_remove:
                     if module in sys.modules:
                         del sys.modules[module]
@@ -4590,16 +4553,16 @@ class TestAsyncLexaNewFormat:
 
                 with patch("builtins.__import__", side_effect=mock_import):
                     # Import the module fresh
-                    import cerevox.clients.async_lexa
+                    import cerevox.apis.async_lexa
 
                     # Verify that TQDM_AVAILABLE is False when ImportError occurs
-                    assert cerevox.clients.async_lexa.TQDM_AVAILABLE is False
+                    assert cerevox.apis.async_lexa.TQDM_AVAILABLE is False
         finally:
             # Restore the original module state
-            if "cerevox.clients.async_lexa" in sys.modules:
-                del sys.modules["cerevox.clients.async_lexa"]
+            if "cerevox.apis.async_lexa" in sys.modules:
+                del sys.modules["cerevox.apis.async_lexa"]
             if original_async_lexa is not None:
-                sys.modules["cerevox.clients.async_lexa"] = original_async_lexa
+                sys.modules["cerevox.apis.async_lexa"] = original_async_lexa
             else:
                 # Force a clean reimport of the module in its normal state
-                import cerevox.clients.async_lexa
+                import cerevox.apis.async_lexa

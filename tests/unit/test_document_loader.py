@@ -5342,7 +5342,6 @@ class TestCoverageCompleteness:
 
     def test_coverage_for_lines_1625_onwards(self):
         """Test DocumentBatch from_api_response for single document detection"""
-        from cerevox.utils.document_loader import DocumentBatch
 
         # Test response that has meaningful content
         response_data = {"text": "some content", "filename": "doc.pdf"}

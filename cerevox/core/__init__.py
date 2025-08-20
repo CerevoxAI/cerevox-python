@@ -1,12 +1,14 @@
 """
-Cerevox SDK Core Components
+Cerevox SDK Core
 
-This module contains the core infrastructure components including base clients,
-exceptions, and data models.
+This module contains the core infrastructure including:
+    - Base clients
+    - Exceptions and error handling
+    - Data models
 """
 
-from .async_base_client import AsyncBaseClient
-from .base_client import BaseClient
+from .async_client import AsyncClient
+from .client import Client
 from .exceptions import (
     AccountError,
     InsufficientPermissionsError,
@@ -89,9 +91,9 @@ from .models import (
 
 __all__ = [
     # Base clients
-    "BaseClient",
-    "AsyncBaseClient",
-    # Exceptions
+    "Client",
+    "AsyncClient",
+    # Exceptions and error handling
     "AccountError",
     "InsufficientPermissionsError",
     "LexaAuthError",
@@ -106,7 +108,9 @@ __all__ = [
     "UserManagementError",
     "create_error_from_response",
     "get_retry_strategy",
-    # Models - Account related
+    # Models - Shared
+    "VALID_MODES",
+    # Models - Account management
     "AccountInfo",
     "AccountPlan",
     "CreatedResponse",
@@ -120,7 +124,7 @@ __all__ = [
     "UserCreate",
     "UserDelete",
     "UserUpdate",
-    # Models - Hippo (RAG) related
+    # Models - Hippo (RAG)
     "AskItem",
     "AskListItem",
     "AsksListResponse",
@@ -148,8 +152,7 @@ __all__ = [
     "SourceInfo",
     "TableInfo",
     "TextBlock",
-    # Models - Lexa (Document Processing) related
-    "VALID_MODES",
+    # Models - Lexa (Document Processing)
     "BucketListResponse",
     "ContentElement",
     "ContentInfo",

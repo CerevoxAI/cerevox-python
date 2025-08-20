@@ -1,5 +1,5 @@
 """
-Test suite for cerevox.clients.account
+Test suite for cerevox.apis.account
 
 Comprehensive tests to achieve 100% code coverage for the Account class,
 including all methods, error handling, and edge cases.
@@ -42,7 +42,7 @@ class TestAccountInitialization:
             mock_login.return_value = None
             client = Account(api_key="test-api-key")
             assert client.api_key == "test-api-key"
-            assert client.base_url == "https://dev.cerevox.ai/v1"
+            assert client.data_url == "https://dev.cerevox.ai/v1"
             assert client.timeout == 30.0
             assert client.max_retries == 3
             mock_login.assert_called_once_with("test-api-key")
@@ -65,25 +65,20 @@ class TestAccountInitialization:
             ):
                 Account()
 
-    def test_init_with_custom_base_url(self):
+    def test_init_with_custom_data_url(self):
         """Test initialization with custom base URL"""
         with patch.object(Account, "_login") as mock_login:
             mock_login.return_value = None
             client = Account(
                 api_key="test-key",
-                base_url="https://custom.api.com",
+                data_url="https://custom.api.com",
             )
-            assert client.base_url == "https://custom.api.com"
+            assert client.data_url == "https://custom.api.com"
 
-    def test_init_invalid_base_url(self):
+    def test_init_invalid_data_url(self):
         """Test initialization with invalid base URL"""
-        with pytest.raises(ValueError, match="base_url must start with"):
-            Account(api_key="test-key", base_url="invalid-url")
-
-    def test_init_empty_base_url(self):
-        """Test initialization with empty base URL"""
-        with pytest.raises(ValueError, match="base_url must be a non-empty string"):
-            Account(api_key="test-key", base_url="")
+        with pytest.raises(ValueError, match="data_url must start with"):
+            Account(api_key="test-key", data_url="invalid-url")
 
     def test_init_with_session_kwargs(self):
         """Test initialization with session kwargs"""
@@ -126,7 +121,7 @@ class TestAccountAuthentication:
         with patch.object(Account, "__init__", return_value=None):
             client = Account.__new__(Account)
             client.session = requests.Session()
-            client.base_url = "https://dev.cerevox.ai/v1"
+            client.data_url = "https://dev.cerevox.ai/v1"
             client.auth_url = "https://dev.cerevox.ai/v1"
             client.timeout = 30.0
             client.api_key = "test-api-key"
@@ -160,7 +155,7 @@ class TestAccountAuthentication:
         with patch.object(Account, "__init__", return_value=None):
             client = Account.__new__(Account)
             client.session = requests.Session()
-            client.base_url = "https://dev.cerevox.ai/v1"
+            client.data_url = "https://dev.cerevox.ai/v1"
             client.auth_url = "https://dev.cerevox.ai/v1"
             client.timeout = 30.0
             client.api_key = "wrong-api-key"
@@ -188,7 +183,7 @@ class TestAccountAuthentication:
         with patch.object(Account, "__init__", return_value=None):
             client = Account.__new__(Account)
             client.session = requests.Session()
-            client.base_url = "https://dev.cerevox.ai/v1"
+            client.data_url = "https://dev.cerevox.ai/v1"
             client.auth_url = "https://dev.cerevox.ai/v1"
             client.timeout = 30.0
             client.api_key = "test-api-key"
@@ -213,7 +208,7 @@ class TestAccountAuthentication:
         with patch.object(Account, "__init__", return_value=None):
             client = Account.__new__(Account)
             client.session = requests.Session()
-            client.base_url = "https://dev.cerevox.ai/v1"
+            client.data_url = "https://dev.cerevox.ai/v1"
             client.auth_url = "https://dev.cerevox.ai/v1"
             client.timeout = 30.0
             client.api_key = "test-api-key"
@@ -247,7 +242,7 @@ class TestAccountManagement:
             client = Account.__new__(Account)
             client.api_key = "test_api_key"
             client.session = requests.Session()
-            client.base_url = "https://dev.cerevox.ai/v1"
+            client.data_url = "https://dev.cerevox.ai/v1"
             client.auth_url = "https://dev.cerevox.ai/v1"
             client.timeout = 30.0
             client.access_token = "access_123"
@@ -281,7 +276,7 @@ class TestAccountManagement:
             client = Account.__new__(Account)
             client.api_key = "test_api_key"
             client.session = requests.Session()
-            client.base_url = "https://dev.cerevox.ai/v1"
+            client.data_url = "https://dev.cerevox.ai/v1"
             client.auth_url = "https://dev.cerevox.ai/v1"
             client.timeout = 30.0
             client.access_token = "access_123"
@@ -314,7 +309,7 @@ class TestAccountManagement:
             client = Account.__new__(Account)
             client.api_key = "test_api_key"
             client.session = requests.Session()
-            client.base_url = "https://dev.cerevox.ai/v1"
+            client.data_url = "https://dev.cerevox.ai/v1"
             client.auth_url = "https://dev.cerevox.ai/v1"
             client.timeout = 30.0
             client.access_token = "access_123"
@@ -345,7 +340,7 @@ class TestUserManagement:
             client = Account.__new__(Account)
             client.api_key = "test_api_key"
             client.session = requests.Session()
-            client.base_url = "https://dev.cerevox.ai/v1"
+            client.data_url = "https://dev.cerevox.ai/v1"
             client.auth_url = "https://dev.cerevox.ai/v1"
             client.timeout = 30.0
             client.access_token = "access_123"
@@ -371,7 +366,7 @@ class TestUserManagement:
             client = Account.__new__(Account)
             client.api_key = "test_api_key"
             client.session = requests.Session()
-            client.base_url = "https://dev.cerevox.ai/v1"
+            client.data_url = "https://dev.cerevox.ai/v1"
             client.auth_url = "https://dev.cerevox.ai/v1"
             client.timeout = 30.0
             client.access_token = "access_123"
@@ -413,7 +408,7 @@ class TestUserManagement:
             client = Account.__new__(Account)
             client.api_key = "test_api_key"
             client.session = requests.Session()
-            client.base_url = "https://dev.cerevox.ai/v1"
+            client.data_url = "https://dev.cerevox.ai/v1"
             client.auth_url = "https://dev.cerevox.ai/v1"
             client.timeout = 30.0
             client.access_token = "access_123"
@@ -452,7 +447,7 @@ class TestUserManagement:
             client = Account.__new__(Account)
             client.api_key = "test_api_key"
             client.session = requests.Session()
-            client.base_url = "https://dev.cerevox.ai/v1"
+            client.data_url = "https://dev.cerevox.ai/v1"
             client.auth_url = "https://dev.cerevox.ai/v1"
             client.timeout = 30.0
             client.access_token = "access_123"
@@ -485,7 +480,7 @@ class TestUserManagement:
             client = Account.__new__(Account)
             client.api_key = "test_api_key"
             client.session = requests.Session()
-            client.base_url = "https://dev.cerevox.ai/v1"
+            client.data_url = "https://dev.cerevox.ai/v1"
             client.auth_url = "https://dev.cerevox.ai/v1"
             client.timeout = 30.0
             client.access_token = "access_123"
@@ -512,7 +507,7 @@ class TestUserManagement:
             client = Account.__new__(Account)
             client.api_key = "test_api_key"
             client.session = requests.Session()
-            client.base_url = "https://dev.cerevox.ai/v1"
+            client.data_url = "https://dev.cerevox.ai/v1"
             client.auth_url = "https://dev.cerevox.ai/v1"
             client.timeout = 30.0
             client.access_token = "access_123"
@@ -545,7 +540,7 @@ class TestUserManagement:
             client = Account.__new__(Account)
             client.api_key = "test_api_key"
             client.session = requests.Session()
-            client.base_url = "https://dev.cerevox.ai/v1"
+            client.data_url = "https://dev.cerevox.ai/v1"
             client.auth_url = "https://dev.cerevox.ai/v1"
             client.timeout = 30.0
             client.access_token = "access_123"
@@ -571,7 +566,7 @@ class TestUserManagement:
             client = Account.__new__(Account)
             client.api_key = "test_api_key"
             client.session = requests.Session()
-            client.base_url = "https://dev.cerevox.ai/v1"
+            client.data_url = "https://dev.cerevox.ai/v1"
             client.auth_url = "https://dev.cerevox.ai/v1"
             client.timeout = 30.0
             client.access_token = "access_123"
@@ -594,7 +589,7 @@ class TestUserManagement:
             client = Account.__new__(Account)
             client.api_key = "test_api_key"
             client.session = requests.Session()
-            client.base_url = "https://dev.cerevox.ai/v1"
+            client.data_url = "https://dev.cerevox.ai/v1"
             client.auth_url = "https://dev.cerevox.ai/v1"
             client.timeout = 30.0
             client.access_token = "access_123"
@@ -619,7 +614,7 @@ class TestUserManagement:
             client = Account.__new__(Account)
             client.api_key = "test_api_key"
             client.session = requests.Session()
-            client.base_url = "https://dev.cerevox.ai/v1"
+            client.data_url = "https://dev.cerevox.ai/v1"
             client.auth_url = "https://dev.cerevox.ai/v1"
             client.timeout = 30.0
             client.access_token = "access_123"
@@ -647,7 +642,7 @@ class TestAccountErrorHandling:
             client = Account.__new__(Account)
             client.api_key = "test_api_key"
             client.session = requests.Session()
-            client.base_url = "https://dev.cerevox.ai/v1"
+            client.data_url = "https://dev.cerevox.ai/v1"
             client.auth_url = "https://dev.cerevox.ai/v1"
             client.timeout = 30.0
             client.access_token = "access_123"
@@ -669,7 +664,7 @@ class TestAccountErrorHandling:
             client = Account.__new__(Account)
             client.api_key = "test_api_key"
             client.session = requests.Session()
-            client.base_url = "https://dev.cerevox.ai/v1"
+            client.data_url = "https://dev.cerevox.ai/v1"
             client.auth_url = "https://dev.cerevox.ai/v1"
             client.timeout = 30.0
             client.access_token = "access_123"
@@ -693,7 +688,7 @@ class TestAccountErrorHandling:
             client = Account.__new__(Account)
             client.api_key = "test_api_key"
             client.session = requests.Session()
-            client.base_url = "https://dev.cerevox.ai/v1"
+            client.data_url = "https://dev.cerevox.ai/v1"
             client.auth_url = "https://dev.cerevox.ai/v1"
             client.timeout = 30.0
             client.access_token = "access_123"
@@ -721,7 +716,7 @@ class TestAccountErrorHandling:
             client = Account.__new__(Account)
             client.api_key = "test_api_key"
             client.session = requests.Session()
-            client.base_url = "https://dev.cerevox.ai/v1"
+            client.data_url = "https://dev.cerevox.ai/v1"
             client.auth_url = "https://dev.cerevox.ai/v1"
             client.timeout = 30.0
             client.access_token = "access_123"
@@ -747,7 +742,7 @@ class TestAccountErrorHandling:
             client = Account.__new__(Account)
             client.api_key = "test_api_key"
             client.session = requests.Session()
-            client.base_url = "https://dev.cerevox.ai/v1"
+            client.data_url = "https://dev.cerevox.ai/v1"
             client.auth_url = "https://dev.cerevox.ai/v1"
             client.timeout = 30.0
             client.access_token = "access_123"
@@ -773,7 +768,7 @@ class TestAccountErrorHandling:
             client = Account.__new__(Account)
             client.api_key = "test_api_key"
             client.session = requests.Session()
-            client.base_url = "https://dev.cerevox.ai/v1"
+            client.data_url = "https://dev.cerevox.ai/v1"
             client.auth_url = "https://dev.cerevox.ai/v1"
             client.timeout = 30.0
             client.access_token = "access_123"
@@ -795,7 +790,7 @@ class TestAccountRequestHelpers:
             client = Account.__new__(Account)
             client.api_key = "test_api_key"
             client.session = requests.Session()
-            client.base_url = "https://dev.cerevox.ai/v1"
+            client.data_url = "https://dev.cerevox.ai/v1"
             client.auth_url = "https://dev.cerevox.ai/v1"
             client.timeout = 30.0
             original_close = Mock()
@@ -810,7 +805,7 @@ class TestAccountRequestHelpers:
             client = Account.__new__(Account)
             client.api_key = "test_api_key"
             client.session = requests.Session()
-            client.base_url = "https://dev.cerevox.ai/v1"
+            client.data_url = "https://dev.cerevox.ai/v1"
             client.auth_url = "https://dev.cerevox.ai/v1"
             client.timeout = 30.0
             del client.session  # Remove session
@@ -852,7 +847,7 @@ class TestAccountFullCoverage:
             client = Account.__new__(Account)
             client.api_key = "test_api_key"
             client.session = requests.Session()
-            client.base_url = "https://dev.cerevox.ai/v1"
+            client.data_url = "https://dev.cerevox.ai/v1"
             client.auth_url = "https://dev.cerevox.ai/v1"
             client.timeout = 30.0
             client.access_token = "access_123"
@@ -884,7 +879,7 @@ class TestAccountFullCoverage:
             client = Account.__new__(Account)
             client.api_key = "test_api_key"
             client.session = requests.Session()
-            client.base_url = "https://dev.cerevox.ai/v1"
+            client.data_url = "https://dev.cerevox.ai/v1"
             client.auth_url = "https://dev.cerevox.ai/v1"
             client.timeout = 30.0
             client.access_token = "access_123"
@@ -916,7 +911,7 @@ class TestAccountFullCoverage:
             client = Account.__new__(Account)
             client.api_key = "test_api_key"
             client.session = requests.Session()
-            client.base_url = "https://dev.cerevox.ai/v1"
+            client.data_url = "https://dev.cerevox.ai/v1"
             client.auth_url = "https://dev.cerevox.ai/v1"
             client.timeout = 30.0
             client.access_token = "access_123"
@@ -948,7 +943,7 @@ class TestAccountFullCoverage:
             client = Account.__new__(Account)
             client.api_key = "test_api_key"
             client.session = requests.Session()
-            client.base_url = "https://dev.cerevox.ai/v1"
+            client.data_url = "https://dev.cerevox.ai/v1"
             client.auth_url = "https://dev.cerevox.ai/v1"
             client.timeout = 30.0
             client.access_token = "access_123"
@@ -974,7 +969,7 @@ class TestAccountFullCoverage:
             client = Account.__new__(Account)
             client.api_key = "test_api_key"
             client.session = requests.Session()
-            client.base_url = "https://dev.cerevox.ai/v1"
+            client.data_url = "https://dev.cerevox.ai/v1"
             client.auth_url = "https://dev.cerevox.ai/v1"
             client.timeout = 30.0
             client.access_token = "access_123"
@@ -1001,7 +996,7 @@ class TestAccountFullCoverage:
             client = Account.__new__(Account)
             client.api_key = "test_api_key"
             client.session = requests.Session()
-            client.base_url = "https://dev.cerevox.ai/v1"
+            client.data_url = "https://dev.cerevox.ai/v1"
             client.auth_url = "https://dev.cerevox.ai/v1"
             client.timeout = 30.0
             client.access_token = "access_123"
@@ -1027,7 +1022,7 @@ class TestAccountFullCoverage:
             client = Account.__new__(Account)
             client.api_key = "test_api_key"
             client.session = requests.Session()
-            client.base_url = "https://dev.cerevox.ai/v1"
+            client.data_url = "https://dev.cerevox.ai/v1"
             client.auth_url = "https://dev.cerevox.ai/v1"
             client.timeout = 30.0
             client.access_token = "access_123"

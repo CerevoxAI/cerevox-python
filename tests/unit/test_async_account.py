@@ -1,5 +1,5 @@
 """
-Test suite for cerevox.clients.async_account
+Test suite for cerevox.apis.async_account
 
 Comprehensive tests to achieve 100% code coverage for the AsyncAccount class,
 including all methods, error handling, and edge cases.
@@ -79,7 +79,7 @@ class TestAsyncAccountInitialization:
         """Test initialization with API key parameter"""
         client = AsyncAccount(api_key="test-api-key")
         assert client.api_key == "test-api-key"
-        assert client.base_url == "https://dev.cerevox.ai/v1"
+        assert client.data_url == "https://dev.cerevox.ai/v1"
         assert client.timeout.total == 30.0
         assert client.max_retries == 3
 
@@ -98,23 +98,18 @@ class TestAsyncAccountInitialization:
             client = AsyncAccount(api_key=None)
             assert client.api_key == "env-api-key"
 
-    def test_init_with_custom_base_url(self):
+    def test_init_with_custom_data_url(self):
         """Test initialization with custom base URL"""
         client = AsyncAccount(
             api_key="test-key",
-            base_url="https://custom.api.com",
+            data_url="https://custom.api.com",
         )
-        assert client.base_url == "https://custom.api.com"
+        assert client.data_url == "https://custom.api.com"
 
-    def test_init_invalid_base_url(self):
+    def test_init_invalid_data_url(self):
         """Test initialization with invalid base URL"""
-        with pytest.raises(ValueError, match="base_url must start with"):
-            AsyncAccount(api_key="test-key", base_url="invalid-url")
-
-    def test_init_empty_base_url(self):
-        """Test initialization with empty base URL"""
-        with pytest.raises(ValueError, match="base_url must be a non-empty string"):
-            AsyncAccount(api_key="test-key", base_url="")
+        with pytest.raises(ValueError, match="data_url must start with"):
+            AsyncAccount(api_key="test-key", data_url="invalid-url")
 
     def test_init_invalid_max_retries(self):
         """Test initialization with invalid max_retries"""
