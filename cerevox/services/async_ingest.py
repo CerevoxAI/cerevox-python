@@ -63,8 +63,8 @@ class AsyncIngest(AsyncClient):
     def __init__(
         self,
         api_key: Optional[str] = None,
+        base_url: Optional[str] = None,
         data_url: Optional[str] = None,
-        auth_url: Optional[str] = None,
         product: Optional[str] = None,
         max_concurrent: int = 10,
         **kwargs: Any,
@@ -74,13 +74,13 @@ class AsyncIngest(AsyncClient):
 
         Args:
             api_key: User Personal Access Token (PAT) for authentication
-            data_url: Base URL for the Cerevox API (used for data requests)
-            auth_url: Base URL for authentication (defaults to data_url if not provided)
+            base_url : str, default "https://dev.cerevox.ai/v1" Base URL for cerevox requests.
+            data_url : str, default "https://data.cerevox.ai" Data URL for cerevox requests.
             product: Product identifier for ingestion requests (e.g., "lexa", "hippo")
             max_concurrent: Maximum number of concurrent requests (default: 10)
             **kwargs: Additional arguments passed to base client
         """
-        super().__init__(api_key, data_url, auth_url, **kwargs)
+        super().__init__(api_key, base_url, data_url, **kwargs)
         self.product = product
         self.max_concurrent = max_concurrent
         self._semaphore = asyncio.Semaphore(max_concurrent)
@@ -264,7 +264,7 @@ class AsyncIngest(AsyncClient):
 
             async with self._semaphore:
                 response = await self._request(
-                    "POST", "/v0/files", data=data, params=params
+                    "POST", "/v0/files", data=data, params=params, is_data=True
                 )
             return IngestionResult(**response)
 
@@ -325,7 +325,7 @@ class AsyncIngest(AsyncClient):
         payload = {"files": processed_urls, "mode": mode, "product": self.product}
 
         async with self._semaphore:
-            data = await self._request("POST", "/v0/file-urls", json_data=payload)
+            data = await self._request("POST", "/v0/file-urls", json_data=payload, is_data=True)
         return IngestionResult(**data)
 
     # Amazon S3 Integration
@@ -358,7 +358,7 @@ class AsyncIngest(AsyncClient):
         }
 
         async with self._semaphore:
-            data = await self._request("POST", "/v0/amazon-folder", json_data=payload)
+            data = await self._request("POST", "/v0/amazon-folder", json_data=payload, is_data=True)
         return IngestionResult(**data)
 
     async def list_s3_buckets(self) -> BucketListResponse:
@@ -369,7 +369,7 @@ class AsyncIngest(AsyncClient):
             BucketListResponse containing list of available buckets
         """
         async with self._semaphore:
-            data = await self._request("GET", "/v0/amazon-listBuckets")
+            data = await self._request("GET", "/v0/amazon-listBuckets", is_data=True)
         return BucketListResponse(**data)
 
     async def list_s3_folders(self, bucket_name: str) -> FolderListResponse:
@@ -384,7 +384,7 @@ class AsyncIngest(AsyncClient):
         """
         async with self._semaphore:
             data = await self._request(
-                "GET", "/v0/amazon-listFoldersInBucket", params={"bucket": bucket_name}
+                "GET", "/v0/amazon-listFoldersInBucket", params={"bucket": bucket_name}, is_data=True
             )
         return FolderListResponse(**data)
 
@@ -411,7 +411,7 @@ class AsyncIngest(AsyncClient):
         payload = {"folder_id": box_folder_id, "mode": mode, "product": self.product}
 
         async with self._semaphore:
-            data = await self._request("POST", "/v0/box-folder", json_data=payload)
+            data = await self._request("POST", "/v0/box-folder", json_data=payload, is_data=True)
         return IngestionResult(**data)
 
     async def list_box_folders(self) -> FolderListResponse:
@@ -422,7 +422,7 @@ class AsyncIngest(AsyncClient):
             FolderListResponse containing list of available folders
         """
         async with self._semaphore:
-            data = await self._request("GET", "/v0/box-listFolders")
+            data = await self._request("GET", "/v0/box-listFolders", is_data=True)
         return FolderListResponse(**data)
 
     # Dropbox Integration
@@ -448,7 +448,7 @@ class AsyncIngest(AsyncClient):
         payload = {"path": folder_path, "mode": mode, "product": self.product}
 
         async with self._semaphore:
-            data = await self._request("POST", "/v0/dropbox-folder", json_data=payload)
+            data = await self._request("POST", "/v0/dropbox-folder", json_data=payload, is_data=True)
         return IngestionResult(**data)
 
     async def list_dropbox_folders(self) -> FolderListResponse:
@@ -459,7 +459,7 @@ class AsyncIngest(AsyncClient):
             FolderListResponse containing list of available folders
         """
         async with self._semaphore:
-            data = await self._request("GET", "/v0/dropbox-listFolders")
+            data = await self._request("GET", "/v0/dropbox-listFolders", is_data=True)
         return FolderListResponse(**data)
 
     # Microsoft SharePoint Integration
@@ -493,7 +493,7 @@ class AsyncIngest(AsyncClient):
 
         async with self._semaphore:
             data = await self._request(
-                "POST", "/v0/microsoft-folder", json_data=payload
+                "POST", "/v0/microsoft-folder", json_data=payload, is_data=True
             )
         return IngestionResult(**data)
 
@@ -505,7 +505,7 @@ class AsyncIngest(AsyncClient):
             SiteListResponse containing list of available sites
         """
         async with self._semaphore:
-            data = await self._request("GET", "/v0/microsoft-listSites")
+            data = await self._request("GET", "/v0/microsoft-listSites", is_data=True)
         return SiteListResponse(**data)
 
     async def list_sharepoint_drives(self, site_id: str) -> DriveListResponse:
@@ -520,7 +520,7 @@ class AsyncIngest(AsyncClient):
         """
         async with self._semaphore:
             data = await self._request(
-                "GET", "/v0/microsoft-listDrivesInSite", params={"site_id": site_id}
+                "GET", "/v0/microsoft-listDrivesInSite", params={"site_id": site_id}, is_data=True
             )
         return DriveListResponse(**data)
 
@@ -536,7 +536,7 @@ class AsyncIngest(AsyncClient):
         """
         async with self._semaphore:
             data = await self._request(
-                "GET", "/v0/microsoft-listFoldersInDrive", params={"drive_id": drive_id}
+                "GET", "/v0/microsoft-listFoldersInDrive", params={"drive_id": drive_id}, is_data=True
             )
         return FolderListResponse(**data)
 
@@ -564,7 +564,7 @@ class AsyncIngest(AsyncClient):
 
         async with self._semaphore:
             data = await self._request(
-                "POST", "/v0/salesforce-folder", json_data=payload
+                "POST", "/v0/salesforce-folder", json_data=payload, is_data=True
             )
         return IngestionResult(**data)
 
@@ -576,7 +576,7 @@ class AsyncIngest(AsyncClient):
             FolderListResponse containing list of available folders
         """
         async with self._semaphore:
-            data = await self._request("GET", "/v0/salesforce-listFolders")
+            data = await self._request("GET", "/v0/salesforce-listFolders", is_data=True)
         return FolderListResponse(**data)
 
     # Sendme Integration
@@ -600,5 +600,5 @@ class AsyncIngest(AsyncClient):
         payload = {"ticket": ticket, "mode": mode, "product": self.product}
 
         async with self._semaphore:
-            data = await self._request("POST", "/v0/sendme", json_data=payload)
+            data = await self._request("POST", "/v0/sendme", json_data=payload, is_data=True)
         return IngestionResult(**data)

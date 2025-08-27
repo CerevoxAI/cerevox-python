@@ -136,8 +136,8 @@ class AsyncClient:
     def __init__(
         self,
         api_key: Optional[str] = None,
+        base_url: Optional[str] = None,
         data_url: Optional[str] = None,
-        auth_url: Optional[str] = None,
         max_retries: int = 3,
         timeout: float = 30.0,
         **kwargs: Any,
@@ -151,12 +151,11 @@ class AsyncClient:
             User Personal Access Token for authentication. If None, attempts
             to read from CEREVOX_API_KEY environment variable. This token
             must have appropriate scopes for the intended operations.
-        data_url : str, optional
-            Base URL for API data operations. Must be a valid HTTP/HTTPS URL.
-            Defaults to "https://dev.cerevox.ai/v1" for development usage.
-        auth_url : str, optional
-            Base URL for authentication endpoints. Must be a valid HTTP/HTTPS URL.
-            If not provided, inherits the value from data_url.
+        base_url : str, default "https://dev.cerevox.ai/v1"
+            Base URL for cerevox requests.
+        data_url : str, default "https://data.cerevox.ai"
+            Data URL for the Cerevox RAG API. Change to production URL
+            for live environments.
         max_retries : int, default 3
             Maximum retry attempts for transient failures. Must be >= 0.
             Retries are handled at the application level for specific error types.
@@ -193,32 +192,23 @@ class AsyncClient:
         if not self.api_key:
             raise ValueError("api_key is required for authentication")
 
+        # Default base_url if not provided
+        if not base_url:
+            base_url = "https://dev.cerevox.ai/v1"
+
         # Default data_url if not provided
         if not data_url:
-            data_url = "https://dev.cerevox.ai/v1"
+            data_url = "https://data.cerevox.ai"
 
         # Basic URL validation
-        if not (data_url.startswith("http://") or data_url.startswith("https://")):
-            raise ValueError("data_url must start with http:// or https://")
+        if not (base_url.startswith(HTTP) or base_url.startswith(HTTPS)):
+            raise ValueError(f"base_url must start with {HTTP} or {HTTPS}")
 
-        # Validate max_retries
-        if not isinstance(max_retries, int):
-            raise TypeError("max_retries must be an integer")
-        if max_retries < 0:
-            raise ValueError("max_retries must be a non-negative integer")
+        if not (data_url.startswith(HTTP) or data_url.startswith(HTTPS)):
+            raise ValueError(f"data_url must start with {HTTP} or {HTTPS}")
 
+        self.base_url = base_url.rstrip("/")  # Remove trailing slash
         self.data_url = data_url.rstrip("/")  # Remove trailing slash
-
-        # Set auth_url - defaults to data_url if not provided
-        if auth_url:
-            # Validate auth_url format
-            if not auth_url or not isinstance(auth_url, str):
-                raise ValueError("auth_url must be a non-empty string")
-            if not (auth_url.startswith("http://") or auth_url.startswith("https://")):
-                raise ValueError("auth_url must start with http:// or https://")
-            self.auth_url = auth_url.rstrip("/")
-        else:
-            self.auth_url = self.data_url
 
         self.timeout = aiohttp.ClientTimeout(total=timeout)
         self.max_retries = max_retries
@@ -382,6 +372,7 @@ class AsyncClient:
         headers: Optional[Dict[str, str]] = None,
         data: Optional[Any] = None,
         is_auth: bool = False,
+        is_data: bool = False,
         **kwargs: Any,
     ) -> Dict[str, Any]:
         """
@@ -415,6 +406,8 @@ class AsyncClient:
         is_auth : bool, default False
             If True, uses auth_url and bypasses token validation for
             authentication endpoints.
+        is_data : bool, default False
+            If True, uses data_url.
         **kwargs : dict
             Additional arguments passed directly to aiohttp.ClientSession.request,
             such as 'allow_redirects', 'max_redirects', 'ssl', or 'proxy'.
@@ -501,14 +494,16 @@ class AsyncClient:
         if not self.session:
             await self.start_session()
 
-        data_url = self.auth_url
+        base_url = self.base_url
 
-        # Check if token needs refresh before making request (unless this is an auth request)
+        # Check if token needs refresh before making request
         if not is_auth:
-            await self._ensure_valid_token()
-            data_url = self.data_url
+            self._ensure_valid_token()
 
-        url = f"{data_url}{endpoint}"
+        if is_data:
+            base_url = self.data_url
+
+        url = f"{base_url}{endpoint}"
 
         # Merge additional headers
         request_headers = dict(self.session_kwargs["headers"])
@@ -856,7 +851,7 @@ class AsyncClient:
         The async nature allows for non-blocking logout operations,
         useful when shutting down multiple client instances concurrently.
         """
-        response_data = await self._request("POST", "/token/revoke", is_auth=True)
+        response_data = await self._request("POST", "/token/revoke")
 
         # Clear all token information since the token is now revoked
         self.access_token = None

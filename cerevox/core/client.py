@@ -100,8 +100,8 @@ class Client:
     def __init__(
         self,
         api_key: Optional[str] = None,
+        base_url: Optional[str] = None,
         data_url: Optional[str] = None,
-        auth_url: Optional[str] = None,
         max_retries: int = 3,
         session_kwargs: Optional[Dict[str, Any]] = None,
         timeout: float = 30.0,
@@ -116,12 +116,11 @@ class Client:
             User Personal Access Token for authentication. If None, attempts
             to read from CEREVOX_API_KEY environment variable. This token
             must have appropriate scopes for the intended operations.
-        data_url : str, optional
-            Base URL for API data operations. Must be a valid HTTP/HTTPS URL.
-            Defaults to "https://dev.cerevox.ai/v1" for development usage.
-        auth_url : str, optional
-            Base URL for authentication endpoints. Must be a valid HTTP/HTTPS URL.
-            If not provided, inherits the value from data_url.
+        base_url : str, default "https://dev.cerevox.ai/v1"
+            Base URL for cerevox requests.
+        data_url : str, default "https://data.cerevox.ai"
+            Data URL for the Cerevox RAG API. Change to production URL
+            for live environments.
         max_retries : int, default 3
             Maximum retry attempts for transient failures. Must be >= 0.
             Applies to 5xx server errors with exponential backoff strategy.
@@ -164,26 +163,23 @@ class Client:
         if not self.api_key:
             raise ValueError("api_key is required for authentication")
 
+        # Default base_url if not provided
+        if not base_url:
+            base_url = "https://dev.cerevox.ai/v1"
+
         # Default data_url if not provided
         if not data_url:
-            data_url = "https://dev.cerevox.ai/v1"
+            data_url = "https://data.cerevox.ai"
 
         # Basic URL validation
+        if not (base_url.startswith(HTTP) or base_url.startswith(HTTPS)):
+            raise ValueError(f"base_url must start with {HTTP} or {HTTPS}")
+
         if not (data_url.startswith(HTTP) or data_url.startswith(HTTPS)):
             raise ValueError(f"data_url must start with {HTTP} or {HTTPS}")
 
+        self.base_url = base_url.rstrip("/")  # Remove trailing slash
         self.data_url = data_url.rstrip("/")  # Remove trailing slash
-
-        # Set auth_url - defaults to data_url if not provided
-        if auth_url:
-            # Validate auth_url format
-            if not auth_url or not isinstance(auth_url, str):
-                raise ValueError("auth_url must be a non-empty string")
-            if not (auth_url.startswith(HTTP) or auth_url.startswith(HTTPS)):
-                raise ValueError(f"auth_url must start with {HTTP} or {HTTPS}")
-            self.auth_url = auth_url.rstrip("/")
-        else:
-            self.auth_url = self.data_url
 
         self.timeout = timeout
         self.max_retries = max_retries
@@ -235,6 +231,7 @@ class Client:
         headers: Optional[Dict[str, str]] = None,
         files: Optional[Dict[str, Any]] = None,
         is_auth: bool = False,
+        is_data: bool = False,
         **kwargs: Any,
     ) -> Dict[str, Any]:
         """
@@ -266,8 +263,10 @@ class Client:
             Files to upload in multipart/form-data format. Keys are field
             names, values are file-like objects or tuples.
         is_auth : bool, default False
-            If True, uses auth_url and bypasses token validation for
+            If True, uses base_url and bypasses token validation for
             authentication endpoints.
+        is_data : bool, default False
+            If True, uses data_url.
         **kwargs : dict
             Additional arguments passed directly to the requests library,
             such as 'stream', 'allow_redirects', or 'verify'.
@@ -340,14 +339,16 @@ class Client:
         not retry client errors (4xx) which typically require user
         intervention to resolve.
         """
-        data_url = self.auth_url
+        base_url = self.base_url
 
         # Check if token needs refresh before making request
         if not is_auth:
             self._ensure_valid_token()
-            data_url = self.data_url
 
-        url = f"{data_url}{endpoint}"
+        if is_data:
+            base_url = self.data_url
+
+        url = f"{base_url}{endpoint}"
 
         # Merge additional headers
         request_headers = dict(self.session.headers)
@@ -715,7 +716,7 @@ class Client:
         The revocation request uses the current access token for
         authentication, so it must be valid when called.
         """
-        response_data = self._request("POST", "/token/revoke", is_auth=True)
+        response_data = self._request("POST", "/token/revoke")
 
         # Clear all token information since the token is now revoked
         self.access_token = None

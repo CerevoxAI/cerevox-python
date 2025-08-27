@@ -107,8 +107,8 @@ class AsyncHippo(AsyncIngest):
         self,
         *,
         api_key: Optional[str] = None,
-        data_url: str = "https://dev.cerevox.ai/v1",
-        auth_url: Optional[str] = None,
+        base_url: str = "https://dev.cerevox.ai/v1",
+        data_url: str = "https://data.cerevox.ai",
         max_retries: int = 3,
         timeout: float = 30.0,
         **kwargs: Any,
@@ -121,11 +121,11 @@ class AsyncHippo(AsyncIngest):
         api_key : str, optional
             User Personal Access Token (PAT) for authentication. If None,
             attempts to read from CEREVOX_API_KEY environment variable.
-        data_url : str, default "https://dev.cerevox.ai/v1"
-            Base URL for the Cerevox RAG API. Change to production URL
+        base_url : str, default "https://dev.cerevox.ai/v1"
+            Base URL for cerevox requests.
+        data_url : str, default "https://data.cerevox.ai"
+            Data URL for the Cerevox RAG API. Change to production URL
             for live environments.
-        auth_url : str, optional
-            Authentication endpoint URL. Uses data_url if not specified.
         max_retries : int, default 3
             Maximum retry attempts for failed requests. Must be >= 0.
         timeout : float, default 30.0
@@ -148,8 +148,8 @@ class AsyncHippo(AsyncIngest):
         """
         super().__init__(
             api_key=api_key,
+            base_url=base_url,
             data_url=data_url,
-            auth_url=auth_url,
             product="hippo",
             max_retries=max_retries,
             timeout=timeout,

@@ -59,8 +59,8 @@ class Ingest(Client):
     def __init__(
         self,
         api_key: Optional[str] = None,
-        data_url: str = "https://www.data.cerevox.ai",
-        auth_url: str = "https://dev.cerevox.ai/v1",
+        base_url: str = "https://dev.cerevox.ai/v1",
+        data_url: str = "https://data.cerevox.ai",
         product: Optional[str] = None,
         **kwargs: Any,
     ) -> None:
@@ -69,12 +69,12 @@ class Ingest(Client):
 
         Args:
             api_key: User Personal Access Token (PAT) for authentication
-            data_url: Base URL for the Cerevox API (used for data requests)
-            auth_url: Base URL for authentication (defaults to data_url if not provided)
+            base_url : str, default "https://dev.cerevox.ai/v1" Base URL for cerevox requests.
+            data_url : str, default "https://data.cerevox.ai" Data URL for cerevox requests.
             product: Product identifier for ingestion requests (e.g., "lexa", "hippo")
             **kwargs: Additional arguments passed to base client
         """
-        super().__init__(api_key, data_url, auth_url, **kwargs)
+        super().__init__(api_key, base_url, data_url, **kwargs)
         self.product = product
 
     def _get_file_info_from_url(self, url: str) -> FileInfo:
@@ -218,7 +218,7 @@ class Ingest(Client):
                 data["folder_id"] = folder_id
 
             response = self._request(
-                "POST", "/v0/files", files=dict(file_objects), params=data
+                "POST", "/v0/files", files=dict(file_objects), params=data, is_data=True
             )
             return IngestionResult(**response)
 
@@ -271,7 +271,7 @@ class Ingest(Client):
         if folder_id is not None:
             payload["folder_id"] = folder_id
 
-        data = self._request("POST", "/v0/file-urls", json_data=payload)
+        data = self._request("POST", "/v0/file-urls", json_data=payload, is_data=True)
         return IngestionResult(**data)
 
     def _validate_mode(self, mode: Union[ProcessingMode, str]) -> str:
@@ -333,7 +333,7 @@ class Ingest(Client):
         if folder_id is not None:
             payload["folder_id"] = folder_id
 
-        data = self._request("POST", "/v0/amazon-folder", json_data=payload)
+        data = self._request("POST", "/v0/amazon-folder", json_data=payload, is_data=True)
         return IngestionResult(**data)
 
     def list_s3_buckets(self) -> BucketListResponse:
@@ -343,7 +343,7 @@ class Ingest(Client):
         Returns:
             BucketListResponse containing list of available buckets
         """
-        data = self._request("GET", "/v0/amazon-listBuckets")
+        data = self._request("GET", "/v0/amazon-listBuckets", is_data=True)
         return BucketListResponse(**data)
 
     def list_s3_folders(self, bucket_name: str) -> FolderListResponse:
@@ -357,7 +357,7 @@ class Ingest(Client):
             FolderListResponse containing list of folders in the bucket
         """
         data = self._request(
-            "GET", "/v0/amazon-listFoldersInBucket", params={"bucket": bucket_name}
+            "GET", "/v0/amazon-listFoldersInBucket", params={"bucket": bucket_name}, is_data=True
         )
         return FolderListResponse(**data)
 
@@ -391,7 +391,7 @@ class Ingest(Client):
         if folder_id is not None:
             payload["folder_id"] = folder_id
 
-        data = self._request("POST", "/v0/box-folder", json_data=payload)
+        data = self._request("POST", "/v0/box-folder", json_data=payload, is_data=True)
         return IngestionResult(**data)
 
     def list_box_folders(self) -> FolderListResponse:
@@ -401,7 +401,7 @@ class Ingest(Client):
         Returns:
             FolderListResponse containing list of available folders
         """
-        data = self._request("GET", "/v0/box-listFolders")
+        data = self._request("GET", "/v0/box-listFolders", is_data=True)
         return FolderListResponse(**data)
 
     # Dropbox Integration
@@ -429,7 +429,7 @@ class Ingest(Client):
         if folder_id is not None:
             payload["folder_id"] = folder_id
 
-        data = self._request("POST", "/v0/dropbox-folder", json_data=payload)
+        data = self._request("POST", "/v0/dropbox-folder", json_data=payload, is_data=True)
         return IngestionResult(**data)
 
     def list_dropbox_folders(self) -> FolderListResponse:
@@ -439,7 +439,7 @@ class Ingest(Client):
         Returns:
             FolderListResponse containing list of available folders
         """
-        data = self._request("GET", "/v0/dropbox-listFolders")
+        data = self._request("GET", "/v0/dropbox-listFolders", is_data=True)
         return FolderListResponse(**data)
 
     # Microsoft SharePoint Integration
@@ -475,7 +475,7 @@ class Ingest(Client):
         if folder_id is not None:
             payload["folder_id"] = folder_id
 
-        data = self._request("POST", "/v0/microsoft-folder", json_data=payload)
+        data = self._request("POST", "/v0/microsoft-folder", json_data=payload, is_data=True)
         return IngestionResult(**data)
 
     def list_sharepoint_sites(self) -> SiteListResponse:
@@ -485,7 +485,7 @@ class Ingest(Client):
         Returns:
             SiteListResponse containing list of available sites
         """
-        data = self._request("GET", "/v0/microsoft-listSites")
+        data = self._request("GET", "/v0/microsoft-listSites", is_data=True)
         return SiteListResponse(**data)
 
     def list_sharepoint_drives(self, site_id: str) -> DriveListResponse:
@@ -499,7 +499,7 @@ class Ingest(Client):
             DriveListResponse containing list of drives in the site
         """
         data = self._request(
-            "GET", "/v0/microsoft-listDrivesInSite", params={"site_id": site_id}
+            "GET", "/v0/microsoft-listDrivesInSite", params={"site_id": site_id}, is_data=True
         )
         return DriveListResponse(**data)
 
@@ -514,7 +514,7 @@ class Ingest(Client):
             FolderListResponse containing list of folders in the drive
         """
         data = self._request(
-            "GET", "/v0/microsoft-listFoldersInDrive", params={"drive_id": drive_id}
+            "GET", "/v0/microsoft-listFoldersInDrive", params={"drive_id": drive_id}, is_data=True
         )
         return FolderListResponse(**data)
 
@@ -543,7 +543,7 @@ class Ingest(Client):
         if folder_id is not None:
             payload["folder_id"] = folder_id
 
-        data = self._request("POST", "/v0/salesforce-folder", json_data=payload)
+        data = self._request("POST", "/v0/salesforce-folder", json_data=payload, is_data=True)
         return IngestionResult(**data)
 
     def list_salesforce_folders(self) -> FolderListResponse:
@@ -553,7 +553,7 @@ class Ingest(Client):
         Returns:
             FolderListResponse containing list of available folders
         """
-        data = self._request("GET", "/v0/salesforce-listFolders")
+        data = self._request("GET", "/v0/salesforce-listFolders", is_data=True)
         return FolderListResponse(**data)
 
     # Sendme Integration
@@ -581,5 +581,5 @@ class Ingest(Client):
         if folder_id is not None:
             payload["folder_id"] = folder_id
 
-        data = self._request("POST", "/v0/sendme", json_data=payload)
+        data = self._request("POST", "/v0/sendme", json_data=payload, is_data=True)
         return IngestionResult(**data)
