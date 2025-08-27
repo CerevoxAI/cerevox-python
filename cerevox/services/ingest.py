@@ -333,7 +333,9 @@ class Ingest(Client):
         if folder_id is not None:
             payload["folder_id"] = folder_id
 
-        data = self._request("POST", "/v0/amazon-folder", json_data=payload, is_data=True)
+        data = self._request(
+            "POST", "/v0/amazon-folder", json_data=payload, is_data=True
+        )
         return IngestionResult(**data)
 
     def list_s3_buckets(self) -> BucketListResponse:
@@ -357,7 +359,10 @@ class Ingest(Client):
             FolderListResponse containing list of folders in the bucket
         """
         data = self._request(
-            "GET", "/v0/amazon-listFoldersInBucket", params={"bucket": bucket_name}, is_data=True
+            "GET",
+            "/v0/amazon-listFoldersInBucket",
+            params={"bucket": bucket_name},
+            is_data=True,
         )
         return FolderListResponse(**data)
 
@@ -429,7 +434,9 @@ class Ingest(Client):
         if folder_id is not None:
             payload["folder_id"] = folder_id
 
-        data = self._request("POST", "/v0/dropbox-folder", json_data=payload, is_data=True)
+        data = self._request(
+            "POST", "/v0/dropbox-folder", json_data=payload, is_data=True
+        )
         return IngestionResult(**data)
 
     def list_dropbox_folders(self) -> FolderListResponse:
@@ -475,7 +482,9 @@ class Ingest(Client):
         if folder_id is not None:
             payload["folder_id"] = folder_id
 
-        data = self._request("POST", "/v0/microsoft-folder", json_data=payload, is_data=True)
+        data = self._request(
+            "POST", "/v0/microsoft-folder", json_data=payload, is_data=True
+        )
         return IngestionResult(**data)
 
     def list_sharepoint_sites(self) -> SiteListResponse:
@@ -499,7 +508,10 @@ class Ingest(Client):
             DriveListResponse containing list of drives in the site
         """
         data = self._request(
-            "GET", "/v0/microsoft-listDrivesInSite", params={"site_id": site_id}, is_data=True
+            "GET",
+            "/v0/microsoft-listDrivesInSite",
+            params={"site_id": site_id},
+            is_data=True,
         )
         return DriveListResponse(**data)
 
@@ -514,7 +526,10 @@ class Ingest(Client):
             FolderListResponse containing list of folders in the drive
         """
         data = self._request(
-            "GET", "/v0/microsoft-listFoldersInDrive", params={"drive_id": drive_id}, is_data=True
+            "GET",
+            "/v0/microsoft-listFoldersInDrive",
+            params={"drive_id": drive_id},
+            is_data=True,
         )
         return FolderListResponse(**data)
 
@@ -543,7 +558,9 @@ class Ingest(Client):
         if folder_id is not None:
             payload["folder_id"] = folder_id
 
-        data = self._request("POST", "/v0/salesforce-folder", json_data=payload, is_data=True)
+        data = self._request(
+            "POST", "/v0/salesforce-folder", json_data=payload, is_data=True
+        )
         return IngestionResult(**data)
 
     def list_salesforce_folders(self) -> FolderListResponse:

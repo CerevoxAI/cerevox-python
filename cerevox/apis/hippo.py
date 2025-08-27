@@ -904,6 +904,7 @@ class Hippo(Ingest):
         is_qna: bool = True,
         citation_style: Optional[str] = None,
         sources: Optional[List[str]] = None,
+        top_k: Optional[int] = None,
     ) -> AskSubmitResponse:
         """
         Submit a question to get AI-powered RAG responses from documents.
@@ -926,6 +927,11 @@ class Hippo(Ingest):
         sources : List[str], optional
             List of specific file IDs to limit the search scope. If None,
             searches all files in the associated folder.
+        top_k : int, optional
+            Number of top relevant passages to retrieve (1-100 inclusive).
+            Controls the maximum number of document chunks returned for
+            generating the response. Higher values provide more context
+            but may increase processing time.
 
         Returns
         -------
@@ -998,11 +1004,15 @@ class Hippo(Ingest):
         Response quality depends on document content, query specificity,
         and the semantic similarity between question and document passages.
         """
+        if top_k is not None and not (1 <= top_k <= 100):
+            raise ValueError("top_k must be between 1 and 100 inclusive")
+
         request = AskSubmitRequest(
             query=query,
             is_qna=is_qna,
             citation_style=citation_style,
             sources=sources,
+            top_k=top_k,
         )
         response_data = self._request(
             "POST", f"/chats/{chat_id}/asks", json_data=request.model_dump()

@@ -613,6 +613,10 @@ class AskSubmitRequest(BaseModel):
     sources: Optional[List[str]] = Field(
         None, description="Specific files to query against"
     )
+    top_k: Optional[int] = Field(
+        None,
+        description="Number of top relevant passages to retrieve (1-100 inclusive)",
+    )
 
     model_config = ConfigDict(populate_by_name=True)
 

@@ -24,6 +24,8 @@ from .models import (
 )
 
 FAILED_ID = core.FAILED_ID
+HTTP = core.HTTP_PREFIX
+HTTPS = core.HTTPS_PREFIX
 
 logger = logging.getLogger(__name__)
 
@@ -498,7 +500,7 @@ class AsyncClient:
 
         # Check if token needs refresh before making request
         if not is_auth:
-            self._ensure_valid_token()
+            await self._ensure_valid_token()
 
         if is_data:
             base_url = self.data_url

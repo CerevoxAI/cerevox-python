@@ -325,7 +325,9 @@ class AsyncIngest(AsyncClient):
         payload = {"files": processed_urls, "mode": mode, "product": self.product}
 
         async with self._semaphore:
-            data = await self._request("POST", "/v0/file-urls", json_data=payload, is_data=True)
+            data = await self._request(
+                "POST", "/v0/file-urls", json_data=payload, is_data=True
+            )
         return IngestionResult(**data)
 
     # Amazon S3 Integration
@@ -358,7 +360,9 @@ class AsyncIngest(AsyncClient):
         }
 
         async with self._semaphore:
-            data = await self._request("POST", "/v0/amazon-folder", json_data=payload, is_data=True)
+            data = await self._request(
+                "POST", "/v0/amazon-folder", json_data=payload, is_data=True
+            )
         return IngestionResult(**data)
 
     async def list_s3_buckets(self) -> BucketListResponse:
@@ -384,7 +388,10 @@ class AsyncIngest(AsyncClient):
         """
         async with self._semaphore:
             data = await self._request(
-                "GET", "/v0/amazon-listFoldersInBucket", params={"bucket": bucket_name}, is_data=True
+                "GET",
+                "/v0/amazon-listFoldersInBucket",
+                params={"bucket": bucket_name},
+                is_data=True,
             )
         return FolderListResponse(**data)
 
@@ -411,7 +418,9 @@ class AsyncIngest(AsyncClient):
         payload = {"folder_id": box_folder_id, "mode": mode, "product": self.product}
 
         async with self._semaphore:
-            data = await self._request("POST", "/v0/box-folder", json_data=payload, is_data=True)
+            data = await self._request(
+                "POST", "/v0/box-folder", json_data=payload, is_data=True
+            )
         return IngestionResult(**data)
 
     async def list_box_folders(self) -> FolderListResponse:
@@ -448,7 +457,9 @@ class AsyncIngest(AsyncClient):
         payload = {"path": folder_path, "mode": mode, "product": self.product}
 
         async with self._semaphore:
-            data = await self._request("POST", "/v0/dropbox-folder", json_data=payload, is_data=True)
+            data = await self._request(
+                "POST", "/v0/dropbox-folder", json_data=payload, is_data=True
+            )
         return IngestionResult(**data)
 
     async def list_dropbox_folders(self) -> FolderListResponse:
@@ -520,7 +531,10 @@ class AsyncIngest(AsyncClient):
         """
         async with self._semaphore:
             data = await self._request(
-                "GET", "/v0/microsoft-listDrivesInSite", params={"site_id": site_id}, is_data=True
+                "GET",
+                "/v0/microsoft-listDrivesInSite",
+                params={"site_id": site_id},
+                is_data=True,
             )
         return DriveListResponse(**data)
 
@@ -536,7 +550,10 @@ class AsyncIngest(AsyncClient):
         """
         async with self._semaphore:
             data = await self._request(
-                "GET", "/v0/microsoft-listFoldersInDrive", params={"drive_id": drive_id}, is_data=True
+                "GET",
+                "/v0/microsoft-listFoldersInDrive",
+                params={"drive_id": drive_id},
+                is_data=True,
             )
         return FolderListResponse(**data)
 
@@ -576,7 +593,9 @@ class AsyncIngest(AsyncClient):
             FolderListResponse containing list of available folders
         """
         async with self._semaphore:
-            data = await self._request("GET", "/v0/salesforce-listFolders", is_data=True)
+            data = await self._request(
+                "GET", "/v0/salesforce-listFolders", is_data=True
+            )
         return FolderListResponse(**data)
 
     # Sendme Integration
@@ -600,5 +619,7 @@ class AsyncIngest(AsyncClient):
         payload = {"ticket": ticket, "mode": mode, "product": self.product}
 
         async with self._semaphore:
-            data = await self._request("POST", "/v0/sendme", json_data=payload, is_data=True)
+            data = await self._request(
+                "POST", "/v0/sendme", json_data=payload, is_data=True
+            )
         return IngestionResult(**data)
