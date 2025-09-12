@@ -998,13 +998,14 @@ class TestHippoAskManagement:
                 "reply": "This document is about testing.",
                 "source_data": [
                     {
-                        "citation": "Document 1, Page 1",
-                        "name": "test.pdf",
-                        "type": "pdf",
-                        "page": 1,
-                        "text_blocks": [
-                            {"data": "Sample text", "index": 0, "score": 1}
-                        ],
+                        "text": "Sample text from document",
+                        "score": 0.95,
+                        "metadata": {
+                            "citation": "Document 1, Page 1",
+                            "name": "test.pdf",
+                            "type": "pdf",
+                            "page": 1,
+                        },
                     }
                 ],
             },
@@ -1115,11 +1116,14 @@ class TestHippoAskManagement:
                 "filenames": ["test.pdf", "doc.docx"],
                 "source_data": [
                     {
-                        "citation": "Document 1",
-                        "name": "test.pdf",
-                        "type": "pdf",
-                        "page": 1,
-                        "text_blocks": ["Sample text"],
+                        "text": "Sample text from document",
+                        "score": 0.92,
+                        "metadata": {
+                            "citation": "Document 1",
+                            "name": "test.pdf",
+                            "type": "pdf",
+                            "page": 1,
+                        },
                     }
                 ],
             },

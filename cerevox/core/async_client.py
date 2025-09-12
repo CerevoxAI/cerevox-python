@@ -220,7 +220,6 @@ class AsyncClient:
             "timeout": self.timeout,
             "headers": {
                 "User-Agent": "cerevox-python-async/0.1.6",
-                "Content-Type": "application/json",
             },
             **kwargs,
         }
@@ -375,6 +374,7 @@ class AsyncClient:
         data: Optional[Any] = None,
         is_auth: bool = False,
         is_data: bool = False,
+        timeout: Optional[float] = None,
         **kwargs: Any,
     ) -> Dict[str, Any]:
         """
@@ -410,6 +410,9 @@ class AsyncClient:
             authentication endpoints.
         is_data : bool, default False
             If True, uses data_url.
+        timeout : float, optional
+            Override the default timeout for this specific request.
+            If None, uses the client's default timeout.
         **kwargs : dict
             Additional arguments passed directly to aiohttp.ClientSession.request,
             such as 'allow_redirects', 'max_redirects', 'ssl', or 'proxy'.
@@ -513,6 +516,12 @@ class AsyncClient:
             request_headers.update(headers)
 
         try:
+            # Use provided timeout or fall back to default
+            if timeout is not None:
+                request_timeout = aiohttp.ClientTimeout(total=timeout)
+            else:
+                request_timeout = self.timeout
+
             async with self.session.request(  # type: ignore
                 method=method,
                 url=url,
@@ -520,6 +529,7 @@ class AsyncClient:
                 params=params,
                 headers=request_headers,
                 data=data,
+                timeout=request_timeout,
                 **kwargs,
             ) as response:
                 # Extract request ID for error reporting
@@ -717,7 +727,11 @@ class AsyncClient:
 
         # Skip token validation for login request and use auth_url
         response_data = await self._request(
-            "POST", "/token/login", headers=headers, is_auth=True
+            "POST",
+            "/token/login",
+            headers=headers,
+            json_data={"login": True},
+            is_auth=True,
         )
 
         token_response = TokenResponse(**response_data)

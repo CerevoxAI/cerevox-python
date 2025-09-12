@@ -7,12 +7,16 @@ and cloud storage providers.
 """
 
 import asyncio
+import gzip
 import json
 import os
 import re
+import shutil
+import tempfile
 import time
 import warnings
 from concurrent.futures import ThreadPoolExecutor
+from io import BytesIO
 from pathlib import Path
 from typing import (
     Any,
@@ -20,6 +24,7 @@ from typing import (
     Dict,
     List,
     Optional,
+    Tuple,
     Union,
 )
 from urllib.parse import unquote, urlparse
@@ -67,6 +72,7 @@ class AsyncIngest(AsyncClient):
         data_url: Optional[str] = None,
         product: Optional[str] = None,
         max_concurrent: int = 10,
+        compression_threshold: int = 1024 * 1024,  # 1MB default
         **kwargs: Any,
     ) -> None:
         """
@@ -78,11 +84,13 @@ class AsyncIngest(AsyncClient):
             data_url : str, default "https://data.cerevox.ai" Data URL for cerevox requests.
             product: Product identifier for ingestion requests (e.g., "lexa", "hippo")
             max_concurrent: Maximum number of concurrent requests (default: 10)
+            compression_threshold: File size threshold in bytes above which files are gzipped (default: 1MB)
             **kwargs: Additional arguments passed to base client
         """
         super().__init__(api_key, base_url, data_url, **kwargs)
         self.product = product
         self.max_concurrent = max_concurrent
+        self.compression_threshold = compression_threshold
         self._semaphore = asyncio.Semaphore(max_concurrent)
 
     async def _get_file_info_from_url(self, url: str) -> FileInfo:
@@ -150,6 +158,149 @@ class AsyncIngest(AsyncClient):
 
         return FileInfo(name=filename, url=url, type=content_type)
 
+    def _is_already_gzip_compressed(self, filename: str) -> bool:
+        """
+        Check if file is already gzip compressed based on file extension
+
+        Args:
+            filename: Name of the file
+
+        Returns:
+            True if file appears to be already gzip compressed, False otherwise
+        """
+        # Only skip files that are already gzip compressed
+        gzip_extensions = {".gz", ".gzip"}
+
+        # Get file extension in lowercase
+        file_ext = Path(filename).suffix.lower()
+
+        # Check for compound extensions like .tar.gz
+        if filename.lower().endswith(".tar.gz") or filename.lower().endswith(".tgz"):
+            return True
+
+        return file_ext in gzip_extensions
+
+    def _should_compress_content(self, content: bytes, filename: str = "") -> bool:
+        """
+        Determine if content should be compressed based on size threshold and file type
+
+        Args:
+            content: File content as bytes
+            filename: Name of the file (optional, used for extension checking)
+
+        Returns:
+            True if content should be compressed, False otherwise
+        """
+        # Don't compress if file is already gzip compressed
+        if filename and self._is_already_gzip_compressed(filename):
+            return False
+
+        # Don't compress if below threshold
+        if len(content) <= self.compression_threshold:
+            return False
+
+        return True
+
+    def _compress_content(self, content: bytes, filename: str) -> Tuple[bytes, str]:
+        """
+        Compress content using gzip (legacy method for small content)
+
+        Args:
+            content: Original file content as bytes
+            filename: Original filename
+
+        Returns:
+            Tuple of (compressed_content, new_filename)
+        """
+        compressed_content = gzip.compress(content)
+        # Add .gz extension if not already present
+        if not filename.endswith(".gz"):
+            compressed_filename = f"{filename}.gz"
+        else:
+            compressed_filename = filename
+        return compressed_content, compressed_filename
+
+    async def _stream_compress_file(
+        self, file_path: Path, chunk_size: int = 1024 * 1024
+    ) -> Tuple[str, str]:
+        """
+        Compress a file using streaming to avoid loading entire file into memory
+
+        Args:
+            file_path: Path to the file to compress
+            chunk_size: Size of chunks to read/write (default: 1MB)
+
+        Returns:
+            Tuple of (compressed_file_path, compressed_filename)
+        """
+        # Create temporary file for compressed output
+        compressed_fd, compressed_path = tempfile.mkstemp(suffix=".gz")
+
+        try:
+            # Use thread pool executor for CPU-bound compression
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(
+                None,
+                self._compress_file_sync,
+                str(file_path),
+                compressed_path,
+                chunk_size,
+            )
+
+            # Generate compressed filename
+            original_name = file_path.name
+            if not original_name.endswith(".gz"):
+                compressed_filename = f"{original_name}.gz"
+            else:
+                compressed_filename = original_name
+
+            return compressed_path, compressed_filename
+
+        except Exception:
+            # Clean up temp file on error
+            try:
+                os.unlink(compressed_path)
+            except (OSError, FileNotFoundError):
+                pass
+            raise
+
+    def _compress_file_sync(
+        self, input_path: str, output_path: str, chunk_size: int
+    ) -> None:
+        """
+        Synchronous file compression helper for use in thread pool
+
+        Args:
+            input_path: Path to input file
+            output_path: Path to output compressed file
+            chunk_size: Size of chunks to process
+        """
+        with open(input_path, "rb") as f_in:
+            with gzip.open(output_path, "wb") as f_out:
+                shutil.copyfileobj(f_in, f_out, length=chunk_size)
+
+    def _should_stream_compress(self, file_path: Path) -> bool:
+        """
+        Determine if a file should use streaming compression based on size
+
+        Args:
+            file_path: Path to the file
+
+        Returns:
+            True if file should use streaming compression, False otherwise
+        """
+        # Don't stream compress if file is already gzip compressed
+        if self._is_already_gzip_compressed(file_path.name):
+            return False
+
+        try:
+            file_size = file_path.stat().st_size
+            # Use streaming compression for files larger than 10MB
+            # This avoids loading large files into memory
+            return file_size > 10 * 1024 * 1024  # 10MB threshold
+        except (OSError, FileNotFoundError):
+            return False
+
     def _validate_mode(self, mode: Union[ProcessingMode, str]) -> str:
         """
         Validate and normalize processing mode
@@ -181,6 +332,7 @@ class AsyncIngest(AsyncClient):
         self,
         files: Union[List[FileInput], FileInput],
         mode: Union[ProcessingMode, str] = ProcessingMode.DEFAULT,
+        folder_id: Optional[str] = None,
     ) -> IngestionResult:
         """
         Upload files for parsing
@@ -188,6 +340,7 @@ class AsyncIngest(AsyncClient):
         Args:
             files: List of files to upload (supports paths, raw content, or streams)
             mode: Processing mode for the files
+            folder_id: Optional Hippo folder ID for RAG operations
 
         Returns:
             IngestionResult containing request_id and status
@@ -209,6 +362,8 @@ class AsyncIngest(AsyncClient):
 
         # Prepare files for upload using aiohttp.FormData
         data = aiohttp.FormData()
+        # Track temporary files for cleanup
+        temp_files_to_cleanup: List[str] = []
 
         try:
             for i, file_input in enumerate(files):
@@ -220,16 +375,43 @@ class AsyncIngest(AsyncClient):
                     if not path.is_file():
                         raise ValueError(f"Not a file: {file_input}")
 
-                    # Read file asynchronously
-                    async with aiofiles.open(path, "rb") as file:
-                        file_content = await file.read()
+                    filename = path.name
 
-                    data.add_field("files", file_content, filename=path.name)
+                    # Use streaming compression for large files
+                    if self._should_stream_compress(path):
+                        temp_file_path, filename = await self._stream_compress_file(
+                            path
+                        )
+                        temp_files_to_cleanup.append(temp_file_path)
+
+                        # Read compressed file asynchronously
+                        async with aiofiles.open(temp_file_path, "rb") as file:
+                            file_content = await file.read()
+
+                        data.add_field("files", file_content, filename=filename)
+                    else:
+                        # For smaller files, use the original in-memory approach
+                        async with aiofiles.open(path, "rb") as file:
+                            file_content = await file.read()
+
+                        # Check if we should compress small files
+                        if self._should_compress_content(file_content, filename):
+                            file_content, filename = self._compress_content(
+                                file_content, filename
+                            )
+
+                        data.add_field("files", file_content, filename=filename)
 
                 elif isinstance(file_input, (bytes, bytearray)):
                     # Handle raw content
+                    content = bytes(file_input)
                     filename = f"file_{i}.bin"  # Generate a default filename
-                    data.add_field("files", file_input, filename=filename)
+
+                    # Check if we should compress
+                    if self._should_compress_content(content, filename):
+                        content, filename = self._compress_content(content, filename)
+
+                    data.add_field("files", content, filename=filename)
 
                 elif hasattr(file_input, "read"):
                     # Handle file-like objects (streams)
@@ -252,8 +434,21 @@ class AsyncIngest(AsyncClient):
                         if hasattr(file_input, "seek"):
                             file_input.seek(0)  # Reset position for potential reuse
                         content = file_input.read()
+
+                        # Check if we should compress
+                        if self._should_compress_content(content, filename):
+                            content, filename = self._compress_content(
+                                content, filename
+                            )
+
                         data.add_field("files", content, filename=filename)
                     else:
+                        # Check if we should compress
+                        if self._should_compress_content(file_input, filename):
+                            file_input, filename = self._compress_content(
+                                file_input, filename
+                            )
+
                         data.add_field("files", file_input, filename=filename)
 
                 else:
@@ -261,10 +456,49 @@ class AsyncIngest(AsyncClient):
 
             # Prepare query parameters
             params = {"mode": mode, "product": self.product}
+            if folder_id is not None:
+                params["folder_id"] = folder_id
+
+            # Calculate total file size to determine appropriate timeout
+            total_file_size = sum(
+                (
+                    path.stat().st_size
+                    if isinstance(file_input, (str, Path)) and Path(file_input).exists()
+                    else (
+                        len(file_input)
+                        if isinstance(file_input, (bytes, bytearray))
+                        else 0
+                    )
+                )
+                for file_input in files
+            )
+
+            # Use extended timeout for large files (>1GB gets 2+ hour timeout)
+            # Base timeout: 30 minutes + 1 minute per 100MB
+            upload_timeout = max(
+                1800, min(7200, 1800 + (total_file_size // (100 * 1024 * 1024)) * 60)
+            )
+
+            print(
+                f"🔄 Uploading {len(files)} file(s) ({total_file_size / (1024**3):.2f} GB) with {upload_timeout/60:.1f} minute timeout"
+            )
+
+            # Prepare headers with file size information
+            headers = {}
+            if total_file_size > 0:
+                # Note: This is an approximation as multipart form data adds overhead
+                # The actual Content-Length will be larger due to form boundaries and headers
+                headers["X-Total-File-Size"] = str(total_file_size)
 
             async with self._semaphore:
                 response = await self._request(
-                    "POST", "/v0/files", data=data, params=params, is_data=True
+                    "POST",
+                    "/v0/files",
+                    data=data,
+                    params=params,
+                    headers=headers,
+                    is_data=True,
+                    timeout=upload_timeout,  # Override timeout for large uploads
                 )
             return IngestionResult(**response)
 
@@ -284,11 +518,19 @@ class AsyncIngest(AsyncClient):
                 raise
             else:
                 raise LexaError(f"File upload failed: {str(e)}")
+        finally:
+            # Clean up temporary compressed files
+            for temp_file in temp_files_to_cleanup:
+                try:
+                    os.unlink(temp_file)
+                except (OSError, FileNotFoundError):
+                    pass
 
     async def _upload_urls(
         self,
         urls: Union[List[FileURLInput], FileURLInput],
         mode: Union[ProcessingMode, str] = ProcessingMode.DEFAULT,
+        folder_id: Optional[str] = None,
     ) -> IngestionResult:
         """
         Upload files from URLs
@@ -296,6 +538,7 @@ class AsyncIngest(AsyncClient):
         Args:
             urls: List of URL strings
             mode: Processing mode
+            folder_id: Optional Hippo folder ID for RAG operations
 
         Returns:
             IngestionResult with job details
@@ -323,6 +566,8 @@ class AsyncIngest(AsyncClient):
             processed_urls.append(file_info.model_dump())
 
         payload = {"files": processed_urls, "mode": mode, "product": self.product}
+        if folder_id is not None:
+            payload["folder_id"] = folder_id
 
         async with self._semaphore:
             data = await self._request(
@@ -337,6 +582,7 @@ class AsyncIngest(AsyncClient):
         bucket_name: str,
         folder_path: str,
         mode: Union[ProcessingMode, str] = ProcessingMode.DEFAULT,
+        folder_id: Optional[str] = None,
     ) -> IngestionResult:
         """
         Upload files from an Amazon S3 folder
@@ -345,6 +591,7 @@ class AsyncIngest(AsyncClient):
             bucket_name: S3 bucket name
             folder_path: Path to the folder within the bucket
             mode: Processing mode
+            folder_id: Optional Hippo folder ID for RAG operations
 
         Returns:
             IngestionResult with job details
@@ -358,6 +605,8 @@ class AsyncIngest(AsyncClient):
             "mode": mode,
             "product": self.product,
         }
+        if folder_id is not None:
+            payload["folder_id"] = folder_id
 
         async with self._semaphore:
             data = await self._request(
@@ -401,6 +650,7 @@ class AsyncIngest(AsyncClient):
         self,
         box_folder_id: str,
         mode: Union[ProcessingMode, str] = ProcessingMode.DEFAULT,
+        folder_id: Optional[str] = None,
     ) -> IngestionResult:
         """
         Upload files from a Box folder
@@ -408,6 +658,7 @@ class AsyncIngest(AsyncClient):
         Args:
             box_folder_id: Box folder ID to process
             mode: Processing mode
+            folder_id: Optional Hippo folder ID for RAG operations
 
         Returns:
             IngestionResult with job details
@@ -415,7 +666,13 @@ class AsyncIngest(AsyncClient):
         # Validate mode parameter
         mode = self._validate_mode(mode)
 
-        payload = {"folder_id": box_folder_id, "mode": mode, "product": self.product}
+        payload = {
+            "box_folder_id": box_folder_id,
+            "mode": mode,
+            "product": self.product,
+        }
+        if folder_id is not None:
+            payload["folder_id"] = folder_id
 
         async with self._semaphore:
             data = await self._request(
@@ -440,6 +697,7 @@ class AsyncIngest(AsyncClient):
         self,
         folder_path: str,
         mode: Union[ProcessingMode, str] = ProcessingMode.DEFAULT,
+        folder_id: Optional[str] = None,
     ) -> IngestionResult:
         """
         Upload files from a Dropbox folder
@@ -447,6 +705,7 @@ class AsyncIngest(AsyncClient):
         Args:
             folder_path: Dropbox folder path to process
             mode: Processing mode
+            folder_id: Optional Hippo folder ID for RAG operations
 
         Returns:
             IngestionResult with job details
@@ -455,6 +714,8 @@ class AsyncIngest(AsyncClient):
         mode = self._validate_mode(mode)
 
         payload = {"path": folder_path, "mode": mode, "product": self.product}
+        if folder_id is not None:
+            payload["folder_id"] = folder_id
 
         async with self._semaphore:
             data = await self._request(
@@ -478,16 +739,18 @@ class AsyncIngest(AsyncClient):
     async def _upload_sharepoint_folder(
         self,
         drive_id: str,
-        folder_id: str,
+        sharepoint_folder_id: str,
         mode: Union[ProcessingMode, str] = ProcessingMode.DEFAULT,
+        folder_id: Optional[str] = None,
     ) -> IngestionResult:
         """
         Upload files from a Microsoft SharePoint folder
 
         Args:
             drive_id: Drive ID within the site
-            folder_id: Microsoft folder ID to process
+            sharepoint_folder_id: Microsoft folder ID to process
             mode: Processing mode
+            folder_id: Optional Hippo folder ID for RAG operations
 
         Returns:
             IngestionResult with job details
@@ -497,10 +760,12 @@ class AsyncIngest(AsyncClient):
 
         payload = {
             "drive_id": drive_id,
-            "folder_id": folder_id,
+            "sharepoint_folder_id": sharepoint_folder_id,
             "mode": mode,
             "product": self.product,
         }
+        if folder_id is not None:
+            payload["folder_id"] = folder_id
 
         async with self._semaphore:
             data = await self._request(
@@ -563,6 +828,7 @@ class AsyncIngest(AsyncClient):
         self,
         folder_name: str,
         mode: Union[ProcessingMode, str] = ProcessingMode.DEFAULT,
+        folder_id: Optional[str] = None,
     ) -> IngestionResult:
         """
         Upload files from a Salesforce folder
@@ -570,6 +836,7 @@ class AsyncIngest(AsyncClient):
         Args:
             folder_name: Name of the folder for organization
             mode: Processing mode
+            folder_id: Optional Hippo folder ID for RAG operations
 
         Returns:
             IngestionResult with job details
@@ -578,6 +845,8 @@ class AsyncIngest(AsyncClient):
         mode = self._validate_mode(mode)
 
         payload = {"name": folder_name, "mode": mode, "product": self.product}
+        if folder_id is not None:
+            payload["folder_id"] = folder_id
 
         async with self._semaphore:
             data = await self._request(
@@ -601,7 +870,10 @@ class AsyncIngest(AsyncClient):
     # Sendme Integration
 
     async def _upload_sendme_files(
-        self, ticket: str, mode: Union[ProcessingMode, str] = ProcessingMode.DEFAULT
+        self,
+        ticket: str,
+        mode: Union[ProcessingMode, str] = ProcessingMode.DEFAULT,
+        folder_id: Optional[str] = None,
     ) -> IngestionResult:
         """
         Upload files from Sendme
@@ -609,6 +881,7 @@ class AsyncIngest(AsyncClient):
         Args:
             ticket: Sendme ticket ID
             mode: Processing mode
+            folder_id: Optional Hippo folder ID for RAG operations
 
         Returns:
             IngestionResult with job details
@@ -617,6 +890,8 @@ class AsyncIngest(AsyncClient):
         mode = self._validate_mode(mode)
 
         payload = {"ticket": ticket, "mode": mode, "product": self.product}
+        if folder_id is not None:
+            payload["folder_id"] = folder_id
 
         async with self._semaphore:
             data = await self._request(

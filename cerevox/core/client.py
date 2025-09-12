@@ -232,6 +232,7 @@ class Client:
         files: Optional[Dict[str, Any]] = None,
         is_auth: bool = False,
         is_data: bool = False,
+        timeout: Optional[float] = None,
         **kwargs: Any,
     ) -> Dict[str, Any]:
         """
@@ -267,6 +268,9 @@ class Client:
             authentication endpoints.
         is_data : bool, default False
             If True, uses data_url.
+        timeout : float, optional
+            Override the default timeout for this specific request.
+            If None, uses the client's default timeout.
         **kwargs : dict
             Additional arguments passed directly to the requests library,
             such as 'stream', 'allow_redirects', or 'verify'.
@@ -356,6 +360,9 @@ class Client:
             request_headers.update(headers)
 
         try:
+            # Use provided timeout or fall back to default
+            request_timeout = timeout if timeout is not None else self.timeout
+
             response = self.session.request(
                 method=method,
                 url=url,
@@ -363,7 +370,7 @@ class Client:
                 params=params,
                 headers=request_headers,
                 files=files,
-                timeout=self.timeout,
+                timeout=request_timeout,
                 **kwargs,
             )
 
@@ -601,7 +608,11 @@ class Client:
 
         # Skip token validation for login request and use auth_url
         response_data = self._request(
-            "POST", "/token/login", headers=headers, is_auth=True
+            "POST",
+            "/token/login",
+            headers=headers,
+            json_data={"login": True},
+            is_auth=True,
         )
 
         token_response = TokenResponse(**response_data)

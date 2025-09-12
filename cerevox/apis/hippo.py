@@ -1017,6 +1017,7 @@ class Hippo(Ingest):
         response_data = self._request(
             "POST", f"/chats/{chat_id}/asks", json_data=request.model_dump()
         )
+        print(response_data)
         return AskSubmitResponse(**response_data)
 
     def get_asks(self, chat_id: str, msg_maxlen: int = 120) -> List[AskListItem]:

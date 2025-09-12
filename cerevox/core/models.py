@@ -584,18 +584,11 @@ class TableInfo(BaseModel):
 class SourceData(BaseModel):
     """Source data for ask responses"""
 
-    citation: Optional[str] = Field(None, description="Citation information")
-    name: Optional[str] = Field(None, description="Source name")
-    type: Optional[str] = Field(None, description="Source type (mime type)")
-    page: Optional[int] = Field(None, description="Source page number")
-    url: Optional[str] = Field(None, description="Source URL")
-    text_blocks: Optional[List[TextBlock]] = Field(
-        None, description="Source text blocks"
+    text: str = Field(..., description="Source text content")
+    score: float = Field(..., description="Relevance score")
+    metadata: Dict[str, Any] = Field(
+        ..., description="Extracted metadata with arbitrary fields"
     )
-    text_context: Optional[List[str]] = Field(None, description="Text context")
-    table_blocks: Optional[List[str]] = Field(None, description="Table blocks")
-    table_context: Optional[List[str]] = Field(None, description="Table context")
-    table: Optional[TableInfo] = Field(None, description="Table information")
 
     model_config = ConfigDict(populate_by_name=True)
 
@@ -624,11 +617,11 @@ class AskSubmitRequest(BaseModel):
 class SimpleSourceData(BaseModel):
     """Simplified source data structure (for GET /asks/{index} responses)"""
 
-    citation: Optional[str] = Field(None, description="Citation information")
-    name: Optional[str] = Field(None, description="Source name")
-    type: Optional[str] = Field(None, description="Source type (mime type)")
-    page: Optional[int] = Field(None, description="Source page number")
-    text_blocks: Optional[List[str]] = Field(None, description="Text blocks as strings")
+    text: str = Field(..., description="Source text content")
+    score: float = Field(..., description="Relevance score")
+    metadata: Dict[str, Any] = Field(
+        ..., description="Extracted metadata with arbitrary fields"
+    )
 
     model_config = ConfigDict(populate_by_name=True)
 
