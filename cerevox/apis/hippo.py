@@ -26,6 +26,8 @@ from ..core import (
     FoldersListResponse,
     IngestionResult,
     ProcessingMode,
+    ReasoningLevel,
+    ResponseType,
     UpdatedResponse,
 )
 from ..services import Ingest
@@ -901,10 +903,13 @@ class Hippo(Ingest):
         self,
         chat_id: str,
         query: str,
-        is_qna: bool = True,
+        response_type: Union[ResponseType, str] = ResponseType.ANSWERS,
         citation_style: Optional[str] = None,
-        sources: Optional[List[str]] = None,
+        source_ids: Optional[List[str]] = None,
         top_k: Optional[int] = None,
+        answer_options: Optional[Dict[str, str]] = None,
+        reasoning_level: Union[ReasoningLevel, str] = ReasoningLevel.NONE,
+        include_retrieval: bool = False,
     ) -> AskSubmitResponse:
         """
         Submit a question to get AI-powered RAG responses from documents.
@@ -917,14 +922,14 @@ class Hippo(Ingest):
             The question or query to ask about the documents. Can be
             natural language questions, requests for summaries, or
             specific information retrieval.
-        is_qna : bool, default True
-            If True, returns AI-generated answer with source citations.
-            If False, returns only relevant source passages without
-            AI interpretation.
+        response_type : Union[ResponseType, str], default ResponseType.ANSWERS
+            Type of response to return. Either 'answers' for AI-generated answer
+            with source citations, or 'sources' for only relevant source passages
+            without AI interpretation.
         citation_style : str, optional
             Citation format for sources. Options include "APA", "MLA",
             "Chicago", or custom formats. Defaults to standard format.
-        sources : List[str], optional
+        source_ids : List[str], optional
             List of specific file IDs to limit the search scope. If None,
             searches all files in the associated folder.
         top_k : int, optional
@@ -932,6 +937,13 @@ class Hippo(Ingest):
             Controls the maximum number of document chunks returned for
             generating the response. Higher values provide more context
             but may increase processing time.
+        answer_options : Dict[str, str], optional
+            Multiple choice answer options (e.g., {'A': 'option1', 'B': 'option2'}).
+        reasoning_level : Union[ReasoningLevel, str], default ReasoningLevel.NONE
+            Level of reasoning to include in the response. Options: 'none', 'basic',
+            or 'detailed'.
+        include_retrieval : bool, default False
+            Whether the answer_options should be included in the retrieval process.
 
         Returns
         -------
@@ -967,18 +979,19 @@ class Hippo(Ingest):
         >>> response = client.submit_ask(
         ...     "chat123",
         ...     "methodology section",
-        ...     is_qna=False
+        ...     response_type=ResponseType.SOURCES
         ... )
         >>> for passage in response.sources:
         ...     print(passage.content)
 
-        Targeted search with citations:
+        Targeted search with citations and reasoning:
 
         >>> response = client.submit_ask(
         ...     "chat123",
         ...     "What is the experimental design?",
         ...     citation_style="APA",
-        ...     sources=["file123", "file456"]
+        ...     source_ids=["file123", "file456"],
+        ...     reasoning_level=ReasoningLevel.DETAILED
         ... )
 
         Follow-up questions:
@@ -1009,10 +1022,13 @@ class Hippo(Ingest):
 
         request = AskSubmitRequest(
             query=query,
-            is_qna=is_qna,
+            response_type=response_type,
             citation_style=citation_style,
-            sources=sources,
+            source_ids=source_ids,
             top_k=top_k,
+            answer_options=answer_options,
+            reasoning_level=reasoning_level,
+            include_retrieval=include_retrieval,
         )
         response_data = self._request(
             "POST", f"/chats/{chat_id}/asks", json_data=request.model_dump()

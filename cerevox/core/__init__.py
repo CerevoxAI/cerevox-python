@@ -73,6 +73,8 @@ from .models import (
     MessageResponse,
     PageSourceInfo,
     ProcessingMode,
+    ReasoningLevel,
+    ResponseType,
     SiteInfo,
     SiteListResponse,
     SourceData,
@@ -168,6 +170,8 @@ __all__ = [
     "JobStatus",
     "PageSourceInfo",
     "ProcessingMode",
+    "ReasoningLevel",
+    "ResponseType",
     "SiteInfo",
     "SiteListResponse",
 ]

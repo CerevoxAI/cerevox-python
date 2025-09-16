@@ -45,6 +45,21 @@ class ProcessingMode(str, Enum):
     DEFAULT = "default"
 
 
+class ResponseType(str, Enum):
+    """Enumeration of response types for ask submissions"""
+
+    ANSWERS = "answers"
+    SOURCES = "sources"
+
+
+class ReasoningLevel(str, Enum):
+    """Enumeration of reasoning levels for ask submissions"""
+
+    NONE = "none"
+    BASIC = "basic"
+    DETAILED = "detailed"
+
+
 VALID_MODES = [mode.value for mode in ProcessingMode]
 
 
@@ -597,18 +612,27 @@ class AskSubmitRequest(BaseModel):
     """Request for submitting an ask"""
 
     query: str = Field(..., description="Question/query to ask")
-    is_qna: bool = Field(
-        ..., description="Whether to return final answer (True) or sources only (False)"
+    response_type: ResponseType = Field(
+        ResponseType.ANSWERS, description="Type of response: 'answers' for AI-generated answer or 'sources' for source passages only"
     )
     citation_style: Optional[str] = Field(
         None, description="Citation style for sources"
     )
-    sources: Optional[List[str]] = Field(
-        None, description="Specific files to query against"
+    source_ids: Optional[List[str]] = Field(
+        None, description="Specific file IDs to query against"
     )
     top_k: Optional[int] = Field(
         None,
         description="Number of top relevant passages to retrieve (1-100 inclusive)",
+    )
+    answer_options: Optional[Dict[str, str]] = Field(
+        None, description="Multiple choice answer options (e.g., {'A': 'option1', 'B': 'option2'})"
+    )
+    reasoning_level: ReasoningLevel = Field(
+        ReasoningLevel.NONE, description="Level of reasoning to include in the response: 'none', 'basic', or 'detailed'"
+    )
+    include_retrieval: bool = Field(
+        False, description="Whether the answer_options should be included in the retrieval process"
     )
 
     model_config = ConfigDict(populate_by_name=True)
@@ -631,6 +655,7 @@ class AskSubmitResponse(BaseModel):
     ask_index: int = Field(..., description="Index of the created ask")
     query: Optional[str] = Field(None, description="The question asked")
     reply: Optional[str] = Field(None, description="The response received")
+    reasoning: Optional[str] = Field(None, description="Reasoning behind the answer")
     source_data: Optional[List[SourceData]] = Field(
         None, description="Full source data"
     )
