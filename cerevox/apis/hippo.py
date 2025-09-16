@@ -910,6 +910,7 @@ class Hippo(Ingest):
         answer_options: Optional[Dict[str, str]] = None,
         reasoning_level: Union[ReasoningLevel, str] = ReasoningLevel.NONE,
         include_retrieval: bool = False,
+        mode: str = "lite",
     ) -> AskSubmitResponse:
         """
         Submit a question to get AI-powered RAG responses from documents.
@@ -944,6 +945,9 @@ class Hippo(Ingest):
             or 'detailed'.
         include_retrieval : bool, default False
             Whether the answer_options should be included in the retrieval process.
+        mode : str, default "lite"
+            Query processing mode. Either 'lite' for faster processing or 'pro'
+            for more comprehensive analysis.
 
         Returns
         -------
@@ -1029,9 +1033,10 @@ class Hippo(Ingest):
             answer_options=answer_options,
             reasoning_level=reasoning_level,
             include_retrieval=include_retrieval,
+            mode=mode,
         )
         response_data = self._request(
-            "POST", f"/chats/{chat_id}/asks", json_data=request.model_dump()
+            "POST", f"/chats/{chat_id}/asks", json_data=request.model_dump(), timeout=300.0
         )
         print(response_data)
         return AskSubmitResponse(**response_data)

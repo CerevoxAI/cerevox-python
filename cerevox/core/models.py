@@ -634,6 +634,9 @@ class AskSubmitRequest(BaseModel):
     include_retrieval: bool = Field(
         False, description="Whether the answer_options should be included in the retrieval process"
     )
+    mode: str = Field(
+        "lite", description="Query processing mode: 'lite' for faster processing or 'pro' for more comprehensive analysis"
+    )
 
     model_config = ConfigDict(populate_by_name=True)
 
