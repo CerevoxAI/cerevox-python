@@ -1,19 +1,14 @@
 <p align="center">
-  <a href="https://cerevox.ai">
+  <a href="https://cerevox.ai/lexa">
     <img height="120" src="https://raw.githubusercontent.com/CerevoxAI/assets/refs/heads/main/cerevox-python.png" alt="Cerevox Logo">
   </a>
 </p>
 
-<h1 align="center">Cerevox - The Data Layer for AI Agents 🧠 ⚡</h1>
+<h1 align="center">Cerevox - The Data Layer 🧠 ⚡</h1>
 
 <p align="center">
-  <strong>Flagship Results @ Mini Cost</strong><br>
-  <i>Data Parsing (Lexa) • Data Search (Hippo) • Enterprise-grade • Built for AI</i>
-</p>
-
-<p align="center">
-  <strong>🎯 80% cost reduction • 99.5% accuracy match • 10x more requests</strong><br>
-  <i>Precision retrieval delivers 70% smaller context — only relevant chunks, zero noise</i>
+  <strong>Parse documents with enterprise-grade reliability</strong><br>
+  <i>AI-powered • Highest Accuracy • Vector DB ready</i>
 </p>
 
 <p align="center">
@@ -25,20 +20,21 @@
   <a href="https://github.com/cerevoxAI/cerevox-python/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License"></a>
 </p>
 
+**Official Python SDK for:**
+- **[Lexa](https://cerevox.ai/lexa) - Parse documents into structured data**
+  - > 🎯 **Perfect for**: RAG applications, document analysis, data extraction, and vector database preparation
+- **[Hippo](https://cerevox.ai/) - Make intelligent queries on data loaded into Cerevox**
+  - > 🎯 **Perfect for**: all-in-one system for drawing useful conclusions from mountains of data
+
+### Table of Contents
 - <a href="#-installation">Installation</a>
-- <a href="#-quick-start">Quick Start</a>
+- <a href="#-lexa-quick-start">Lexa Quick Start</a>
+- <a href="#-hippo-getting-started">Hippo Getting Started</a>
 - <a href="#-features">Features</a>
 - <a href="#-examples">Examples</a>
 - <a href="#-documentation">Documentation</a>
 - <a href="#-support--community">Support</a>
----
 
-**Official Python SDK for [Cerevox](https://cerevox.ai) - The Data Layer for AI Agents**
-
-> 🎯 **Three powerful APIs in one SDK:**
-> - **Lexa** - Data parsing: Extract structured data from documents with SOTA accuracy
-> - **Hippo** - Data search: Semantic search & Q&A over document collections
-> - **Account** - Enterprise user management and authentication
 
 ## 📦 Installation
 
@@ -46,128 +42,86 @@
 pip install cerevox
 ```
 
-## 📋 Requirements
+### 📋 Requirements
 
 - Python 3.9+
-- API key from [Cerevox](https://cerevox.ai)
+- API key from [Cerevox](https://cerevox.ai/lexa)
 
-## 🚀 Quick Start
+## 🚀 Lexa Quick Start
 
-### 📄 Data Parsing with Lexa
-
-Parse documents into structured data for your AI agents:
+### Basic Usage
 
 ```python
 from cerevox import Lexa
 
-# Parse documents
+# Parse a document
 client = Lexa(api_key="your-api-key")
-documents = client.parse(["document.pdf", "report.docx"])
+documents = client.parse(["document.pdf"])
 
 print(f"Extracted {len(documents[0].content)} characters")
 print(f"Found {len(documents[0].tables)} tables")
-
-# Get chunks optimized for vector databases
-chunks = documents.get_all_text_chunks(target_size=500)
-print(f"Ready for embedding: {len(chunks)} chunks")
 ```
 
-### 🦛 Data Search with Hippo
-
-Enable AI agents to search and query your document collections:
-
-```python
-from cerevox import Hippo
-
-# Initialize RAG client
-hippo = Hippo(api_key="your-api-key")
-
-# Create a folder and upload documents
-hippo.create_folder("docs", "My Documents")
-hippo.upload_file("docs", "document.pdf")
-
-# Create a chat and ask questions
-chat = hippo.create_chat("docs")
-response = hippo.submit_ask(
-    chat["chat_id"],
-    "What are the key findings in this document?"
-)
-
-print(response["response"])
-# Includes source citations and confidence scores!
-```
-
-### ⚡ Async Processing (Recommended)
-
-Both Lexa and Hippo support async/await for high-performance AI agent workflows:
+### Async Processing (Recommended)
 
 ```python
 import asyncio
-from cerevox import AsyncLexa, AsyncHippo
+from cerevox import AsyncLexa
 
 async def main():
-    # Document parsing
-    async with AsyncLexa(api_key="your-api-key") as lexa:
-        documents = await lexa.parse(["doc1.pdf", "doc2.pdf"])
-        print(f"Parsed {len(documents)} documents")
-
-    # RAG operations
-    async with AsyncHippo(api_key="your-api-key") as hippo:
-        await hippo.create_folder("docs", "Documents")
-        result = await hippo.upload_file("docs", "document.pdf")
-
-        chat = await hippo.create_chat("docs")
-        answer = await hippo.submit_ask(
-            chat["chat_id"],
-            "Summarize this document"
-        )
-        print(answer["response"])
+    async with AsyncLexa(api_key="your-api-key") as client:
+        documents = await client.parse(["document.pdf", "report.docx"])
+        
+        # Get chunks optimized for vector databases
+        chunks = documents.get_all_text_chunks(target_size=500)
+        print(f"Ready for embedding: {len(chunks)} chunks")
 
 asyncio.run(main())
 ```
 
+## 🚀 Hippo Getting Started
+
+- Create Folder and Upload Files
+- Start Chat to Ask Questions on the Folder Data
+
+See guide [hippo-getting-started.md](docs/hippo-getting-started.md)
+
 ## ✨ Features
 
-### 📄 **Lexa - Data Parsing**
-- **SOTA Accuracy** with cutting-edge ML models for document parsing
-- **12+ File Formats** - PDF, DOCX, PPTX, HTML, images, and more
-- **Advanced Table Extraction** preserving structure and formatting
-- **Vector DB Optimized** chunks for AI agent knowledge bases
-- **7+ Cloud Storage** integrations (S3, SharePoint, Google Drive, etc.)
-- **Rich Metadata** extraction including images, formatting, and structure
-
-### 🦛 **Hippo - Data Search**
-- **Precision Retrieval** - 70% smaller context with only relevant chunks, zero noise
-- **Semantic Search** over document collections for AI agents
-- **AI-Powered Q&A** with source citations and confidence scores
-- **Folder Organization** for structured document management
-- **Chat Sessions** for conversational AI agent interactions
-- **Multi-Format Upload** from files, URLs, or bytes
-- **Real-time Processing** with progress tracking
-- **Source Attribution** for reliable AI agent responses
-
-### 🚀 **Enterprise Ready**
-- **Flagship Results @ Mini Cost** - 80% cost reduction with 99.5% accuracy match
-- **10x More Requests** with efficient precision retrieval
+### 🚀 **Performance & Scale**
+- **10x Faster** than traditional solutions
 - **Native Async Support** with concurrent processing
-- **Automatic Retries** and error recovery
-- **Framework Agnostic** - works with Django, Flask, FastAPI
-- **Full Type Safety** with Pydantic v2 models
-- **90% Test Coverage** with comprehensive test suites
+- **Enterprise-grade** reliability with automatic retries
+
+### 🧠 **AI-Powered Extraction**
+- **SOTA Accuracy** with cutting-edge ML models
+- **Advanced Table Extraction** preserving structure and formatting
+- **12+ File Formats** including PDF, DOCX, PPTX, HTML, and more
+
+### 🔗 **Integration Ready**
+- **Vector Database Optimized** chunks for RAG applications
+- **7+ Cloud Storage** integrations (S3, SharePoint, Google Drive, etc.)
+- **Framework Agnostic** works with Django, Flask, FastAPI
+- **Rich Metadata** extraction including images, formatting, and structure
 
 ## 📋 Examples
 
 Explore comprehensive examples in the `examples/` directory:
 
+### Lexa
+
 | Example | Description |
 |---------|-------------|
-| **[`account_hippo_usage.py`](examples/account_hippo_usage.py)** | Complete workflow: authentication, RAG operations, Q&A |
-| **[`unified_client_example.py`](examples/unified_client_example.py)** | Combined usage of Lexa, Hippo, and Account APIs |
-| **[`lexa_examples.py`](examples/lexa_examples.py)** | Document parsing functionality demonstration |
-| **[`vector_db_preparation.py`](examples/vector_db_preparation.py)** | Vector database chunking and integration patterns |
-| **[`async_examples.py`](examples/async_examples.py)** | Advanced async processing techniques |
+| **[`lexa_examples.py`](examples/lexa_examples.py)** | Complete SDK functionality demonstration |
+| **[`lexa_async_examples.py`](examples/lexa_async_examples.py)** | Advanced async processing techniques |
+| **[`lexa_cloud_integrations.py`](examples/lexa_cloud_integrations.py)** | Cloud storage service integrations |
+
+### Document
+
+| Example | Description |
+|---------|-------------|
 | **[`document_examples.py`](examples/document_examples.py)** | Document analysis and manipulation features |
-| **[`cloud_integrations.py`](examples/cloud_integrations.py)** | Cloud storage service integrations |
+| **[`document_vector_db_preparation.py`](examples/document_vector_db_preparation.py)** | Vector database chunking and integration patterns |
 
 ### 🚀 Run Examples
 
@@ -179,31 +133,20 @@ cd cerevox-python
 export CEREVOX_API_KEY="your-api-key"
 
 # Run demos
-python examples/account_hippo_usage.py    # RAG + Account workflow
-python examples/unified_client_example.py # All three APIs
-python examples/lexa_examples.py          # Document parsing
-python examples/vector_db_preparation.py  # Vector DB integration
-python examples/async_examples.py         # Async features
+python examples/lexa_examples.py            # Basic usage
+python examples/lexa_async_examples.py      # Async features
+python examples/lexa_cloud_integrations.py  # Cloud Integrations Coming Soon!
+
+python examples/document_examples.py               # Document analysis
+python examples/document_vector_db_preparation.py  # Vector DB integration
 ```
-
-## 🎯 Use Cases
-
-**Data Parsing (Lexa)**
-- Extract structured data from contracts, invoices, reports for AI agent processing
-- Prepare documents for AI agent knowledge bases and vector databases
-- Analyze document structure, tables, and metadata
-- Integrate with cloud storage for automated AI agent data pipelines
-
-**Data Search (Hippo)**
-- Enable AI agents to search and retrieve from internal documentation with precision retrieval
-- Power AI agent knowledge retrieval with 70% smaller, more relevant context
-- Build AI agents with intelligent document-backed responses at 80% lower cost
-- Extract insights from large document collections for AI analysis
 
 ## 📚 Documentation
 
+### 📖 **API References**
+- **[API Reference](docs/apis)** - Complete API documentation
+
 ### 📖 **Guides & Tutorials**
-- **[API Reference](docs/api-reference.md)** - Complete API documentation
 - **[Vector Database Integration](docs/vector-database-integration.md)** - RAG and vector DB setup
 - **[Advanced Examples](docs/advanced-examples.md)** - Real-world usage patterns
 - **[Migration Guide](docs/migration-guide.md)** - Migrate from other tools
@@ -259,4 +202,4 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 <strong>⭐ Star us on GitHub if Cerevox helped your project!</strong><br>
 Made with ❤️ by the Cerevox team<br>
-Happy Building! 🔍 🦛 ✨
+Happy Parsing 🔍 ✨
