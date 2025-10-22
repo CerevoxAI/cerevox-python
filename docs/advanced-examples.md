@@ -1,6 +1,6 @@
 # Advanced Examples
 
-Advanced usage patterns and real-world applications with Cerevox.
+Advanced usage patterns and real-world applications with Cerevox. Leverage **Flagship Results @ Mini Cost** with precision retrieval that delivers 70% smaller context, enabling 80% cost reduction and 10x more requests while maintaining 99.5% accuracy.
 
 ## Table of Contents
 

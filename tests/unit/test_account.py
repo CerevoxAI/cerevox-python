@@ -77,7 +77,7 @@ class TestAccountInitialization:
 
     def test_init_invalid_data_url(self):
         """Test initialization with invalid base URL"""
-        with pytest.raises(ValueError, match="data_url must start with"):
+        with pytest.raises(ValueError, match="(data_url|base_url) must start with"):
             Account(api_key="test-key", data_url="invalid-url")
 
     def test_init_with_session_kwargs(self):
@@ -210,11 +210,14 @@ class TestAccountAuthentication:
             client.session = requests.Session()
             client.data_url = "https://dev.cerevox.ai/v1"
             client.auth_url = "https://dev.cerevox.ai/v1"
+            client.base_url = "https://dev.cerevox.ai/v1"
             client.timeout = 30.0
             client.api_key = "test-api-key"
             client.access_token = "access_123"
             client.refresh_token = "refresh_456"
-            client.token_expires_at = 123456789.0
+            client.token_expires_at = (
+                9999999999.0  # Far future so token doesn't need refresh
+            )
             result = client._revoke_token()
 
         assert isinstance(result, MessageResponse)

@@ -82,7 +82,7 @@ class TestAsyncHippoInitialization:
         """Test initialization with API key parameter"""
         client = AsyncHippo(api_key="test-api-key")
         assert client.api_key == "test-api-key"
-        assert client.data_url == "https://dev.cerevox.ai/v1"
+        assert client.data_url == "https://data.cerevox.ai"
         assert client.timeout.total == 30.0
         assert client.max_retries == 3
         assert (
@@ -807,9 +807,8 @@ class TestAsyncHippoAskManagement:
             response = await client.submit_ask(
                 "chat123",
                 "What is this document about?",
-                is_qna=False,
                 citation_style="APA",
-                sources=["file1", "file2"],
+                source_ids=["file1", "file2"],
             )
 
             assert isinstance(response, AskSubmitResponse)

@@ -571,3 +571,68 @@ class TestClientInitialization:
         error = exc_info.value
         assert error.message == "API key is required for token refresh"
         assert error.request_id == "Failed to get request ID from response"
+
+    def test_max_retries_non_integer_type_raises_error(self, valid_data_url):
+        """Test that max_retries validation fails for non-integer types - covers line 171"""
+        with pytest.raises(TypeError, match="max_retries must be an integer"):
+            Client(api_key="test-key", data_url=valid_data_url, max_retries="5")
+
+    def test_max_retries_float_type_raises_error(self, valid_data_url):
+        """Test that max_retries validation fails for float type - covers line 171"""
+        with pytest.raises(TypeError, match="max_retries must be an integer"):
+            Client(api_key="test-key", data_url=valid_data_url, max_retries=5.5)
+
+    def test_max_retries_negative_value_raises_error(self, valid_data_url):
+        """Test that max_retries validation fails for negative values - covers line 173"""
+        with pytest.raises(
+            ValueError, match="max_retries must be a non-negative integer"
+        ):
+            Client(api_key="test-key", data_url=valid_data_url, max_retries=-1)
+
+    def test_data_url_defaults_when_none(self):
+        """Test that data_url defaults to https://data.cerevox.ai when not provided - covers line 185"""
+        with patch.object(Client, "_login") as mock_login:
+            mock_login.return_value = None
+            client = Client(api_key="test-key")
+
+            # Verify default data_url is assigned
+            assert client.data_url == "https://data.cerevox.ai"
+
+    def test_base_url_defaults_when_none(self):
+        """Test that base_url defaults to https://dev.cerevox.ai/v1 when not provided"""
+        with patch.object(Client, "_login") as mock_login:
+            mock_login.return_value = None
+            client = Client(api_key="test-key")
+
+            # Verify default base_url is assigned
+            assert client.base_url == "https://dev.cerevox.ai/v1"
+
+    def test_base_url_validation_non_string_type(self):
+        """Test that base_url validation fails for non-string types - covers line 189"""
+        with pytest.raises(ValueError, match="base_url must be a non-empty string"):
+            Client(api_key="test-key", base_url=123)
+
+    def test_base_url_validation_list_type(self):
+        """Test that base_url validation fails for list type - covers line 189"""
+        with pytest.raises(ValueError, match="base_url must be a non-empty string"):
+            Client(api_key="test-key", base_url=["https://api.com"])
+
+    def test_base_url_validation_invalid_protocol(self):
+        """Test that base_url validation fails when protocol is missing - covers line 189"""
+        with pytest.raises(ValueError, match="base_url must start with"):
+            Client(api_key="test-key", base_url="api.cerevox.ai")
+
+    def test_data_url_validation_non_string_type(self):
+        """Test that data_url validation fails for non-string types - covers line 199"""
+        with pytest.raises(ValueError, match="data_url must be a non-empty string"):
+            Client(api_key="test-key", data_url=123)
+
+    def test_data_url_validation_list_type(self):
+        """Test that data_url validation fails for list type - covers line 199"""
+        with pytest.raises(ValueError, match="data_url must be a non-empty string"):
+            Client(api_key="test-key", data_url=["https://data.com"])
+
+    def test_data_url_validation_invalid_protocol(self):
+        """Test that data_url validation fails when protocol is missing - covers line 199"""
+        with pytest.raises(ValueError, match="data_url must start with"):
+            Client(api_key="test-key", data_url="data.cerevox.ai")

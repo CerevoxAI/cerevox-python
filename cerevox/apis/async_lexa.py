@@ -16,7 +16,7 @@ from typing import (
 
 # Optional tqdm import for progress bars
 try:
-    from tqdm import tqdm  # type: ignore
+    from tqdm import tqdm
 
     TQDM_AVAILABLE = True
 except ImportError:
@@ -505,7 +505,7 @@ class AsyncLexa(AsyncIngest):
             raise ValueError("request_id cannot be empty")
 
         async with self._semaphore:
-            response = await self._request("GET", f"/v0/job/{request_id}")
+            response = await self._request("GET", f"/v0/job/{request_id}", is_data=True)
             return JobResponse(**response)
 
     async def _wait_for_completion(

@@ -260,7 +260,6 @@ class TestAsyncClientInitialization:
         """Fixture providing a valid base URL"""
         return "https://dev.cerevox.ai/v1"
 
-    @patch.dict(os.environ, {}, clear=True)
     @pytest.mark.asyncio
     async def test_start_session_without_api_key_raises_error(self, valid_data_url):
         """Test start_session without API key raises ValueError"""
@@ -270,7 +269,7 @@ class TestAsyncClientInitialization:
             data_url=valid_data_url,
             auth_url="https://auth.dev.cerevox.ai/v1",
         )
-
+        os.environ.clear()
         # Clear the API key to test the start_session validation
         client.api_key = None
 
@@ -573,3 +572,54 @@ class TestAsyncClientInitialization:
 
         # Clean up
         await client.close_session()
+
+    @pytest.fixture
+    def valid_api_key(self):
+        """Fixture providing a valid API key"""
+        return "test-api-key-12345"
+
+    def test_data_url_defaults_when_none(self, valid_api_key):
+        """Test that data_url defaults to https://data.cerevox.ai when not provided - covers line 216"""
+        # Create client without data_url parameter
+        client = AsyncClient(api_key=valid_api_key)
+
+        # Verify default data_url is assigned
+        assert client.data_url == "https://data.cerevox.ai"
+
+    def test_base_url_defaults_when_none(self, valid_api_key):
+        """Test that base_url defaults to https://dev.cerevox.ai/v1 when not provided"""
+        # Create client without base_url parameter
+        client = AsyncClient(api_key=valid_api_key)
+
+        # Verify default base_url is assigned
+        assert client.base_url == "https://dev.cerevox.ai/v1"
+
+    def test_base_url_validation_non_string_type(self, valid_api_key):
+        """Test that base_url validation fails for non-string types - covers line 220"""
+        with pytest.raises(ValueError, match="base_url must be a non-empty string"):
+            AsyncClient(api_key=valid_api_key, base_url=123)
+
+    def test_base_url_validation_list_type(self, valid_api_key):
+        """Test that base_url validation fails for list type - covers line 220"""
+        with pytest.raises(ValueError, match="base_url must be a non-empty string"):
+            AsyncClient(api_key=valid_api_key, base_url=["https://api.com"])
+
+    def test_base_url_validation_invalid_protocol(self, valid_api_key):
+        """Test that base_url validation fails when protocol is missing - covers line 220"""
+        with pytest.raises(ValueError, match="base_url must start with"):
+            AsyncClient(api_key=valid_api_key, base_url="api.cerevox.ai")
+
+    def test_data_url_validation_non_string_type(self, valid_api_key):
+        """Test that data_url validation fails for non-string types - covers line 230"""
+        with pytest.raises(ValueError, match="data_url must be a non-empty string"):
+            AsyncClient(api_key=valid_api_key, data_url=123)
+
+    def test_data_url_validation_list_type(self, valid_api_key):
+        """Test that data_url validation fails for list type - covers line 230"""
+        with pytest.raises(ValueError, match="data_url must be a non-empty string"):
+            AsyncClient(api_key=valid_api_key, data_url=["https://data.com"])
+
+    def test_data_url_validation_invalid_protocol(self, valid_api_key):
+        """Test that data_url validation fails when protocol is missing - covers line 230"""
+        with pytest.raises(ValueError, match="data_url must start with"):
+            AsyncClient(api_key=valid_api_key, data_url="data.cerevox.ai")

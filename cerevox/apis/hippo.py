@@ -1021,22 +1021,35 @@ class Hippo(Ingest):
         Response quality depends on document content, query specificity,
         and the semantic similarity between question and document passages.
         """
-        if top_k is not None and not (1 <= top_k <= 100):
-            raise ValueError("top_k must be between 1 and 100 inclusive")
+
+        # Convert string to enum if necessary
+        response_type_enum = (
+            ResponseType(response_type)
+            if isinstance(response_type, str)
+            else response_type
+        )
+        reasoning_level_enum = (
+            ReasoningLevel(reasoning_level)
+            if isinstance(reasoning_level, str)
+            else reasoning_level
+        )
 
         request = AskSubmitRequest(
             query=query,
-            response_type=response_type,
+            response_type=response_type_enum,
             citation_style=citation_style,
             source_ids=source_ids,
             top_k=top_k,
             answer_options=answer_options,
-            reasoning_level=reasoning_level,
+            reasoning_level=reasoning_level_enum,
             include_retrieval=include_retrieval,
             mode=mode,
         )
         response_data = self._request(
-            "POST", f"/chats/{chat_id}/asks", json_data=request.model_dump(), timeout=300.0
+            "POST",
+            f"/chats/{chat_id}/asks",
+            json_data=request.model_dump(exclude_none=True),
+            timeout=300.0,
         )
         print(response_data)
         return AskSubmitResponse(**response_data)

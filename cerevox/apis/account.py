@@ -115,10 +115,19 @@ class Account(Client):
         will validate the provided API key and establish a session with
         the Cerevox API servers.
         """
+        # For Account class, if no URLs are provided, use the default base_url for both
+        # If data_url is not provided, use auth_url or default base_url
+        default_url = "https://dev.cerevox.ai/v1"
+
+        data_url = data_url or auth_url or default_url
+        auth_url = auth_url or data_url or default_url
+        base_url = data_url
+
         super().__init__(
             api_key=api_key,
-            data_url=data_url,
+            base_url=base_url,
             auth_url=auth_url,
+            data_url=data_url,
             max_retries=max_retries,
             session_kwargs=session_kwargs,
             timeout=timeout,

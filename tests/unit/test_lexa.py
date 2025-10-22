@@ -171,7 +171,7 @@ class TestLexaRequest:
         )
 
         client = Lexa(api_key="test-key")
-        result = client._request("GET", "/v0/test")
+        result = client._request("GET", "/v0/test", is_data=True)
         assert result == {"status": "success"}
 
     @responses.activate
@@ -185,7 +185,9 @@ class TestLexaRequest:
         )
 
         client = Lexa(api_key="test-key")
-        result = client._request("POST", "/v0/test", json_data={"key": "value"})
+        result = client._request(
+            "POST", "/v0/test", json_data={"key": "value"}, is_data=True
+        )
         assert result == {"received": True}
 
         # Check the request body
@@ -204,7 +206,7 @@ class TestLexaRequest:
 
         client = Lexa(api_key="test-key")
         files = {"file": ("test.txt", BytesIO(b"test content"))}
-        result = client._request("POST", "/v0/files", files=files)
+        result = client._request("POST", "/v0/files", files=files, is_data=True)
         assert result == {"uploaded": True}
 
     @responses.activate
@@ -218,7 +220,9 @@ class TestLexaRequest:
         )
 
         client = Lexa(api_key="test-key")
-        result = client._request("GET", "/v0/test", params={"param1": "value1"})
+        result = client._request(
+            "GET", "/v0/test", params={"param1": "value1"}, is_data=True
+        )
         assert result == {"params_received": True}
 
         # Check the request URL
@@ -245,7 +249,7 @@ class TestLexaRequest:
         client.token_expires_at = time.time() + 3600
 
         with pytest.raises(LexaAuthError, match="Invalid API key"):
-            client._request("GET", "/v0/test")
+            client._request("GET", "/v0/test", is_data=True)
 
     @responses.activate
     def test_rate_limit_error_429(self):
@@ -259,7 +263,7 @@ class TestLexaRequest:
 
         client = Lexa(api_key="test-key")
         with pytest.raises(LexaRateLimitError, match="Rate limit exceeded"):
-            client._request("GET", "/v0/test")
+            client._request("GET", "/v0/test", is_data=True)
 
     @responses.activate
     def test_validation_error_400(self):
@@ -273,7 +277,7 @@ class TestLexaRequest:
 
         client = Lexa(api_key="test-key")
         with pytest.raises(LexaValidationError, match="Invalid request"):
-            client._request("GET", "/v0/test")
+            client._request("GET", "/v0/test", is_data=True)
 
     def test_timeout_error(self):
         """Test timeout error handling"""
@@ -283,7 +287,7 @@ class TestLexaRequest:
             mock_request.side_effect = Timeout("Request timed out")
 
             with pytest.raises(LexaTimeoutError, match="Request timed out"):
-                client._request("GET", "/v0/test")
+                client._request("GET", "/v0/test", is_data=True)
 
     def test_connection_error(self):
         """Test connection error handling"""
@@ -293,7 +297,7 @@ class TestLexaRequest:
             mock_request.side_effect = ConnectionError("Connection failed")
 
             with pytest.raises(LexaError, match="Connection failed"):
-                client._request("GET", "/v0/test")
+                client._request("GET", "/v0/test", is_data=True)
 
     def test_generic_request_exception(self):
         """Test generic request exception"""
@@ -303,7 +307,7 @@ class TestLexaRequest:
             mock_request.side_effect = RequestException("Generic error")
 
             with pytest.raises(LexaError, match="Request failed"):
-                client._request("GET", "/v0/test")
+                client._request("GET", "/v0/test", is_data=True)
 
 
 class TestGetJobStatus:
@@ -2129,28 +2133,54 @@ class TestAdditionalCoverage:
     """Test additional cases to improve coverage"""
 
     def test_upload_files_file_close_handling(self):
-        """Test that opened files are properly closed"""
+        """Test that opened file streams in file_objects are properly closed in finally block"""
         client = Lexa(api_key="test-key")
 
-        # Create a mock file that tracks if close was called
-        mock_file = Mock()
-        mock_file.read.return_value = b"content"
-        mock_file.__enter__ = Mock(return_value=mock_file)
-        mock_file.__exit__ = Mock(return_value=None)
+        # Create a mock file stream that will be added to file_objects
+        # This tests the finally block cleanup at lines 432-438
+        from io import BytesIO
+        from unittest.mock import MagicMock
 
-        with patch("builtins.open", return_value=mock_file):
-            with patch("pathlib.Path.exists", return_value=True):
-                with patch("pathlib.Path.is_file", return_value=True):
-                    with patch.object(client, "_request") as mock_request:
-                        mock_request.return_value = {
-                            "requestID": "test",
-                            "message": "uploaded",
-                        }
+        # Track the stream that gets added to file_objects
+        captured_stream = None
+        original_request = client._request
 
-                        client._upload_files("/fake/path.txt")
+        def mock_request_capture(*args, **kwargs):
+            nonlocal captured_stream
+            # Capture the stream from the files parameter
+            if "files" in kwargs:
+                files_dict = kwargs["files"]
+                for key, value in files_dict.items():
+                    if isinstance(value, tuple) and len(value) == 2:
+                        _, stream = value
+                        captured_stream = stream
+            return {"requestID": "test", "message": "uploaded"}
 
-                        # Verify close was called
-                        mock_file.close.assert_called_once()
+        # Create temp file
+        import tempfile
+
+        temp_file = tempfile.NamedTemporaryFile(delete=False)
+        temp_file.write(b"test content")
+        temp_file.close()
+
+        try:
+            with patch.object(client, "_request", side_effect=mock_request_capture):
+                client._upload_files(temp_file.name)
+
+                # Verify the stream was captured and has close called
+                assert captured_stream is not None
+                # The stream should be a BytesIO object that was closed in finally block
+                assert isinstance(captured_stream, BytesIO)
+                # Check if the stream is closed
+                assert captured_stream.closed
+        finally:
+            # Clean up temp file
+            import os
+
+            try:
+                os.unlink(temp_file.name)
+            except:
+                pass
 
     def test_get_file_info_url_with_encoded_characters(self):
         """Test URL with encoded characters"""
@@ -2201,6 +2231,7 @@ class TestAdditionalCoverage:
         result = client._request(
             "POST",
             "/v0/test",
+            is_data=True,
             verify=False,  # Additional kwarg
             stream=True,  # Another kwarg
         )
@@ -2452,21 +2483,33 @@ class TestMissingBranchCoverage:
         """Test file handle that doesn't have close method"""
         client = Lexa(api_key="test-key")
 
-        # Mock a file handle without close method
-        mock_file = Mock(spec=[])  # No close method
+        # Mock a file handle without close method but with read method
+        from unittest.mock import MagicMock
+
+        mock_file = MagicMock(
+            spec=["read", "__enter__", "__exit__"]
+        )  # Has read but no close method
+        mock_file.read.return_value = b"content"
+        mock_file.__enter__.return_value = mock_file
+        mock_file.__exit__.return_value = None
+
+        # Create a mock stat object
+        mock_stat = Mock()
+        mock_stat.st_size = 1024
 
         with patch("builtins.open", return_value=mock_file):
             with patch("pathlib.Path.exists", return_value=True):
                 with patch("pathlib.Path.is_file", return_value=True):
-                    with patch.object(client, "_request") as mock_request:
-                        mock_request.return_value = {
-                            "requestID": "test",
-                            "message": "uploaded",
-                        }
+                    with patch("pathlib.Path.stat", return_value=mock_stat):
+                        with patch.object(client, "_request") as mock_request:
+                            mock_request.return_value = {
+                                "requestID": "test",
+                                "message": "uploaded",
+                            }
 
-                        # Should not raise exception even without close method
-                        result = client._upload_files("/fake/path.txt")
-                        assert result.request_id == "test"
+                            # Should not raise exception even without close method
+                            result = client._upload_files("/fake/path.txt")
+                            assert result.request_id == "test"
 
     def test_content_disposition_no_filename_match(self):
         """Test content disposition header without filename match"""
@@ -2976,6 +3019,13 @@ class TestRemainingLineCoverage:
 
                         def read(self):
                             return self._file.read()
+
+                        def __enter__(self):
+                            return self
+
+                        def __exit__(self, exc_type, exc_val, exc_tb):
+                            # Don't close in __exit__ to test the finally block
+                            return False
 
                         def __getattr__(self, name):
                             if name == "close":

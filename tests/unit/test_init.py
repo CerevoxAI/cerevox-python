@@ -36,7 +36,7 @@ class TestPackageInitialization:
         assert cerevox.__title__ == "cerevox"
         assert (
             cerevox.__description__
-            == "Cerevox - The Data Layer, Lexa - parse documents with enterprise-grade reliability"
+            == "Cerevox - The Data Layer for AI Agents: data parsing (Lexa) and data search (Hippo)"
         )
         assert cerevox.__author__ == "Cerevox Team"
         assert cerevox.__license__ == "MIT"

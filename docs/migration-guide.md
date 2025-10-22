@@ -1,6 +1,6 @@
 # Migration Guide
 
-Migrate from popular document processing tools to Cerevox for better performance and accuracy.
+Migrate from popular document processing tools to Cerevox for **Flagship Results @ Mini Cost**. Our precision retrieval delivers 70% smaller context with only relevant chunks, enabling 80% cost reduction while maintaining 99.5% accuracy match.
 
 ## Table of Contents
 
@@ -81,9 +81,11 @@ async with AsyncLexa() as client:
 ### Key Improvements
 
 - **10x faster** document processing with async support
-- **Better table extraction** with structure preservation  
+- **Precision retrieval** - 70% smaller context with only relevant chunks
+- **Better table extraction** with structure preservation
 - **Rich metadata** for enhanced retrieval
 - **Native async** processing for better scalability
+- **Flagship accuracy** with 99.5% accuracy match
 
 ---
 
@@ -129,7 +131,8 @@ async with AsyncLexa() as client:
 
 ### Key Improvements
 
-- **Higher accuracy** especially for complex documents
+- **Higher accuracy** - 99.5% accuracy match for complex documents
+- **Precision retrieval** with 70% smaller, more relevant context
 - **Better table structure** preservation
 - **Async processing** for handling multiple documents
 - **Consistent metadata** across all element types

@@ -613,7 +613,8 @@ class AskSubmitRequest(BaseModel):
 
     query: str = Field(..., description="Question/query to ask")
     response_type: ResponseType = Field(
-        ResponseType.ANSWERS, description="Type of response: 'answers' for AI-generated answer or 'sources' for source passages only"
+        ResponseType.ANSWERS,
+        description="Type of response: 'answers' for AI-generated answer or 'sources' for source passages only",
     )
     citation_style: Optional[str] = Field(
         None, description="Citation style for sources"
@@ -626,16 +627,20 @@ class AskSubmitRequest(BaseModel):
         description="Number of top relevant passages to retrieve (1-100 inclusive)",
     )
     answer_options: Optional[Dict[str, str]] = Field(
-        None, description="Multiple choice answer options (e.g., {'A': 'option1', 'B': 'option2'})"
+        None,
+        description="Multiple choice answer options (e.g., {'A': 'option1', 'B': 'option2'})",
     )
     reasoning_level: ReasoningLevel = Field(
-        ReasoningLevel.NONE, description="Level of reasoning to include in the response: 'none', 'basic', or 'detailed'"
+        ReasoningLevel.NONE,
+        description="Level of reasoning to include in the response: 'none', 'basic', or 'detailed'",
     )
     include_retrieval: bool = Field(
-        False, description="Whether the answer_options should be included in the retrieval process"
+        False,
+        description="Whether the answer_options should be included in the retrieval process",
     )
     mode: str = Field(
-        "lite", description="Query processing mode: 'lite' for faster processing or 'pro' for more comprehensive analysis"
+        "lite",
+        description="Query processing mode: 'lite' for faster processing or 'pro' for more comprehensive analysis",
     )
 
     model_config = ConfigDict(populate_by_name=True)

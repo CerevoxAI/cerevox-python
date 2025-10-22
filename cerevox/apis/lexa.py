@@ -27,7 +27,7 @@ from ..utils import DocumentBatch
 
 # Optional tqdm import for progress bars
 try:
-    from tqdm import tqdm  # type: ignore
+    from tqdm import tqdm
 
     TQDM_AVAILABLE = True
 except ImportError:
@@ -378,7 +378,7 @@ class Lexa(Ingest):
         if not request_id or request_id.strip() == "":
             raise ValueError("request_id cannot be empty")
 
-        response = self._request("GET", f"/v0/job/{request_id}")
+        response = self._request("GET", f"/v0/job/{request_id}", is_data=True)
         return JobResponse(**response)
 
     def _wait_for_completion(

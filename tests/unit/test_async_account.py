@@ -108,7 +108,7 @@ class TestAsyncAccountInitialization:
 
     def test_init_invalid_data_url(self):
         """Test initialization with invalid base URL"""
-        with pytest.raises(ValueError, match="data_url must start with"):
+        with pytest.raises(ValueError, match="(data_url|base_url) must start with"):
             AsyncAccount(api_key="test-key", data_url="invalid-url")
 
     def test_init_invalid_max_retries(self):

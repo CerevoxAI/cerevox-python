@@ -139,6 +139,7 @@ class AsyncClient:
         self,
         api_key: Optional[str] = None,
         base_url: Optional[str] = None,
+        auth_url: Optional[str] = None,
         data_url: Optional[str] = None,
         max_retries: int = 3,
         timeout: float = 30.0,
@@ -155,6 +156,8 @@ class AsyncClient:
             must have appropriate scopes for the intended operations.
         base_url : str, default "https://dev.cerevox.ai/v1"
             Base URL for cerevox requests.
+        auth_url : str, optional
+            Base URL for authentication endpoints. If None, defaults to base_url.
         data_url : str, default "https://data.cerevox.ai"
             Data URL for the Cerevox RAG API. Change to production URL
             for live environments.
@@ -194,34 +197,59 @@ class AsyncClient:
         if not self.api_key:
             raise ValueError("api_key is required for authentication")
 
+        # Validate max_retries type and value
+        if not isinstance(max_retries, int):
+            raise TypeError("max_retries must be an integer")
+        if max_retries < 0:
+            raise ValueError("max_retries must be a non-negative integer")
+
         # Default base_url if not provided
         if not base_url:
             base_url = "https://dev.cerevox.ai/v1"
+
+        # Default auth_url to base_url if not provided
+        if not auth_url:
+            auth_url = base_url
 
         # Default data_url if not provided
         if not data_url:
             data_url = "https://data.cerevox.ai"
 
         # Basic URL validation
+        if not isinstance(base_url, str) or not base_url:
+            raise ValueError("base_url must be a non-empty string")
         if not (base_url.startswith(HTTP) or base_url.startswith(HTTPS)):
             raise ValueError(f"base_url must start with {HTTP} or {HTTPS}")
 
+        if not isinstance(auth_url, str) or not auth_url:
+            raise ValueError("auth_url must be a non-empty string")
+        if not (auth_url.startswith(HTTP) or auth_url.startswith(HTTPS)):
+            raise ValueError(f"auth_url must start with {HTTP} or {HTTPS}")
+
+        if not isinstance(data_url, str) or not data_url:
+            raise ValueError("data_url must be a non-empty string")
         if not (data_url.startswith(HTTP) or data_url.startswith(HTTPS)):
             raise ValueError(f"data_url must start with {HTTP} or {HTTPS}")
 
         self.base_url = base_url.rstrip("/")  # Remove trailing slash
+        self.auth_url = auth_url.rstrip("/")  # Remove trailing slash
         self.data_url = data_url.rstrip("/")  # Remove trailing slash
 
         self.timeout = aiohttp.ClientTimeout(total=timeout)
         self.max_retries = max_retries
 
-        # Session configuration
+        # Session configuration - filter out non-aiohttp parameters
+        session_only_kwargs = {
+            k: v
+            for k, v in kwargs.items()
+            if k not in ["auth_url", "base_url", "data_url"]
+        }
         self.session_kwargs = {
             "timeout": self.timeout,
             "headers": {
                 "User-Agent": "cerevox-python-async/0.1.6",
             },
-            **kwargs,
+            **session_only_kwargs,
         }
 
         self.session: Optional[aiohttp.ClientSession] = None
@@ -499,14 +527,17 @@ class AsyncClient:
         if not self.session:
             await self.start_session()
 
-        base_url = self.base_url
+        # Determine which base URL to use
+        if is_auth:
+            base_url = self.auth_url
+        elif is_data:
+            base_url = self.data_url
+        else:
+            base_url = self.base_url
 
         # Check if token needs refresh before making request
         if not is_auth:
             await self._ensure_valid_token()
-
-        if is_data:
-            base_url = self.data_url
 
         url = f"{base_url}{endpoint}"
 

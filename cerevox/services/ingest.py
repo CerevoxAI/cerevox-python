@@ -79,7 +79,9 @@ class Ingest(Client):
             compression_threshold: File size threshold in bytes above which files are gzipped (default: 1MB)
             **kwargs: Additional arguments passed to base client
         """
-        super().__init__(api_key, base_url, data_url, **kwargs)
+        super().__init__(
+            api_key=api_key, base_url=base_url, data_url=data_url, **kwargs
+        )
         self.product = product
         self.compression_threshold = compression_threshold
 
@@ -157,8 +159,14 @@ class Ingest(Client):
         # Only skip files that are already gzip compressed
         gzip_extensions = {".gz", ".gzip"}
 
-        # Get file extension in lowercase
-        file_ext = Path(filename).suffix.lower()
+        try:
+            # Get file extension in lowercase
+            file_ext = Path(filename).suffix.lower()
+        except (OSError, ValueError, AttributeError):
+            # If Path() fails (invalid path, mocked, etc.), fall back to string operations
+            file_ext = ""
+            if "." in filename:
+                file_ext = "." + filename.rsplit(".", 1)[1].lower()
 
         # Check for compound extensions like .tar.gz
         if filename.lower().endswith(".tar.gz") or filename.lower().endswith(".tgz"):
@@ -324,7 +332,9 @@ class Ingest(Client):
                     if self._should_stream_compress(path):
                         temp_file_path, filename = self._stream_compress_file(path)
                         temp_files_to_cleanup.append(temp_file_path)
-                        content_stream = open(temp_file_path, "rb")
+                        content_stream: Union[BinaryIO, TextIO, BytesIO] = open(
+                            temp_file_path, "rb"
+                        )
                         file_objects.append(("files", (filename, content_stream)))
                     else:
                         # For smaller files, use the original in-memory approach
@@ -366,7 +376,13 @@ class Ingest(Client):
                     # Read content from stream to check for compression
                     if hasattr(file_input, "seek"):
                         file_input.seek(0)  # Reset position
-                    content = file_input.read()
+                    content_raw = file_input.read()
+                    # Ensure content is bytes
+                    content = (
+                        content_raw
+                        if isinstance(content_raw, bytes)
+                        else content_raw.encode("utf-8")
+                    )
 
                     # Check if we should compress
                     if self._should_compress_content(content, filename):
@@ -403,10 +419,6 @@ class Ingest(Client):
                 1800, min(7200, 1800 + (total_file_size // (100 * 1024 * 1024)) * 60)
             )
 
-            print(
-                f"🔄 Uploading {len(files)} file(s) ({total_file_size / (1024**3):.2f} GB) with {upload_timeout/60:.1f} minute timeout"
-            )
-
             # Prepare headers with explicit Content-Length for file size information
             headers = {}
             if total_file_size > 0:
@@ -435,14 +447,14 @@ class Ingest(Client):
                     try:
                         stream.close()
                     except Exception:
-                        pass
+                        raise
 
             # Clean up temporary compressed files
-            for temp_file in temp_files_to_cleanup:
+            for temp_file_path in temp_files_to_cleanup:
                 try:
-                    os.unlink(temp_file)
+                    os.unlink(temp_file_path)
                 except (OSError, FileNotFoundError):
-                    pass
+                    raise
 
     def _upload_urls(
         self,

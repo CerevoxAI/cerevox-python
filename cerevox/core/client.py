@@ -101,6 +101,7 @@ class Client:
         self,
         api_key: Optional[str] = None,
         base_url: Optional[str] = None,
+        auth_url: Optional[str] = None,
         data_url: Optional[str] = None,
         max_retries: int = 3,
         session_kwargs: Optional[Dict[str, Any]] = None,
@@ -118,6 +119,8 @@ class Client:
             must have appropriate scopes for the intended operations.
         base_url : str, default "https://dev.cerevox.ai/v1"
             Base URL for cerevox requests.
+        auth_url : str, optional
+            Base URL for authentication endpoints. If None, defaults to base_url.
         data_url : str, default "https://data.cerevox.ai"
             Data URL for the Cerevox RAG API. Change to production URL
             for live environments.
@@ -163,22 +166,42 @@ class Client:
         if not self.api_key:
             raise ValueError("api_key is required for authentication")
 
+        # Validate max_retries type and value
+        if not isinstance(max_retries, int):
+            raise TypeError("max_retries must be an integer")
+        if max_retries < 0:
+            raise ValueError("max_retries must be a non-negative integer")
+
         # Default base_url if not provided
         if not base_url:
             base_url = "https://dev.cerevox.ai/v1"
+
+        # Default auth_url to base_url if not provided
+        if not auth_url:
+            auth_url = base_url
 
         # Default data_url if not provided
         if not data_url:
             data_url = "https://data.cerevox.ai"
 
         # Basic URL validation
+        if not isinstance(base_url, str) or not base_url:
+            raise ValueError("base_url must be a non-empty string")
         if not (base_url.startswith(HTTP) or base_url.startswith(HTTPS)):
             raise ValueError(f"base_url must start with {HTTP} or {HTTPS}")
 
+        if not isinstance(auth_url, str) or not auth_url:
+            raise ValueError("auth_url must be a non-empty string")
+        if not (auth_url.startswith(HTTP) or auth_url.startswith(HTTPS)):
+            raise ValueError(f"auth_url must start with {HTTP} or {HTTPS}")
+
+        if not isinstance(data_url, str) or not data_url:
+            raise ValueError("data_url must be a non-empty string")
         if not (data_url.startswith(HTTP) or data_url.startswith(HTTPS)):
             raise ValueError(f"data_url must start with {HTTP} or {HTTPS}")
 
         self.base_url = base_url.rstrip("/")  # Remove trailing slash
+        self.auth_url = auth_url.rstrip("/")  # Remove trailing slash
         self.data_url = data_url.rstrip("/")  # Remove trailing slash
 
         self.timeout = timeout
@@ -343,14 +366,18 @@ class Client:
         not retry client errors (4xx) which typically require user
         intervention to resolve.
         """
-        base_url = self.base_url
+        # Determine which base URL to use
+        if is_auth:
+            base_url = self.auth_url if hasattr(self, "auth_url") else self.data_url
+        elif is_data:
+            base_url = self.data_url
+        else:
+            # Fallback to data_url if base_url is not set (for backward compatibility with tests)
+            base_url = self.base_url if hasattr(self, "base_url") else self.data_url
 
         # Check if token needs refresh before making request
         if not is_auth:
             self._ensure_valid_token()
-
-        if is_data:
-            base_url = self.data_url
 
         url = f"{base_url}{endpoint}"
 

@@ -87,7 +87,9 @@ class AsyncIngest(AsyncClient):
             compression_threshold: File size threshold in bytes above which files are gzipped (default: 1MB)
             **kwargs: Additional arguments passed to base client
         """
-        super().__init__(api_key, base_url, data_url, **kwargs)
+        super().__init__(
+            api_key=api_key, base_url=base_url, data_url=data_url, **kwargs
+        )
         self.product = product
         self.max_concurrent = max_concurrent
         self.compression_threshold = compression_threshold
@@ -171,8 +173,14 @@ class AsyncIngest(AsyncClient):
         # Only skip files that are already gzip compressed
         gzip_extensions = {".gz", ".gzip"}
 
-        # Get file extension in lowercase
-        file_ext = Path(filename).suffix.lower()
+        try:
+            # Get file extension in lowercase
+            file_ext = Path(filename).suffix.lower()
+        except (OSError, ValueError, AttributeError):
+            # If Path() fails (invalid path, mocked, etc.), fall back to string operations
+            file_ext = ""
+            if "." in filename:
+                file_ext = "." + filename.rsplit(".", 1)[1].lower()
 
         # Check for compound extensions like .tar.gz
         if filename.lower().endswith(".tar.gz") or filename.lower().endswith(".tgz"):
@@ -433,7 +441,13 @@ class AsyncIngest(AsyncClient):
                     if hasattr(file_input, "read"):
                         if hasattr(file_input, "seek"):
                             file_input.seek(0)  # Reset position for potential reuse
-                        content = file_input.read()
+                        content_raw = file_input.read()
+                        # Ensure we have bytes
+                        content = (
+                            content_raw
+                            if isinstance(content_raw, bytes)
+                            else content_raw.encode("utf-8")
+                        )
 
                         # Check if we should compress
                         if self._should_compress_content(content, filename):
@@ -443,13 +457,11 @@ class AsyncIngest(AsyncClient):
 
                         data.add_field("files", content, filename=filename)
                     else:
-                        # Check if we should compress
-                        if self._should_compress_content(file_input, filename):
-                            file_input, filename = self._compress_content(
-                                file_input, filename
-                            )
-
-                        data.add_field("files", file_input, filename=filename)
+                        # This branch should not be reached for file-like objects
+                        # but kept for backward compatibility
+                        raise ValueError(
+                            f"File-like object must have 'read' method: {type(file_input)}"
+                        )
 
                 else:
                     raise ValueError(f"Unsupported file input type: {type(file_input)}")

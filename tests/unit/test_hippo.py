@@ -58,7 +58,7 @@ class TestHippoInitialization:
 
             client = Hippo(api_key="test-api-key")
             assert client.api_key == "test-api-key"
-            assert client.data_url == "https://dev.cerevox.ai/v1"
+            assert client.data_url == "https://data.cerevox.ai"
             assert client.timeout == 30.0
             assert client.max_retries == 3
             assert "Authorization" in client.session.headers
@@ -114,14 +114,14 @@ class TestHippoInitialization:
             client = Hippo(
                 email="test@example.com",
                 api_key="test-key",
-                data_url="https://dev.cerevox.ai/v1",
+                data_url="https://data.cerevox.ai",
                 timeout=60.0,
                 max_retries=5,
                 session_kwargs=session_kwargs,
                 custom_param="test",
             )
 
-            assert client.data_url == "https://dev.cerevox.ai/v1"
+            assert client.data_url == "https://data.cerevox.ai"
             assert client.timeout == 60.0
             assert client.max_retries == 5
             assert not client.session.verify
@@ -1015,9 +1015,8 @@ class TestHippoAskManagement:
         response = self.client.submit_ask(
             "chat123",
             "What is this document about?",
-            is_qna=False,
             citation_style="APA",
-            sources=["file1", "file2"],
+            source_ids=["file1", "file2"],
         )
 
         assert isinstance(response, AskSubmitResponse)

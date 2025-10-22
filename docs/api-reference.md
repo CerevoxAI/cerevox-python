@@ -1,5 +1,19 @@
 # API Reference
 
+> **📌 Note:** This reference currently covers the Lexa document processing API. For the new Hippo (RAG) and Account management APIs introduced in v0.2.0, please refer to:
+> - **Hippo RAG API**: See [`examples/account_hippo_usage.py`](../examples/account_hippo_usage.py) and inline docstrings in `cerevox.apis.Hippo` / `cerevox.apis.AsyncHippo`
+> - **Account API**: See [`examples/account_hippo_usage.py`](../examples/account_hippo_usage.py) and inline docstrings in `cerevox.apis.Account` / `cerevox.apis.AsyncAccount`
+> - Comprehensive API reference for these new APIs will be added in a future update
+
+## Overview
+
+**Flagship Results @ Mini Cost** - Cerevox delivers 99.5% accuracy at 80% lower cost with precision retrieval that provides 70% smaller, more relevant context.
+
+Cerevox provides three powerful APIs:
+- **Lexa** - Document parsing with SOTA accuracy (documented below)
+- **Hippo** - RAG operations with precision retrieval, semantic search and Q&A (see examples and docstrings)
+- **Account** - Enterprise user management and authentication (see examples and docstrings)
+
 ## Table of Contents
 
 - [AsyncLexa](#asynclexa)

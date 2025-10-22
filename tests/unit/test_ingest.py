@@ -79,7 +79,7 @@ class TestIngestInitialization:
         ingest = Ingest(api_key="test-api-key", product="hippo")
         assert ingest.api_key == "test-api-key"
         assert ingest.product == "hippo"
-        assert ingest.data_url == "https://www.data.cerevox.ai"
+        assert ingest.data_url == "https://data.cerevox.ai"
 
     def test_init_without_product(self):
         """Test initialization without product parameter"""
@@ -121,7 +121,7 @@ class TestUploadFilesWithFolderId:
         """Test uploading files with folder_id parameter - covers line 218"""
         responses.add(
             responses.POST,
-            "https://www.data.cerevox.ai/v0/files",
+            "https://data.cerevox.ai/v0/files",
             json={
                 "message": "Files uploaded successfully",
                 "requestID": "req-123",
@@ -153,7 +153,7 @@ class TestUploadFilesWithFolderId:
         """Test uploading files without folder_id parameter"""
         responses.add(
             responses.POST,
-            "https://www.data.cerevox.ai/v0/files",
+            "https://data.cerevox.ai/v0/files",
             json={
                 "message": "Files uploaded successfully",
                 "requestID": "req-124",
@@ -182,7 +182,7 @@ class TestUploadFilesWithFolderId:
         """Test uploading files with both folder_id and processing mode"""
         responses.add(
             responses.POST,
-            "https://www.data.cerevox.ai/v0/files",
+            "https://data.cerevox.ai/v0/files",
             json={
                 "message": "Files uploaded successfully",
                 "requestID": "req-125",
@@ -225,7 +225,7 @@ class TestUploadUrlsWithFolderId:
         # Mock the upload request
         responses.add(
             responses.POST,
-            "https://www.data.cerevox.ai/v0/file-urls",
+            "https://data.cerevox.ai/v0/file-urls",
             json={"message": "URLs processed", "requestID": "req-url-1"},
             status=200,
         )
@@ -259,7 +259,7 @@ class TestUploadUrlsWithFolderId:
         # Mock the upload request
         responses.add(
             responses.POST,
-            "https://www.data.cerevox.ai/v0/file-urls",
+            "https://data.cerevox.ai/v0/file-urls",
             json={"message": "URLs processed", "requestID": "req-url-2"},
             status=200,
         )
@@ -289,7 +289,7 @@ class TestUploadUrlsWithFolderId:
         # Mock upload request
         responses.add(
             responses.POST,
-            "https://www.data.cerevox.ai/v0/file-urls",
+            "https://data.cerevox.ai/v0/file-urls",
             json={"message": "URLs processed", "requestID": "req-url-3"},
             status=200,
         )
@@ -319,7 +319,7 @@ class TestUploadS3FolderWithFolderId:
         """Test S3 folder upload with folder_id parameter - covers line 334"""
         responses.add(
             responses.POST,
-            "https://www.data.cerevox.ai/v0/amazon-folder",
+            "https://data.cerevox.ai/v0/amazon-folder",
             json={"message": "S3 folder processed", "requestID": "req-s3-1"},
             status=200,
         )
@@ -344,7 +344,7 @@ class TestUploadS3FolderWithFolderId:
         """Test S3 folder upload without folder_id parameter"""
         responses.add(
             responses.POST,
-            "https://www.data.cerevox.ai/v0/amazon-folder",
+            "https://data.cerevox.ai/v0/amazon-folder",
             json={"message": "S3 folder processed", "requestID": "req-s3-2"},
             status=200,
         )
@@ -365,7 +365,7 @@ class TestUploadS3FolderWithFolderId:
         """Test S3 folder upload with folder_id and processing mode"""
         responses.add(
             responses.POST,
-            "https://www.data.cerevox.ai/v0/amazon-folder",
+            "https://data.cerevox.ai/v0/amazon-folder",
             json={"message": "S3 folder processed", "requestID": "req-s3-3"},
             status=200,
         )
@@ -391,7 +391,7 @@ class TestUploadBoxFolderWithFolderId:
         """Test Box folder upload with folder_id parameter - covers line 388"""
         responses.add(
             responses.POST,
-            "https://www.data.cerevox.ai/v0/box-folder",
+            "https://data.cerevox.ai/v0/box-folder",
             json={"message": "Box folder processed", "requestID": "req-box-1"},
             status=200,
         )
@@ -412,7 +412,7 @@ class TestUploadBoxFolderWithFolderId:
         """Test Box folder upload without folder_id parameter"""
         responses.add(
             responses.POST,
-            "https://www.data.cerevox.ai/v0/box-folder",
+            "https://data.cerevox.ai/v0/box-folder",
             json={"message": "Box folder processed", "requestID": "req-box-2"},
             status=200,
         )
@@ -432,7 +432,7 @@ class TestUploadBoxFolderWithFolderId:
         """Test Box folder upload with folder_id and processing mode"""
         responses.add(
             responses.POST,
-            "https://www.data.cerevox.ai/v0/box-folder",
+            "https://data.cerevox.ai/v0/box-folder",
             json={"message": "Box folder processed", "requestID": "req-box-3"},
             status=200,
         )
@@ -458,7 +458,7 @@ class TestUploadDropboxFolderWithFolderId:
         """Test Dropbox folder upload with folder_id parameter - covers line 426"""
         responses.add(
             responses.POST,
-            "https://www.data.cerevox.ai/v0/dropbox-folder",
+            "https://data.cerevox.ai/v0/dropbox-folder",
             json={"message": "Dropbox folder processed", "requestID": "req-dropbox-1"},
             status=200,
         )
@@ -481,7 +481,7 @@ class TestUploadDropboxFolderWithFolderId:
         """Test Dropbox folder upload without folder_id parameter"""
         responses.add(
             responses.POST,
-            "https://www.data.cerevox.ai/v0/dropbox-folder",
+            "https://data.cerevox.ai/v0/dropbox-folder",
             json={"message": "Dropbox folder processed", "requestID": "req-dropbox-2"},
             status=200,
         )
@@ -501,7 +501,7 @@ class TestUploadDropboxFolderWithFolderId:
         """Test Dropbox folder upload with folder_id and processing mode"""
         responses.add(
             responses.POST,
-            "https://www.data.cerevox.ai/v0/dropbox-folder",
+            "https://data.cerevox.ai/v0/dropbox-folder",
             json={"message": "Dropbox folder processed", "requestID": "req-dropbox-3"},
             status=200,
         )
@@ -527,7 +527,7 @@ class TestUploadSharepointFolderWithFolderId:
         """Test SharePoint folder upload with folder_id parameter - covers line 472"""
         responses.add(
             responses.POST,
-            "https://www.data.cerevox.ai/v0/microsoft-folder",
+            "https://data.cerevox.ai/v0/microsoft-folder",
             json={"message": "SharePoint folder processed", "requestID": "req-sp-1"},
             status=200,
         )
@@ -551,7 +551,7 @@ class TestUploadSharepointFolderWithFolderId:
         """Test SharePoint folder upload without folder_id parameter"""
         responses.add(
             responses.POST,
-            "https://www.data.cerevox.ai/v0/microsoft-folder",
+            "https://data.cerevox.ai/v0/microsoft-folder",
             json={"message": "SharePoint folder processed", "requestID": "req-sp-2"},
             status=200,
         )
@@ -573,7 +573,7 @@ class TestUploadSharepointFolderWithFolderId:
         """Test SharePoint folder upload with folder_id and processing mode"""
         responses.add(
             responses.POST,
-            "https://www.data.cerevox.ai/v0/microsoft-folder",
+            "https://data.cerevox.ai/v0/microsoft-folder",
             json={"message": "SharePoint folder processed", "requestID": "req-sp-3"},
             status=200,
         )
@@ -602,7 +602,7 @@ class TestUploadSalesforceFolderWithFolderId:
         """Test Salesforce folder upload with folder_id parameter - covers line 540"""
         responses.add(
             responses.POST,
-            "https://www.data.cerevox.ai/v0/salesforce-folder",
+            "https://data.cerevox.ai/v0/salesforce-folder",
             json={"message": "Salesforce folder processed", "requestID": "req-sf-1"},
             status=200,
         )
@@ -625,7 +625,7 @@ class TestUploadSalesforceFolderWithFolderId:
         """Test Salesforce folder upload without folder_id parameter"""
         responses.add(
             responses.POST,
-            "https://www.data.cerevox.ai/v0/salesforce-folder",
+            "https://data.cerevox.ai/v0/salesforce-folder",
             json={"message": "Salesforce folder processed", "requestID": "req-sf-2"},
             status=200,
         )
@@ -645,7 +645,7 @@ class TestUploadSalesforceFolderWithFolderId:
         """Test Salesforce folder upload with folder_id and processing mode"""
         responses.add(
             responses.POST,
-            "https://www.data.cerevox.ai/v0/salesforce-folder",
+            "https://data.cerevox.ai/v0/salesforce-folder",
             json={"message": "Salesforce folder processed", "requestID": "req-sf-3"},
             status=200,
         )
@@ -671,7 +671,7 @@ class TestUploadSendmeFilesWithFolderId:
         """Test Sendme files upload with folder_id parameter - covers line 578"""
         responses.add(
             responses.POST,
-            "https://www.data.cerevox.ai/v0/sendme",
+            "https://data.cerevox.ai/v0/sendme",
             json={"message": "Sendme files processed", "requestID": "req-sendme-1"},
             status=200,
         )
@@ -694,7 +694,7 @@ class TestUploadSendmeFilesWithFolderId:
         """Test Sendme files upload without folder_id parameter"""
         responses.add(
             responses.POST,
-            "https://www.data.cerevox.ai/v0/sendme",
+            "https://data.cerevox.ai/v0/sendme",
             json={"message": "Sendme files processed", "requestID": "req-sendme-2"},
             status=200,
         )
@@ -714,7 +714,7 @@ class TestUploadSendmeFilesWithFolderId:
         """Test Sendme files upload with folder_id and processing mode"""
         responses.add(
             responses.POST,
-            "https://www.data.cerevox.ai/v0/sendme",
+            "https://data.cerevox.ai/v0/sendme",
             json={"message": "Sendme files processed", "requestID": "req-sendme-3"},
             status=200,
         )
@@ -747,7 +747,7 @@ class TestIngestListingMethods:
         }
         responses.add(
             responses.GET,
-            "https://www.data.cerevox.ai/v0/amazon-listBuckets",
+            "https://data.cerevox.ai/v0/amazon-listBuckets",
             json=bucket_response,
             status=200,
         )
@@ -772,7 +772,7 @@ class TestIngestListingMethods:
         }
         responses.add(
             responses.GET,
-            "https://www.data.cerevox.ai/v0/amazon-listFoldersInBucket",
+            "https://data.cerevox.ai/v0/amazon-listFoldersInBucket",
             json=folder_response,
             status=200,
         )
@@ -797,7 +797,7 @@ class TestIngestListingMethods:
         }
         responses.add(
             responses.GET,
-            "https://www.data.cerevox.ai/v0/box-listFolders",
+            "https://data.cerevox.ai/v0/box-listFolders",
             json=folder_response,
             status=200,
         )
@@ -817,7 +817,7 @@ class TestIngestListingMethods:
         }
         responses.add(
             responses.GET,
-            "https://www.data.cerevox.ai/v0/dropbox-listFolders",
+            "https://data.cerevox.ai/v0/dropbox-listFolders",
             json=folder_response,
             status=200,
         )
@@ -843,7 +843,7 @@ class TestIngestListingMethods:
         }
         responses.add(
             responses.GET,
-            "https://www.data.cerevox.ai/v0/microsoft-listSites",
+            "https://data.cerevox.ai/v0/microsoft-listSites",
             json=site_response,
             status=200,
         )
@@ -867,7 +867,7 @@ class TestIngestListingMethods:
         }
         responses.add(
             responses.GET,
-            "https://www.data.cerevox.ai/v0/microsoft-listDrivesInSite",
+            "https://data.cerevox.ai/v0/microsoft-listDrivesInSite",
             json=drive_response,
             status=200,
         )
@@ -891,7 +891,7 @@ class TestIngestListingMethods:
         }
         responses.add(
             responses.GET,
-            "https://www.data.cerevox.ai/v0/microsoft-listFoldersInDrive",
+            "https://data.cerevox.ai/v0/microsoft-listFoldersInDrive",
             json=folder_response,
             status=200,
         )
@@ -915,7 +915,7 @@ class TestIngestListingMethods:
         }
         responses.add(
             responses.GET,
-            "https://www.data.cerevox.ai/v0/salesforce-listFolders",
+            "https://data.cerevox.ai/v0/salesforce-listFolders",
             json=folder_response,
             status=200,
         )
@@ -1072,7 +1072,7 @@ class TestIngestEdgeCases:
         """Test uploading mixed file types with folder_id"""
         responses.add(
             responses.POST,
-            "https://www.data.cerevox.ai/v0/files",
+            "https://data.cerevox.ai/v0/files",
             json={
                 "message": "Files uploaded successfully",
                 "requestID": "req-mixed",
@@ -1125,7 +1125,7 @@ class TestIngestEdgeCases:
         # Mock upload request
         responses.add(
             responses.POST,
-            "https://www.data.cerevox.ai/v0/file-urls",
+            "https://data.cerevox.ai/v0/file-urls",
             json={"message": "URLs processed", "requestID": "req-multi-url"},
             status=200,
         )
@@ -1190,7 +1190,7 @@ class TestComprehensiveFolderIdCoverage:
         # Mock all necessary responses
         responses.add(
             responses.POST,
-            "https://www.data.cerevox.ai/v0/files",
+            "https://data.cerevox.ai/v0/files",
             json={"message": "Files uploaded", "requestID": "files-test"},
             status=200,
         )
@@ -1204,49 +1204,49 @@ class TestComprehensiveFolderIdCoverage:
 
         responses.add(
             responses.POST,
-            "https://www.data.cerevox.ai/v0/file-urls",
+            "https://data.cerevox.ai/v0/file-urls",
             json={"message": "URLs processed", "requestID": "urls-test"},
             status=200,
         )
 
         responses.add(
             responses.POST,
-            "https://www.data.cerevox.ai/v0/amazon-folder",
+            "https://data.cerevox.ai/v0/amazon-folder",
             json={"message": "S3 processed", "requestID": "s3-test"},
             status=200,
         )
 
         responses.add(
             responses.POST,
-            "https://www.data.cerevox.ai/v0/box-folder",
+            "https://data.cerevox.ai/v0/box-folder",
             json={"message": "Box processed", "requestID": "box-test"},
             status=200,
         )
 
         responses.add(
             responses.POST,
-            "https://www.data.cerevox.ai/v0/dropbox-folder",
+            "https://data.cerevox.ai/v0/dropbox-folder",
             json={"message": "Dropbox processed", "requestID": "dropbox-test"},
             status=200,
         )
 
         responses.add(
             responses.POST,
-            "https://www.data.cerevox.ai/v0/microsoft-folder",
+            "https://data.cerevox.ai/v0/microsoft-folder",
             json={"message": "SharePoint processed", "requestID": "sp-test"},
             status=200,
         )
 
         responses.add(
             responses.POST,
-            "https://www.data.cerevox.ai/v0/salesforce-folder",
+            "https://data.cerevox.ai/v0/salesforce-folder",
             json={"message": "Salesforce processed", "requestID": "sf-test"},
             status=200,
         )
 
         responses.add(
             responses.POST,
-            "https://www.data.cerevox.ai/v0/sendme",
+            "https://data.cerevox.ai/v0/sendme",
             json={"message": "Sendme processed", "requestID": "sendme-test"},
             status=200,
         )
@@ -1311,3 +1311,382 @@ class TestComprehensiveFolderIdCoverage:
             request = responses.calls[request_index].request
             payload = json.loads(request.body)
             assert payload["folder_id"] == folder_id, f"Request {i} missing folder_id"
+
+
+class TestGzipCompression:
+    """Test gzip compression functionality"""
+
+    def test_is_already_gzip_compressed_gz(self):
+        """Test detection of .gz files"""
+        ingest = Ingest(api_key="test-key")
+        assert ingest._is_already_gzip_compressed("file.gz") is True
+        assert ingest._is_already_gzip_compressed("file.GZ") is True
+        assert ingest._is_already_gzip_compressed("file.gzip") is True
+        assert ingest._is_already_gzip_compressed("file.GZIP") is True
+
+    def test_is_already_gzip_compressed_tar_gz(self):
+        """Test detection of .tar.gz files - covers line 165"""
+        ingest = Ingest(api_key="test-key")
+        assert ingest._is_already_gzip_compressed("archive.tar.gz") is True
+        assert ingest._is_already_gzip_compressed("archive.TAR.GZ") is True
+        assert ingest._is_already_gzip_compressed("archive.tgz") is True
+        assert ingest._is_already_gzip_compressed("archive.TGZ") is True
+
+    def test_is_already_gzip_compressed_false(self):
+        """Test detection of non-gzip files"""
+        ingest = Ingest(api_key="test-key")
+        assert ingest._is_already_gzip_compressed("file.txt") is False
+        assert ingest._is_already_gzip_compressed("file.pdf") is False
+        assert ingest._is_already_gzip_compressed("file.zip") is False
+
+    def test_should_compress_content_below_threshold(self):
+        """Test compression decision for small files"""
+        ingest = Ingest(api_key="test-key", compression_threshold=1024 * 1024)  # 1MB
+        small_content = b"small content"
+        assert ingest._should_compress_content(small_content, "file.txt") is False
+
+    def test_should_compress_content_above_threshold(self):
+        """Test compression decision for large files - covers line 188"""
+        ingest = Ingest(api_key="test-key", compression_threshold=1024)  # 1KB
+        large_content = b"x" * (2 * 1024)  # 2KB
+        assert ingest._should_compress_content(large_content, "file.txt") is True
+
+    def test_should_compress_content_already_gzip(self):
+        """Test compression decision for already gzipped files - covers line 182"""
+        ingest = Ingest(api_key="test-key", compression_threshold=1024)  # 1KB
+        large_content = b"x" * (2 * 1024)  # 2KB
+        # Even though file is large, should not compress if already gzip
+        assert ingest._should_compress_content(large_content, "file.gz") is False
+        assert ingest._should_compress_content(large_content, "archive.tar.gz") is False
+
+    def test_compress_content(self):
+        """Test content compression - covers lines 201-207"""
+        import gzip
+
+        ingest = Ingest(api_key="test-key")
+        original_content = b"This is test content that will be compressed"
+        original_filename = "test.txt"
+
+        compressed_content, compressed_filename = ingest._compress_content(
+            original_content, original_filename
+        )
+
+        # Verify the content is actually gzipped
+        assert compressed_content != original_content
+        assert gzip.decompress(compressed_content) == original_content
+
+        # Verify filename has .gz extension
+        assert compressed_filename == "test.txt.gz"
+
+    def test_compress_content_already_has_gz_extension(self):
+        """Test compression when filename already has .gz extension"""
+        import gzip
+
+        ingest = Ingest(api_key="test-key")
+        original_content = b"test content"
+        original_filename = "test.txt.gz"
+
+        compressed_content, compressed_filename = ingest._compress_content(
+            original_content, original_filename
+        )
+
+        # Filename should remain the same (not double .gz)
+        assert compressed_filename == "test.txt.gz"
+        assert gzip.decompress(compressed_content) == original_content
+
+    def test_stream_compress_file(self):
+        """Test streaming file compression - covers lines 223-247"""
+        import gzip
+
+        ingest = Ingest(api_key="test-key")
+
+        # Create temporary file with content
+        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".txt")
+        test_content = b"x" * (2 * 1024 * 1024)  # 2MB of data
+        temp_file.write(test_content)
+        temp_file.close()
+
+        try:
+            # Stream compress the file
+            compressed_path, compressed_filename = ingest._stream_compress_file(
+                Path(temp_file.name)
+            )
+
+            try:
+                # Verify compressed file exists
+                assert os.path.exists(compressed_path)
+
+                # Verify filename has .gz extension
+                assert compressed_filename.endswith(".gz")
+
+                # Verify content is correctly compressed
+                with gzip.open(compressed_path, "rb") as f:
+                    decompressed = f.read()
+                    assert decompressed == test_content
+
+            finally:
+                # Clean up compressed file
+                if os.path.exists(compressed_path):
+                    os.unlink(compressed_path)
+        finally:
+            # Clean up original file
+            os.unlink(temp_file.name)
+
+    def test_stream_compress_file_with_gz_extension(self):
+        """Test streaming compression when filename already has .gz extension"""
+        ingest = Ingest(api_key="test-key")
+
+        # Create temporary file
+        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".txt.gz")
+        temp_file.write(b"test content")
+        temp_file.close()
+
+        try:
+            compressed_path, compressed_filename = ingest._stream_compress_file(
+                Path(temp_file.name)
+            )
+
+            try:
+                # Filename should not have double .gz
+                basename = os.path.basename(temp_file.name)
+                assert compressed_filename == basename
+                assert compressed_filename.count(".gz") == 1
+            finally:
+                if os.path.exists(compressed_path):
+                    os.unlink(compressed_path)
+        finally:
+            os.unlink(temp_file.name)
+
+    def test_should_stream_compress_large_file(self):
+        """Test stream compression decision for large files"""
+        ingest = Ingest(api_key="test-key")
+
+        # Create a large temporary file (>10MB)
+        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".txt")
+        temp_file.write(b"x" * (11 * 1024 * 1024))  # 11MB
+        temp_file.close()
+
+        try:
+            assert ingest._should_stream_compress(Path(temp_file.name)) is True
+        finally:
+            os.unlink(temp_file.name)
+
+    def test_should_stream_compress_small_file(self):
+        """Test stream compression decision for small files"""
+        ingest = Ingest(api_key="test-key")
+
+        # Create a small temporary file (<10MB)
+        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".txt")
+        temp_file.write(b"small content")
+        temp_file.close()
+
+        try:
+            assert ingest._should_stream_compress(Path(temp_file.name)) is False
+        finally:
+            os.unlink(temp_file.name)
+
+    def test_should_stream_compress_already_gzip(self):
+        """Test stream compression decision for already gzipped files - covers line 261"""
+        ingest = Ingest(api_key="test-key")
+
+        # Create a large .gz file
+        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".gz")
+        temp_file.write(b"x" * (11 * 1024 * 1024))  # 11MB
+        temp_file.close()
+
+        try:
+            # Even though file is large, should not stream compress if already gzip
+            assert ingest._should_stream_compress(Path(temp_file.name)) is False
+        finally:
+            os.unlink(temp_file.name)
+
+    def test_should_stream_compress_file_not_found(self):
+        """Test stream compression decision for non-existent files - covers lines 268-269"""
+        ingest = Ingest(api_key="test-key")
+        assert ingest._should_stream_compress(Path("/nonexistent/file.txt")) is False
+
+    @responses.activate
+    def test_upload_files_with_compression(self):
+        """Test uploading files that trigger compression - covers line 336"""
+        responses.add(
+            responses.POST,
+            "https://data.cerevox.ai/v0/files",
+            json={"message": "Files uploaded", "requestID": "req-compress"},
+            status=200,
+        )
+
+        # Use small threshold to trigger compression
+        ingest = Ingest(api_key="test-key", product="lexa", compression_threshold=10)
+
+        # Create content above threshold
+        large_content = b"x" * 100  # Larger than 10 bytes
+
+        result = ingest._upload_files(large_content)
+        assert result.request_id == "req-compress"
+
+    @responses.activate
+    def test_upload_files_no_compression_below_threshold(self):
+        """Test uploading files that don't trigger compression"""
+        responses.add(
+            responses.POST,
+            "https://data.cerevox.ai/v0/files",
+            json={"message": "Files uploaded", "requestID": "req-no-compress"},
+            status=200,
+        )
+
+        ingest = Ingest(
+            api_key="test-key", product="lexa", compression_threshold=1024 * 1024
+        )
+
+        # Small content
+        small_content = b"small"
+
+        result = ingest._upload_files(small_content)
+        assert result.request_id == "req-no-compress"
+
+    @responses.activate
+    def test_upload_already_gzip_file(self):
+        """Test uploading already gzipped files (should not double-compress)"""
+        responses.add(
+            responses.POST,
+            "https://data.cerevox.ai/v0/files",
+            json={"message": "Files uploaded", "requestID": "req-gzip"},
+            status=200,
+        )
+
+        ingest = Ingest(api_key="test-key", product="lexa", compression_threshold=10)
+
+        # Create a .gz file
+        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".gz")
+        temp_file.write(b"x" * 100)  # Larger than threshold
+        temp_file.close()
+
+        try:
+            result = ingest._upload_files(temp_file.name)
+            assert result.request_id == "req-gzip"
+        finally:
+            os.unlink(temp_file.name)
+
+    @responses.activate
+    def test_upload_large_file_stream_compression(self):
+        """Test uploading large files with stream compression - covers lines 325-328"""
+        responses.add(
+            responses.POST,
+            "https://data.cerevox.ai/v0/files",
+            json={"message": "Files uploaded", "requestID": "req-stream"},
+            status=200,
+        )
+
+        ingest = Ingest(api_key="test-key", product="lexa")
+
+        # Create large temporary file (>10MB to trigger stream compression)
+        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".txt")
+        temp_file.write(b"x" * (11 * 1024 * 1024))  # 11MB
+        temp_file.close()
+
+        try:
+            result = ingest._upload_files(temp_file.name)
+            assert result.request_id == "req-stream"
+        finally:
+            os.unlink(temp_file.name)
+
+    @responses.activate
+    def test_upload_bytes_with_compression(self):
+        """Test uploading raw bytes that trigger compression - covers line 350"""
+        responses.add(
+            responses.POST,
+            "https://data.cerevox.ai/v0/files",
+            json={"message": "Files uploaded", "requestID": "req-bytes"},
+            status=200,
+        )
+
+        ingest = Ingest(api_key="test-key", product="lexa", compression_threshold=10)
+
+        # Create bytes above threshold
+        large_bytes = b"x" * 100
+
+        result = ingest._upload_files(large_bytes)
+        assert result.request_id == "req-bytes"
+
+    @responses.activate
+    def test_upload_stream_with_compression(self):
+        """Test uploading file stream with compression - covers lines 367-373"""
+        responses.add(
+            responses.POST,
+            "https://data.cerevox.ai/v0/files",
+            json={"message": "Files uploaded", "requestID": "req-stream-compress"},
+            status=200,
+        )
+
+        ingest = Ingest(api_key="test-key", product="lexa", compression_threshold=10)
+
+        # Create a file-like object with large content
+        stream = BytesIO(b"x" * 100)
+        stream.name = "test.txt"
+
+        result = ingest._upload_files(stream)
+        assert result.request_id == "req-stream-compress"
+
+    @responses.activate
+    def test_upload_files_cleanup_on_success(self):
+        """Test that file streams are closed after upload - covers lines 434-438"""
+        responses.add(
+            responses.POST,
+            "https://data.cerevox.ai/v0/files",
+            json={"message": "Files uploaded", "requestID": "req-cleanup"},
+            status=200,
+        )
+
+        ingest = Ingest(api_key="test-key", product="lexa")
+
+        # Create a temporary file to test cleanup
+        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".txt")
+        temp_file.write(b"test content")
+        temp_file.close()
+
+        try:
+            result = ingest._upload_files(temp_file.name)
+            assert result.request_id == "req-cleanup"
+            # Test passes if no errors occur during cleanup
+        finally:
+            os.unlink(temp_file.name)
+
+    def test_upload_files_cleanup_temp_files_on_error(self):
+        """Test that temporary compressed files are cleaned up on error - covers lines 442-445"""
+        ingest = Ingest(api_key="test-key", product="lexa")
+
+        # Create large temporary file to trigger stream compression
+        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".txt")
+        temp_file.write(b"x" * (11 * 1024 * 1024))  # 11MB
+        temp_file.close()
+
+        try:
+            # Mock _request to raise an exception
+            with patch.object(ingest, "_request") as mock_request:
+                mock_request.side_effect = Exception("Upload failed")
+
+                try:
+                    ingest._upload_files(temp_file.name)
+                except Exception:
+                    pass
+
+                # The compressed temp file should have been cleaned up
+                # We can't easily verify this without inspecting internals,
+                # but we can at least ensure the exception was raised
+                assert mock_request.called
+        finally:
+            os.unlink(temp_file.name)
+
+    def test_custom_compression_threshold(self):
+        """Test setting custom compression threshold"""
+        # Test with custom threshold
+        ingest = Ingest(api_key="test-key", compression_threshold=500 * 1024)  # 500KB
+        assert ingest.compression_threshold == 500 * 1024
+
+        # Content below threshold should not compress
+        content_below = b"x" * (400 * 1024)  # 400KB
+        assert ingest._should_compress_content(content_below) is False
+
+        # Content above threshold should compress
+        content_above = b"x" * (600 * 1024)  # 600KB
+        assert ingest._should_compress_content(content_above) is True

@@ -55,9 +55,7 @@ from .utils import (
 # Version info
 __version__ = "0.2.0"
 __title__ = "cerevox"
-__description__ = (
-    "Cerevox - The Data Layer, Lexa - parse documents with enterprise-grade reliability"
-)
+__description__ = "Cerevox - The Data Layer for AI Agents: data parsing (Lexa) and data search (Hippo)"
 __author__ = "Cerevox Team"
 __license__ = "MIT"
 

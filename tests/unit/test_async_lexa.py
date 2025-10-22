@@ -224,7 +224,7 @@ class TestAsyncLexaRequest:
                     status=200,
                 )
 
-                result = await c._request("GET", "/v0/test")
+                result = await c._request("GET", "/v0/test", is_data=True)
                 assert result == {"status": "success"}
 
     @pytest.mark.asyncio
@@ -241,7 +241,7 @@ class TestAsyncLexaRequest:
                 )
 
                 # When a request returns an empty JSON response, it should return {}
-                result = await c._request("GET", "/v0/test")
+                result = await c._request("GET", "/v0/test", is_data=True)
                 assert result == {}
 
     @pytest.mark.asyncio
@@ -258,7 +258,7 @@ class TestAsyncLexaRequest:
                 )
 
                 result = await c._request(
-                    "POST", "/v0/test", json_data={"key": "value"}
+                    "POST", "/v0/test", json_data={"key": "value"}, is_data=True
                 )
                 assert result == {"received": True}
 
@@ -277,7 +277,7 @@ class TestAsyncLexaRequest:
 
                 data = aiohttp.FormData()
                 data.add_field("file", b"test content", filename="test.txt")
-                result = await c._request("POST", "/v0/files", data=data)
+                result = await c._request("POST", "/v0/files", data=data, is_data=True)
                 assert result == {"uploaded": True}
 
     @pytest.mark.asyncio
@@ -294,7 +294,7 @@ class TestAsyncLexaRequest:
                     status=200,
                 )
 
-                result = await c._request("GET", "/v0/test")
+                result = await c._request("GET", "/v0/test", is_data=True)
                 assert result == {"status": "success"}
                 assert c.session is not None
 
@@ -310,7 +310,7 @@ class TestAsyncLexaRequest:
                 )
 
                 with pytest.raises(LexaRateLimitError, match="Rate limit exceeded"):
-                    await client._request("GET", "/v0/test")
+                    await client._request("GET", "/v0/test", is_data=True)
 
     @pytest.mark.asyncio
     async def test_validation_error_400(self):
@@ -324,7 +324,7 @@ class TestAsyncLexaRequest:
                 )
 
                 with pytest.raises(LexaValidationError, match="Validation failed"):
-                    await client._request("GET", "/v0/test")
+                    await client._request("GET", "/v0/test", is_data=True)
 
     @pytest.mark.asyncio
     async def test_generic_api_error(self):
@@ -338,7 +338,7 @@ class TestAsyncLexaRequest:
                 )
 
                 with pytest.raises(LexaError, match="Internal server error"):
-                    await client._request("GET", "/v0/test")
+                    await client._request("GET", "/v0/test", is_data=True)
 
 
 class TestGetJobStatus:
@@ -2225,7 +2225,7 @@ class TestEdgeCasesAndErrorHandling:
 
                 # Pass kwargs as params instead of directly to session.request
                 result = await client._request(
-                    "GET", "/v0/test", params={"extra_param": "value"}
+                    "GET", "/v0/test", params={"extra_param": "value"}, is_data=True
                 )
                 assert result == {"status": "success"}
 
@@ -3439,43 +3439,36 @@ class TestMissingCoverageLines:
         client = AsyncLexa(api_key="test-key")
 
         try:
-            with aioresponses.aioresponses() as m:
-                m.post(
-                    "https://www.data.cerevox.ai/v0/files?mode=default&product=lexa",
-                    payload={
-                        "requestID": "test-request-id",
-                        "message": "Files uploaded",
-                    },
-                    status=200,
-                )
+            # Create a mock file object that passes the initial hasattr(file_input, 'read') check
+            # but then fails the second hasattr check inside the elif branch
+            class MockFileObject:
+                def __init__(self):
+                    self.name = "test.txt"
+                    # We have 'read' attribute initially
+                    self.read = lambda: b"test content"
 
-                # Create a mock file object that passes the initial hasattr(file_input, 'read') check
-                # but then fails the second hasattr check inside the elif branch
-                class MockFileObject:
-                    def __init__(self):
-                        self.name = "test.txt"
-                        # We have 'read' attribute initially
-                        self.read = lambda: b"test content"
+            mock_file = MockFileObject()
 
-                mock_file = MockFileObject()
+            # Mock hasattr to return True for initial check but False for the second check
+            original_hasattr = hasattr
+            call_count = 0
 
-                # Mock hasattr to return True for initial check but False for the second check
-                original_hasattr = hasattr
-                call_count = 0
+            def mock_hasattr(obj, attr):
+                nonlocal call_count
+                if obj is mock_file and attr == "read":
+                    call_count += 1
+                    if call_count == 1:
+                        return True  # First check passes (line 416)
+                    else:
+                        return False  # Second check fails (line 433), triggers else (line 447/450)
+                return original_hasattr(obj, attr)
 
-                def mock_hasattr(obj, attr):
-                    nonlocal call_count
-                    if obj is mock_file and attr == "read":
-                        call_count += 1
-                        if call_count == 1:
-                            return True  # First check passes (line 530)
-                        else:
-                            return False  # Second check fails (line 541), triggers else (line 547)
-                    return original_hasattr(obj, attr)
-
-                with patch("builtins.hasattr", side_effect=mock_hasattr):
-                    result = await client._upload_files(mock_file)
-                    assert result.request_id == "test-request-id"
+            with patch("builtins.hasattr", side_effect=mock_hasattr):
+                # This should raise ValueError because the else branch at line 447 is triggered
+                with pytest.raises(
+                    ValueError, match="File-like object must have 'read' method"
+                ):
+                    await client._upload_files(mock_file)
         finally:
             await client.close_session()
 
@@ -4074,7 +4067,7 @@ class TestSpecificLine338And358Coverage:
                 mock_request.return_value = mock_context_manager
 
                 with pytest.raises(LexaError, match="Specific error"):
-                    await client._request("GET", "/test")
+                    await client._request("GET", "/test", is_data=True)
         finally:
             await client.close_session()
 
@@ -4172,7 +4165,7 @@ class TestAbsolute100PercentCoverageAsync:
                     status=200,
                 )
 
-                result = await client._request("GET", "/test")
+                result = await client._request("GET", "/test", is_data=True)
                 assert result == {"success": True}
 
         finally:
@@ -4216,7 +4209,7 @@ class TestAbsolute100PercentCoverageAsync:
                 status=200,
             )
 
-            result = await client._request("GET", "/v0/test")
+            result = await client._request("GET", "/v0/test", is_data=True)
             assert result == {"status": "success"}
 
         await client.close_session()
@@ -4234,7 +4227,7 @@ class TestAbsolute100PercentCoverageAsync:
             )
 
             # This should go through the for loop and complete normally
-            result = await client._request("GET", "/v0/test")
+            result = await client._request("GET", "/v0/test", is_data=True)
             assert result == {"result": "data"}
 
         await client.close_session()
@@ -4268,7 +4261,7 @@ class TestFinal100PercentCoverageCompletion:
                 )
 
                 # Normal case - should work fine
-                result = await client._request("GET", "/v0/test")
+                result = await client._request("GET", "/v0/test", is_data=True)
                 assert result == {"status": "success"}
 
     @pytest.mark.asyncio
@@ -4285,7 +4278,7 @@ class TestFinal100PercentCoverageCompletion:
                     status=200,
                 )
 
-                result = await client._request("GET", "/v0/test")
+                result = await client._request("GET", "/v0/test", is_data=True)
                 assert result == {"status": "success"}
 
 
