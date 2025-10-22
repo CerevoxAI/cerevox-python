@@ -58,7 +58,8 @@ AsyncLexa(api_key: str, **options)
 | Parameter | Type | Required | Default | Description |
 |-----------|------|----------|---------|-------------|
 | `api_key` | str | Yes | - | Your Cerevox API key from [cerevox.ai/lexa](https://cerevox.ai/lexa) |
-| `y from [cerevox.ai/lexa](https://cerevox.ai/lexa| `max_concurrent` | int | No | 10 | Maximum number of concurrent processing jobs |
+| `base_url` | str | No | (Cerevox Base URL) | Base URL of the Cerevox API |
+| `max_concurrent` | int | No | 10 | Maximum number of concurrent processing jobs |
 | `timeout` | float | No | 60.0 | Request timeout in seconds |
 | `max_retries` | int | No | 3 | Maximum retry attempts for failed requests |
 
