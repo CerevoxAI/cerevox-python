@@ -4,10 +4,10 @@
   </a>
 </p>
 
-<h1 align="center">Cerevox - The Data Layer 🧠 ⚡</h1>
+<h1 align="center">Cerevox - The Data Layer for AI Agents 🧠 ⚡</h1>
 
 <p align="center">
-  <strong>Parse documents with enterprise-grade reliability</strong><br>
+  <strong>Data Parsing (Lexa) • Data Search (Hippo) • Enterprise-grade • Built for AI</strong><br>
   <i>AI-powered • Highest Accuracy • Vector DB ready</i>
 </p>
 
@@ -23,8 +23,10 @@
 **Official Python SDK for:**
 - **[Lexa](https://cerevox.ai/lexa) - Parse documents into structured data**
   - > 🎯 **Perfect for**: RAG applications, document analysis, data extraction, and vector database preparation
-- **[Hippo](https://cerevox.ai/) - Make intelligent queries on data loaded into Cerevox**
-  - > 🎯 **Perfect for**: all-in-one system for drawing useful conclusions from mountains of data
+- **[Hippo](https://cerevox.ai/) - Search and query your document collections**
+  - > 🎯 **Perfect for**: AI-powered Q&A, semantic search, and drawing insights from document collections
+- **[Account](https://cerevox.ai/) - Enterprise user management and authentication**
+  - > 🎯 **Perfect for**: User authentication, account management, and usage tracking
 
 ### Table of Contents
 - <a href="#-installation">Installation</a>
@@ -45,7 +47,7 @@ pip install cerevox
 ### 📋 Requirements
 
 - Python 3.9+
-- API key from [Cerevox](https://cerevox.ai/lexa)
+- API key from [Cerevox](https://cerevox.ai)
 
 ## 🚀 Lexa Quick Start
 
@@ -172,7 +174,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 **📖 Resources**
 - [Documentation](https://docs.cerevox.ai)
-- [API Reference](docs/api-reference.md)
+- [API Reference](docs/apis/)
 - [Examples](examples/)
 - [Changelog](CHANGELOG.md)
 
@@ -202,4 +204,4 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 <strong>⭐ Star us on GitHub if Cerevox helped your project!</strong><br>
 Made with ❤️ by the Cerevox team<br>
-Happy Parsing 🔍 ✨
+Happy Building! 🔍 🦛 ✨

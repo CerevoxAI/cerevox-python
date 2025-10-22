@@ -1,6 +1,6 @@
 # Hippo Getting Started Guide
 
-This guide demostrates how to use Cerevox Hippo.
+This guide demonstrates how to use Cerevox Hippo.
 
 ## Table of Contents
 - [Summary](#summary)
@@ -27,7 +27,7 @@ So creating a Folder is the first step.
 
 ```python
 # Start Hippo Client
-client = Hippo(email="user@example.com", api_key="password")
+client = Hippo(email="user@example.com", api_key="your-api-key")
 
 # Create folder and upload files
 folder_id = "docs"
