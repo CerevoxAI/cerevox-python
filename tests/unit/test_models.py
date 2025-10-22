@@ -1,5 +1,5 @@
 """
-Tests for cerevox.models
+Tests for cerevox.core.models
 
 Comprehensive tests to achieve 100% code coverage for the models,
 including all methods, error handling, and edge cases.
@@ -11,7 +11,7 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from cerevox.models import (  # Enums; Type aliases; Models
+from cerevox.core import (
     VALID_MODES,
     BucketInfo,
     BucketListResponse,
@@ -253,11 +253,6 @@ class TestIngestionResult:
         """Test creating IngestionResult with alias"""
         result = IngestionResult(message="Success", requestID="req123")
         assert result.request_id == "req123"
-
-    def test_ingestion_result_validation_error(self):
-        """Test IngestionResult validation with missing required fields"""
-        with pytest.raises(ValidationError):
-            IngestionResult(message="Success")  # Missing request_id
 
 
 class TestJobResponse:

@@ -7,6 +7,77 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2025-10-20
+
+### 🚀 Major Release - Platform Expansion
+
+This release transforms Cerevox from a document parsing SDK into a complete data platform with RAG capabilities. Introduces two major new APIs while maintaining full backward compatibility with existing Lexa functionality.
+
+### ✨ Added
+
+#### **New Hippo RAG API** 🦛
+Complete Retrieval-Augmented Generation functionality for building AI-powered Q&A systems:
+- **Folder Management** - Organize documents in folder-based collections (`create_folder`, `get_folders`, `delete_folder`)
+- **File Operations** - Upload and manage documents with multiple input methods (`upload_file`, `upload_file_from_url`, `get_files`, `delete_file`)
+- **Chat Sessions** - Create conversational AI contexts over document collections (`create_chat`, `get_chats`, `delete_chat`)
+- **Q&A System** - Submit questions and receive AI-generated answers with source citations (`submit_ask`, `get_asks`, `get_ask_by_index`)
+- **Async Support** - Full async/await implementation with `AsyncHippo` client for high-performance applications
+- **Progress Tracking** - Real-time upload and processing status callbacks
+- **Source Citations** - AI responses include references to source documents with confidence scores
+
+#### **New Account Management API** 👤
+Enterprise account and user management capabilities:
+- **Authentication** - Token-based authentication with login, refresh, and revoke operations
+- **Account Info** - Retrieve account details, plans, and usage metrics
+- **User Management** - Create, update, delete, and list users (admin operations)
+- **Usage Tracking** - Monitor API usage, page counts, and billing information
+- **Async Support** - Full async implementation with `AsyncAccount` client
+
+#### **New Examples**
+- `examples/account_hippo_usage.py` - Comprehensive workflow demonstration for Account + Hippo integration
+- `examples/unified_client_example.py` - Combined usage patterns for all three APIs (Lexa, Hippo, Account)
+- `examples/account_examples.py` - Account management and authentication examples
+
+### 🔄 Changed
+- **Library Architecture** - Restructured codebase to support multiple API families while maintaining clean separation
+- **Import Structure** - Updated `__init__.py` exports to include new `Hippo`, `AsyncHippo`, `Account`, and `AsyncAccount` clients
+- **Documentation** - Enhanced docstrings across all modules with comprehensive examples and parameter descriptions
+
+### 📚 Improved
+- **Testing Infrastructure** - Added comprehensive test suites for Account and Hippo APIs with async support
+- **Dataset Testing** - Implemented large-scale dataset testing capabilities for validation and benchmarking
+- **Type Safety** - Extended strict mypy type checking to all new modules
+- **Error Handling** - Unified exception hierarchy across all APIs with structured error responses
+
+### 🏗️ Technical Details
+- **Dual Client Pattern** - Maintained consistent sync/async architecture across all three API families
+- **Session Management** - Proper HTTP session pooling and resource cleanup for all clients
+- **Backward Compatibility** - Zero breaking changes to existing Lexa API functionality
+- **API Models** - Added 20+ new Pydantic v2 models for Account and Hippo operations
+
+### 📦 Package Updates
+- Updated package description to reflect expanded platform capabilities
+- Added new keywords: `rag`, `retrieval`, `qa`, `chat`, `semantic-search`, `ai`
+- Maintained Python 3.9-3.13 compatibility across all new features
+
+### Migration Notes
+Existing code using Lexa/AsyncLexa continues to work without changes. New functionality is opt-in:
+
+```python
+# Existing code - works exactly as before
+from cerevox import Lexa
+client = Lexa(api_key="your-key")
+documents = client.parse(["document.pdf"])
+
+# New RAG capabilities - opt-in
+from cerevox import Hippo, Account
+hippo = Hippo(api_key="your-key")
+account = Account(api_key="your-key")
+```
+
+### 🙏 Contributors
+Special thanks to everyone who contributed to this major release!
+
 ## [0.1.6] - 2025-07-01
 
 ### Enhanced
@@ -132,7 +203,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - pydantic >= 2.0.0
 - beautifulsoup4 >= 4.11.0
 
-[Unreleased]: https://github.com/CerevoxAI/cerevox-python/compare/v0.1.6...HEAD
+[Unreleased]: https://github.com/CerevoxAI/cerevox-python/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/CerevoxAI/cerevox-python/compare/v0.1.6...v0.2.0
 [0.1.6]: https://github.com/CerevoxAI/cerevox-python/compare/v0.1.5...v0.1.6
 [0.1.5]: https://github.com/CerevoxAI/cerevox-python/compare/v0.1.4...v0.1.5
 [0.1.4]: https://github.com/CerevoxAI/cerevox-python/compare/v0.1.3...v0.1.4

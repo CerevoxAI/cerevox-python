@@ -4,12 +4,12 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "cerevox"
-version = "0.1.6"
+version = "0.2.0"
 authors = [
     {name = "Cerevox", email = "support@cerevox.ai"},
     {name = "Muaz Siddiqui", email = "muaz@cerevox.ai"}
 ]
-description = "Official Python SDK for Cerevox"
+description = "Official Python SDK for Cerevox - The Data Layer for AI Agents: data parsing (Lexa) and data search (Hippo)"
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.9"
@@ -27,7 +27,7 @@ classifiers = [
     "Topic :: Text Processing",
     "Topic :: Scientific/Engineering :: Information Analysis",
 ]
-keywords = ["document", "parsing", "api", "pdf", "extraction", "async", "vector-database", "chunking"]
+keywords = ["ai-agents", "data-layer", "document-parsing", "semantic-search", "data-search", "api", "pdf", "extraction", "async", "vector-database", "chunking", "rag", "retrieval", "qa", "ai"]
 # Core dependencies - always installed
 dependencies = [
     "aiohttp>=3.12.4",
@@ -48,7 +48,7 @@ data = [
 # Development and testing extras
 dev = [
     "pytest>=8.3.5",
-    "pytest-asyncio>=1.0.0",
+    "pytest-asyncio>=0.23.0",
     "pytest-cov>=4.0.0",
     "pytest-timeout>=2.1.0",
     "aioresponses>=0.7.8",
@@ -70,7 +70,7 @@ all = [
     "beautifulsoup4>=4.13.4",
     "tqdm>=4.66.0",
     "pytest>=8.3.5",
-    "pytest-asyncio>=1.0.0",
+    "pytest-asyncio>=0.23.0",
     "pytest-cov>=4.0.0",
     "pytest-timeout>=2.1.0",
     "aioresponses>=0.7.8",
@@ -182,6 +182,7 @@ filterwarnings = [
     "ignore::DeprecationWarning",
     "ignore::RuntimeWarning",
     "ignore::pytest.PytestDeprecationWarning",
+    "ignore:urllib3 v2 only supports OpenSSL:urllib3.exceptions.NotOpenSSLWarning",
 ]
 log_cli = true
 log_cli_level = "INFO"

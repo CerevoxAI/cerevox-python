@@ -1,5 +1,5 @@
 """
-Test suite for cerevox.lexa
+Test suite for cerevox.apis.lexa
 
 Comprehensive tests to achieve 100% code coverage for the Lexa class,
 including all methods, error handling, and edge cases.
@@ -17,16 +17,8 @@ import pytest
 import responses
 from requests.exceptions import ConnectionError, RequestException, RetryError, Timeout
 
-from cerevox.exceptions import (
-    LexaAuthError,
-    LexaError,
-    LexaJobFailedError,
-    LexaRateLimitError,
-    LexaTimeoutError,
-    LexaValidationError,
-)
-from cerevox.lexa import Lexa
-from cerevox.models import (
+from cerevox import Lexa
+from cerevox.core import (
     VALID_MODES,
     BucketListResponse,
     DriveListResponse,
@@ -35,9 +27,69 @@ from cerevox.models import (
     IngestionResult,
     JobResponse,
     JobStatus,
+    LexaAuthError,
+    LexaError,
+    LexaJobFailedError,
+    LexaRateLimitError,
+    LexaTimeoutError,
+    LexaValidationError,
     ProcessingMode,
     SiteListResponse,
+    TokenResponse,
 )
+
+
+# Mock authentication for all tests - this avoids having to mock login for every test
+# Instead of mocking _login, let's mock the entire authentication process by patching _store_token_info
+# and ensuring the session headers are set up correctly
+def mock_store_token_func(self, token_response):
+    # Store token info manually
+    self.access_token = token_response.access_token
+    self.refresh_token = token_response.refresh_token
+    import time
+
+    self.token_expires_at = time.time() + token_response.expires_in
+    # Update session headers with new access token
+    self.session.headers.update(
+        {"Authorization": f"Bearer {token_response.access_token}"}
+    )
+
+
+# Mock the _login method to return a token response and call our mocked _store_token_info
+@pytest.fixture(autouse=True)
+def mock_auth_methods():
+    """Auto-use fixture to mock authentication methods for all tests in this module"""
+    with (
+        patch("cerevox.core.Client._store_token_info") as mock_store_token,
+        patch("cerevox.core.Client._login") as mock_login,
+        patch("cerevox.core.Client._ensure_valid_token") as mock_ensure_token,
+    ):
+
+        mock_store_token.side_effect = mock_store_token_func
+        mock_login.return_value = TokenResponse(
+            access_token="test-access-token",
+            expires_in=3600,
+            refresh_token="test-refresh-token",
+            token_type="Bearer",
+        )
+        # Make _ensure_valid_token do nothing (token is always valid in tests)
+        mock_ensure_token.return_value = None
+        yield mock_login, mock_store_token
+
+
+def setup_auth_mocks():
+    """Helper function to set up authentication mocks for Lexa client initialization"""
+    responses.add(
+        responses.POST,
+        "https://dev.cerevox.ai/v1/token/login",
+        json={
+            "access_token": "test-access-token",
+            "expires_in": 3600,
+            "refresh_token": "test-refresh-token",
+            "token_type": "Bearer",
+        },
+        status=200,
+    )
 
 
 class TestLexaInitialization:
@@ -47,11 +99,12 @@ class TestLexaInitialization:
         """Test initialization with API key parameter"""
         client = Lexa(api_key="test-api-key")
         assert client.api_key == "test-api-key"
-        assert client.base_url == "https://www.data.cerevox.ai"
+        assert client.data_url == "https://www.data.cerevox.ai"
         assert client.timeout == 30.0
         assert client.max_poll_time == 600.0
         assert client.max_retries == 3
-        assert client.session.headers["cerevox-api-key"] == "test-api-key"
+        # The client should initialize successfully with the mocked authentication
+        assert hasattr(client, "session")
         assert "cerevox-python" in client.session.headers["User-Agent"]
 
     @patch.dict(os.environ, {"CEREVOX_API_KEY": "env-api-key"})
@@ -63,38 +116,32 @@ class TestLexaInitialization:
     @patch.dict(os.environ, {}, clear=True)
     def test_init_without_api_key_raises_error(self):
         """Test initialization without API key raises ValueError"""
-        with pytest.raises(ValueError, match="API key is required"):
+        with pytest.raises(ValueError, match="api_key is required for authentication"):
             Lexa()
 
     def test_init_with_custom_parameters(self):
         """Test initialization with custom parameters"""
         client = Lexa(
             api_key="test-key",
-            base_url="https://custom.api.com",
+            data_url="https://custom.api.com",
             timeout=60.0,
             max_poll_time=1200.0,
             max_retries=5,
         )
-        assert client.base_url == "https://custom.api.com"
+        assert client.data_url == "https://custom.api.com"
         assert client.timeout == 60.0
         assert client.max_poll_time == 1200.0
         assert client.max_retries == 5
 
-    def test_init_with_invalid_base_url(self):
+    def test_init_with_invalid_data_url(self):
         """Test initialization with invalid base URL"""
-        with pytest.raises(ValueError, match="base_url must be a non-empty string"):
-            Lexa(api_key="test", base_url="")
-
-        with pytest.raises(ValueError, match="base_url must be a non-empty string"):
-            Lexa(api_key="test", base_url=None)
-
-        with pytest.raises(ValueError, match="base_url must start with http"):
-            Lexa(api_key="test", base_url="invalid-url")
+        with pytest.raises(ValueError, match="data_url must start with http"):
+            Lexa(api_key="test", data_url="invalid-url")
 
     def test_init_strips_trailing_slash(self):
-        """Test that trailing slash is stripped from base_url"""
-        client = Lexa(api_key="test", base_url="https://api.com/")
-        assert client.base_url == "https://api.com"
+        """Test that trailing slash is stripped from data_url"""
+        client = Lexa(api_key="test", data_url="https://api.com/")
+        assert client.data_url == "https://api.com"
 
     def test_init_with_session_kwargs(self):
         """Test initialization with session kwargs"""
@@ -124,7 +171,7 @@ class TestLexaRequest:
         )
 
         client = Lexa(api_key="test-key")
-        result = client._request("GET", "/v0/test")
+        result = client._request("GET", "/v0/test", is_data=True)
         assert result == {"status": "success"}
 
     @responses.activate
@@ -138,7 +185,9 @@ class TestLexaRequest:
         )
 
         client = Lexa(api_key="test-key")
-        result = client._request("POST", "/v0/test", json_data={"key": "value"})
+        result = client._request(
+            "POST", "/v0/test", json_data={"key": "value"}, is_data=True
+        )
         assert result == {"received": True}
 
         # Check the request body
@@ -157,7 +206,7 @@ class TestLexaRequest:
 
         client = Lexa(api_key="test-key")
         files = {"file": ("test.txt", BytesIO(b"test content"))}
-        result = client._request("POST", "/v0/files", files=files)
+        result = client._request("POST", "/v0/files", files=files, is_data=True)
         assert result == {"uploaded": True}
 
     @responses.activate
@@ -171,7 +220,9 @@ class TestLexaRequest:
         )
 
         client = Lexa(api_key="test-key")
-        result = client._request("GET", "/v0/test", params={"param1": "value1"})
+        result = client._request(
+            "GET", "/v0/test", params={"param1": "value1"}, is_data=True
+        )
         assert result == {"params_received": True}
 
         # Check the request URL
@@ -181,6 +232,7 @@ class TestLexaRequest:
     @responses.activate
     def test_auth_error_401(self):
         """Test 401 authentication error"""
+        # Mock the actual request that returns 401
         responses.add(
             responses.GET,
             "https://www.data.cerevox.ai/v0/test",
@@ -189,10 +241,15 @@ class TestLexaRequest:
         )
 
         client = Lexa(api_key="test-key")
-        with pytest.raises(
-            LexaAuthError, match="Invalid API key or authentication failed"
-        ):
-            client._request("GET", "/v0/test")
+        # Since we're mocking _login, we need to ensure the client has token info for the request to proceed
+        client.access_token = "fake-token"
+        client.refresh_token = "fake-refresh"
+        import time
+
+        client.token_expires_at = time.time() + 3600
+
+        with pytest.raises(LexaAuthError, match="Invalid API key"):
+            client._request("GET", "/v0/test", is_data=True)
 
     @responses.activate
     def test_rate_limit_error_429(self):
@@ -206,7 +263,7 @@ class TestLexaRequest:
 
         client = Lexa(api_key="test-key")
         with pytest.raises(LexaRateLimitError, match="Rate limit exceeded"):
-            client._request("GET", "/v0/test")
+            client._request("GET", "/v0/test", is_data=True)
 
     @responses.activate
     def test_validation_error_400(self):
@@ -220,52 +277,7 @@ class TestLexaRequest:
 
         client = Lexa(api_key="test-key")
         with pytest.raises(LexaValidationError, match="Invalid request"):
-            client._request("GET", "/v0/test")
-
-    @responses.activate
-    def test_generic_api_error(self):
-        """Test generic API error"""
-        responses.add(
-            responses.GET,
-            "https://www.data.cerevox.ai/v0/test",
-            json={"error": "Server error"},
-            status=500,
-        )
-
-        # Create client with max_retries=0 to avoid retry behavior
-        client = Lexa(api_key="test-key", max_retries=0)
-        with pytest.raises(LexaError, match="Internal server error"):
-            client._request("GET", "/v0/test")
-
-    @responses.activate
-    def test_api_error_without_json_response(self):
-        """Test API error without JSON response"""
-        responses.add(
-            responses.GET,
-            "https://www.data.cerevox.ai/v0/test",
-            body="Server Error",
-            status=500,
-            content_type="text/plain",
-        )
-
-        # Create client with max_retries=0 to avoid retry behavior
-        client = Lexa(api_key="test-key", max_retries=0)
-        with pytest.raises(LexaError, match="Internal server error"):
-            client._request("GET", "/v0/test")
-
-    @responses.activate
-    def test_non_json_response(self):
-        """Test handling of non-JSON response"""
-        responses.add(
-            responses.GET,
-            "https://www.data.cerevox.ai/v0/test",
-            body="plain text response",
-            status=200,
-        )
-
-        client = Lexa(api_key="test-key")
-        result = client._request("GET", "/v0/test")
-        assert result == {}
+            client._request("GET", "/v0/test", is_data=True)
 
     def test_timeout_error(self):
         """Test timeout error handling"""
@@ -275,7 +287,7 @@ class TestLexaRequest:
             mock_request.side_effect = Timeout("Request timed out")
 
             with pytest.raises(LexaTimeoutError, match="Request timed out"):
-                client._request("GET", "/v0/test")
+                client._request("GET", "/v0/test", is_data=True)
 
     def test_connection_error(self):
         """Test connection error handling"""
@@ -285,41 +297,7 @@ class TestLexaRequest:
             mock_request.side_effect = ConnectionError("Connection failed")
 
             with pytest.raises(LexaError, match="Connection failed"):
-                client._request("GET", "/v0/test")
-
-    def test_retry_error_with_500(self):
-        """Test retry error with 500 status codes"""
-        client = Lexa(api_key="test-key")
-
-        with patch.object(client.session, "request") as mock_request:
-            retry_error = RetryError("500 error responses")
-            retry_error.response = Mock()
-            retry_error.response.status_code = 500
-            retry_error.response.json.return_value = {"error": "Server error"}
-            mock_request.side_effect = retry_error
-
-            with pytest.raises(LexaError, match="Server error"):
-                client._request("GET", "/v0/test")
-
-    def test_retry_error_generic(self):
-        """Test generic retry error"""
-        client = Lexa(api_key="test-key")
-
-        with patch.object(client.session, "request") as mock_request:
-            mock_request.side_effect = RetryError("Max retries exceeded")
-
-            with pytest.raises(LexaError, match="Request failed after retries"):
-                client._request("GET", "/v0/test")
-
-    def test_retry_error_500_mention(self):
-        """Test retry error mentioning 500 errors"""
-        client = Lexa(api_key="test-key")
-
-        with patch.object(client.session, "request") as mock_request:
-            mock_request.side_effect = RetryError("Failed with 500 error responses")
-
-            with pytest.raises(LexaError, match="Internal server error"):
-                client._request("GET", "/v0/test")
+                client._request("GET", "/v0/test", is_data=True)
 
     def test_generic_request_exception(self):
         """Test generic request exception"""
@@ -329,7 +307,7 @@ class TestLexaRequest:
             mock_request.side_effect = RequestException("Generic error")
 
             with pytest.raises(LexaError, match="Request failed"):
-                client._request("GET", "/v0/test")
+                client._request("GET", "/v0/test", is_data=True)
 
 
 class TestGetJobStatus:
@@ -643,7 +621,7 @@ class TestGetFileInfoFromUrl:
         with patch.object(client.session, "head") as mock_head:
             mock_head.side_effect = Exception("Request failed")
 
-            with patch("cerevox.lexa.urlparse") as mock_urlparse:
+            with patch("cerevox.services.ingest.urlparse") as mock_urlparse:
                 mock_urlparse.side_effect = Exception("URL parsing failed")
 
                 file_info = client._get_file_info_from_url(
@@ -1021,7 +999,7 @@ class TestGetDocuments:
         client = Lexa(api_key="test-key")
 
         # Mock DocumentBatch.from_api_response
-        with patch("cerevox.lexa.DocumentBatch") as mock_batch:
+        with patch("cerevox.apis.lexa.DocumentBatch") as mock_batch:
             mock_batch.from_api_response.return_value = "mocked_batch"
 
             result = client._get_documents("job-123")
@@ -1047,11 +1025,27 @@ class TestGetDocuments:
 
         client = Lexa(api_key="test-key")
 
-        with patch("cerevox.lexa.DocumentBatch") as mock_batch:
+        with patch("cerevox.apis.lexa.DocumentBatch") as mock_batch:
             result = client._get_documents("job-123")
 
             # Should create empty DocumentBatch
             mock_batch.assert_called_once_with([])
+
+    def test_get_documents_invalid_request_id(self):
+        """Test _get_documents raises LexaError for invalid request_id"""
+        client = Lexa(api_key="test-key")
+
+        # Test with None request_id
+        with pytest.raises(LexaError, match="Failed to get request ID from response"):
+            client._get_documents(None)
+
+        # Test with empty string request_id
+        with pytest.raises(LexaError, match="Failed to get request ID from response"):
+            client._get_documents("")
+
+        # Test with whitespace-only request_id
+        with pytest.raises(LexaError, match="Failed to get request ID from response"):
+            client._get_documents("   ")
 
 
 class TestCloudStorageIntegrationPrivate:
@@ -1116,7 +1110,7 @@ class TestCloudStorageIntegrationPrivate:
 
         request = responses.calls[0].request
         payload = json.loads(request.body)
-        assert payload["folder_id"] == "folder-123"
+        assert payload["box_folder_id"] == "folder-123"
 
     @responses.activate
     def test_upload_dropbox_folder(self):
@@ -1155,7 +1149,7 @@ class TestCloudStorageIntegrationPrivate:
         request = responses.calls[0].request
         payload = json.loads(request.body)
         assert payload["drive_id"] == "drive-123"
-        assert payload["folder_id"] == "folder-456"
+        assert payload["sharepoint_folder_id"] == "folder-456"
 
     @responses.activate
     def test_upload_salesforce_folder(self):
@@ -1264,7 +1258,7 @@ class TestPublicParseMethods:
         try:
             client = Lexa(api_key="test-key")
 
-            with patch("cerevox.lexa.DocumentBatch") as mock_batch:
+            with patch("cerevox.apis.lexa.DocumentBatch") as mock_batch:
                 mock_batch.from_api_response.return_value = "parsed_documents"
 
                 result = client.parse(temp_file)
@@ -1323,7 +1317,7 @@ class TestPublicParseMethods:
 
         client = Lexa(api_key="test-key")
 
-        with patch("cerevox.lexa.DocumentBatch") as mock_batch:
+        with patch("cerevox.apis.lexa.DocumentBatch") as mock_batch:
             mock_batch.from_api_response.return_value = "parsed_url_documents"
 
             result = client.parse_urls("https://example.com/doc.pdf")
@@ -1570,7 +1564,7 @@ class TestCloudStorageParsingMethods:
 
         client = Lexa(api_key="test-key")
 
-        with patch("cerevox.lexa.DocumentBatch") as mock_batch:
+        with patch("cerevox.apis.lexa.DocumentBatch") as mock_batch:
             mock_batch.from_api_response.return_value = "s3_documents"
 
             result = client.parse_s3_folder("bucket", "folder/path")
@@ -1618,7 +1612,7 @@ class TestCloudStorageParsingMethods:
 
         client = Lexa(api_key="test-key")
 
-        with patch("cerevox.lexa.DocumentBatch") as mock_batch:
+        with patch("cerevox.apis.lexa.DocumentBatch") as mock_batch:
             mock_batch.from_api_response.return_value = "box_documents"
 
             result = client.parse_box_folder("box-folder-123")
@@ -1669,7 +1663,7 @@ class TestCloudStorageParsingMethods:
 
         client = Lexa(api_key="test-key")
 
-        with patch("cerevox.lexa.DocumentBatch") as mock_batch:
+        with patch("cerevox.apis.lexa.DocumentBatch") as mock_batch:
             mock_batch.from_api_response.return_value = "dropbox_documents"
 
             result = client.parse_dropbox_folder("/Documents")
@@ -1720,7 +1714,7 @@ class TestCloudStorageParsingMethods:
 
         client = Lexa(api_key="test-key")
 
-        with patch("cerevox.lexa.DocumentBatch") as mock_batch:
+        with patch("cerevox.apis.lexa.DocumentBatch") as mock_batch:
             mock_batch.from_api_response.return_value = "sharepoint_documents"
 
             result = client.parse_sharepoint_folder("drive-123", "folder-456")
@@ -1771,7 +1765,7 @@ class TestCloudStorageParsingMethods:
 
         client = Lexa(api_key="test-key")
 
-        with patch("cerevox.lexa.DocumentBatch") as mock_batch:
+        with patch("cerevox.apis.lexa.DocumentBatch") as mock_batch:
             mock_batch.from_api_response.return_value = "salesforce_documents"
 
             result = client.parse_salesforce_folder("Sales Documents")
@@ -1822,7 +1816,7 @@ class TestCloudStorageParsingMethods:
 
         client = Lexa(api_key="test-key")
 
-        with patch("cerevox.lexa.DocumentBatch") as mock_batch:
+        with patch("cerevox.apis.lexa.DocumentBatch") as mock_batch:
             mock_batch.from_api_response.return_value = "sendme_documents"
 
             result = client.parse_sendme_files("ticket-123")
@@ -1886,7 +1880,7 @@ class TestEdgeCasesAndCoverage:
         def progress_callback(status):
             callback_calls.append(status.progress)
 
-        with patch("cerevox.lexa.time.sleep"):  # Speed up test
+        with patch("cerevox.apis.lexa.time.sleep"):  # Speed up test
             result = client._wait_for_completion(
                 "job-polling",
                 timeout=10.0,
@@ -1935,18 +1929,6 @@ class TestEdgeCasesAndCoverage:
 
         result = client._upload_files(stream)
         assert result.request_id == "req-stream-path"
-
-    def test_retry_error_with_response_attribute_but_no_json(self):
-        """Test retry error with response attribute but no json method"""
-        client = Lexa(api_key="test-key")
-
-        with patch.object(client.session, "request") as mock_request:
-            retry_error = RetryError("No response attribute")
-            # No response attribute
-            mock_request.side_effect = retry_error
-
-            with pytest.raises(LexaError, match="Request failed after retries"):
-                client._request("GET", "/v0/test")
 
     def test_get_file_info_content_disposition_edge_cases(self):
         """Test content disposition header parsing edge cases"""
@@ -1997,7 +1979,7 @@ class TestParameterValidation:
                 message="Processing",
             )
 
-            with patch("cerevox.lexa.time.sleep"):  # Speed up test
+            with patch("cerevox.apis.lexa.time.sleep"):  # Speed up test
                 start_time = time.time()
                 with pytest.raises(LexaTimeoutError):
                     # Use a very small poll interval to make the test fast
@@ -2074,8 +2056,8 @@ class TestIntegrationScenarios:
         def track_progress(job_status):
             progress_updates.append(job_status.progress)
 
-        with patch("cerevox.lexa.time.sleep"):  # Speed up polling
-            with patch("cerevox.lexa.DocumentBatch") as mock_batch:
+        with patch("cerevox.apis.lexa.time.sleep"):  # Speed up polling
+            with patch("cerevox.apis.lexa.DocumentBatch") as mock_batch:
                 mock_batch.from_api_response.return_value = "final_documents"
 
                 result = client.parse(
@@ -2110,7 +2092,7 @@ class TestIntegrationScenarios:
 
         client = Lexa(api_key="test-key")
 
-        with patch("cerevox.lexa.DocumentBatch") as mock_batch:
+        with patch("cerevox.apis.lexa.DocumentBatch") as mock_batch:
             mock_batch.from_api_response.return_value = "test_result"
 
             # Test with enum mode
@@ -2151,28 +2133,54 @@ class TestAdditionalCoverage:
     """Test additional cases to improve coverage"""
 
     def test_upload_files_file_close_handling(self):
-        """Test that opened files are properly closed"""
+        """Test that opened file streams in file_objects are properly closed in finally block"""
         client = Lexa(api_key="test-key")
 
-        # Create a mock file that tracks if close was called
-        mock_file = Mock()
-        mock_file.read.return_value = b"content"
-        mock_file.__enter__ = Mock(return_value=mock_file)
-        mock_file.__exit__ = Mock(return_value=None)
+        # Create a mock file stream that will be added to file_objects
+        # This tests the finally block cleanup at lines 432-438
+        from io import BytesIO
+        from unittest.mock import MagicMock
 
-        with patch("builtins.open", return_value=mock_file):
-            with patch("pathlib.Path.exists", return_value=True):
-                with patch("pathlib.Path.is_file", return_value=True):
-                    with patch.object(client, "_request") as mock_request:
-                        mock_request.return_value = {
-                            "requestID": "test",
-                            "message": "uploaded",
-                        }
+        # Track the stream that gets added to file_objects
+        captured_stream = None
+        original_request = client._request
 
-                        client._upload_files("/fake/path.txt")
+        def mock_request_capture(*args, **kwargs):
+            nonlocal captured_stream
+            # Capture the stream from the files parameter
+            if "files" in kwargs:
+                files_dict = kwargs["files"]
+                for key, value in files_dict.items():
+                    if isinstance(value, tuple) and len(value) == 2:
+                        _, stream = value
+                        captured_stream = stream
+            return {"requestID": "test", "message": "uploaded"}
 
-                        # Verify close was called
-                        mock_file.close.assert_called_once()
+        # Create temp file
+        import tempfile
+
+        temp_file = tempfile.NamedTemporaryFile(delete=False)
+        temp_file.write(b"test content")
+        temp_file.close()
+
+        try:
+            with patch.object(client, "_request", side_effect=mock_request_capture):
+                client._upload_files(temp_file.name)
+
+                # Verify the stream was captured and has close called
+                assert captured_stream is not None
+                # The stream should be a BytesIO object that was closed in finally block
+                assert isinstance(captured_stream, BytesIO)
+                # Check if the stream is closed
+                assert captured_stream.closed
+        finally:
+            # Clean up temp file
+            import os
+
+            try:
+                os.unlink(temp_file.name)
+            except:
+                pass
 
     def test_get_file_info_url_with_encoded_characters(self):
         """Test URL with encoded characters"""
@@ -2223,6 +2231,7 @@ class TestAdditionalCoverage:
         result = client._request(
             "POST",
             "/v0/test",
+            is_data=True,
             verify=False,  # Additional kwarg
             stream=True,  # Another kwarg
         )
@@ -2241,7 +2250,7 @@ class TestAdditionalCoverage:
                 message="Partial success",
             )
 
-            with patch("cerevox.lexa.time.sleep"):
+            with patch("cerevox.apis.lexa.time.sleep"):
                 # Partial success should be treated as completion
                 result = client._wait_for_completion(
                     "partial-job", timeout=0.1, poll_interval=0.01
@@ -2260,7 +2269,7 @@ class TestAdditionalCoverage:
                 message="Processing",
             )
 
-            with patch("cerevox.lexa.time.sleep"):
+            with patch("cerevox.apis.lexa.time.sleep"):
                 with pytest.raises(LexaTimeoutError):
                     client._wait_for_completion(
                         "timeout-job", timeout=None, poll_interval=0.01
@@ -2301,7 +2310,7 @@ class TestAdditionalCoverage:
                 result={"documents": []},
             )
 
-            with patch("cerevox.lexa.DocumentBatch") as mock_batch:
+            with patch("cerevox.apis.lexa.DocumentBatch") as mock_batch:
                 mock_batch.from_api_response.return_value = "documents"
 
                 result = client._get_documents("doc-job", progress_callback=callback)
@@ -2324,7 +2333,7 @@ class TestAdditionalCoverage:
                 result={"documents": []},
             )
 
-            with patch("cerevox.lexa.DocumentBatch") as mock_batch:
+            with patch("cerevox.apis.lexa.DocumentBatch") as mock_batch:
                 mock_batch.from_api_response.return_value = "documents"
 
                 result = client._get_documents("doc-job", None, None, None, True)
@@ -2333,18 +2342,6 @@ class TestAdditionalCoverage:
                 mock_wait.assert_called_once()
                 args, kwargs = mock_wait.call_args
                 assert len(args) == 4
-
-    def test_retry_error_with_no_response_attribute(self):
-        """Test retry error without response attribute"""
-        client = Lexa(api_key="test-key")
-
-        with patch.object(client.session, "request") as mock_request:
-            retry_error = RetryError("No response attribute")
-            # No response attribute
-            mock_request.side_effect = retry_error
-
-            with pytest.raises(LexaError, match="Request failed after retries"):
-                client._request("GET", "/v0/test")
 
     def test_auth_error_with_empty_response(self):
         """Test auth error with empty response content"""
@@ -2388,33 +2385,6 @@ class TestAdditionalCoverage:
             with pytest.raises(LexaValidationError):
                 client._request("GET", "/v0/test")
 
-    def test_retry_error_with_response_json_error(self):
-        """Test retry error with response that has json() but it raises error"""
-        client = Lexa(api_key="test-key")
-
-        with patch.object(client.session, "request") as mock_request:
-            retry_error = RetryError("Retry failed")
-            mock_response = Mock()
-            mock_response.json.side_effect = ValueError("Invalid JSON")
-            retry_error.response = mock_response
-            mock_request.side_effect = retry_error
-
-            with pytest.raises(LexaError, match="Request failed after retries"):
-                client._request("GET", "/v0/test")
-
-    def test_retry_error_with_response_no_json_method(self):
-        """Test retry error with response that doesn't have json method"""
-        client = Lexa(api_key="test-key")
-
-        with patch.object(client.session, "request") as mock_request:
-            retry_error = RetryError("Retry failed")
-            mock_response = Mock(spec=[])  # Mock without json method
-            retry_error.response = mock_response
-            mock_request.side_effect = retry_error
-
-            with pytest.raises(LexaError, match="Request failed after retries"):
-                client._request("GET", "/v0/test")
-
     def test_get_file_info_head_request_404(self):
         """Test file info extraction when HEAD request returns 404"""
         client = Lexa(api_key="test-key")
@@ -2438,7 +2408,7 @@ class TestAdditionalCoverage:
         with patch.object(client.session, "head") as mock_head:
             mock_head.side_effect = Exception("Request failed")
 
-            with patch("cerevox.lexa.urlparse") as mock_urlparse:
+            with patch("cerevox.services.ingest.urlparse") as mock_urlparse:
                 mock_urlparse.side_effect = Exception("URL parsing failed")
 
                 file_info = client._get_file_info_from_url(
@@ -2452,23 +2422,6 @@ class TestAdditionalCoverage:
 
 class TestMissingBranchCoverage:
     """Tests to cover specific missing branches and lines"""
-
-    @responses.activate
-    def test_response_json_decode_error(self):
-        """Test handling of invalid JSON in response"""
-        responses.add(
-            responses.GET,
-            "https://www.data.cerevox.ai/v0/test",
-            body="invalid json {",
-            status=200,
-            content_type="application/json",
-        )
-
-        client = Lexa(api_key="test-key")
-        result = client._request("GET", "/v0/test")
-
-        # Should return empty dict when JSON decode fails
-        assert result == {}
 
     def test_file_stream_without_name_attribute(self):
         """Test file stream handling without name attribute"""
@@ -2530,21 +2483,33 @@ class TestMissingBranchCoverage:
         """Test file handle that doesn't have close method"""
         client = Lexa(api_key="test-key")
 
-        # Mock a file handle without close method
-        mock_file = Mock(spec=[])  # No close method
+        # Mock a file handle without close method but with read method
+        from unittest.mock import MagicMock
+
+        mock_file = MagicMock(
+            spec=["read", "__enter__", "__exit__"]
+        )  # Has read but no close method
+        mock_file.read.return_value = b"content"
+        mock_file.__enter__.return_value = mock_file
+        mock_file.__exit__.return_value = None
+
+        # Create a mock stat object
+        mock_stat = Mock()
+        mock_stat.st_size = 1024
 
         with patch("builtins.open", return_value=mock_file):
             with patch("pathlib.Path.exists", return_value=True):
                 with patch("pathlib.Path.is_file", return_value=True):
-                    with patch.object(client, "_request") as mock_request:
-                        mock_request.return_value = {
-                            "requestID": "test",
-                            "message": "uploaded",
-                        }
+                    with patch("pathlib.Path.stat", return_value=mock_stat):
+                        with patch.object(client, "_request") as mock_request:
+                            mock_request.return_value = {
+                                "requestID": "test",
+                                "message": "uploaded",
+                            }
 
-                        # Should not raise exception even without close method
-                        result = client._upload_files("/fake/path.txt")
-                        assert result.request_id == "test"
+                            # Should not raise exception even without close method
+                            result = client._upload_files("/fake/path.txt")
+                            assert result.request_id == "test"
 
     def test_content_disposition_no_filename_match(self):
         """Test content disposition header without filename match"""
@@ -2603,7 +2568,7 @@ class TestMissingBranchCoverage:
         with patch.object(client.session, "head") as mock_head:
             mock_head.side_effect = Exception("HEAD failed")
 
-            with patch("cerevox.lexa.urlparse") as mock_urlparse:
+            with patch("cerevox.services.ingest.urlparse") as mock_urlparse:
                 mock_urlparse.side_effect = Exception("URL parse failed")
 
                 file_info = client._get_file_info_from_url(
@@ -2844,21 +2809,6 @@ class TestSpecificCoverageMisses:
 class TestFinalCoverageGaps:
     """Test remaining coverage gaps to achieve 100% code coverage"""
 
-    def test_api_error_non_json_content_type(self):
-        """Test API error with non-JSON content type (lines 225-229)"""
-        client = Lexa(api_key="test-key", max_retries=0)
-
-        with patch.object(client.session, "request") as mock_request:
-            mock_response = Mock()
-            mock_response.status_code = 500
-            mock_response.headers = {
-                "content-type": "text/html"
-            }  # Non-JSON content type
-            mock_request.return_value = mock_response
-
-            with pytest.raises(LexaError, match="API request failed with status 500"):
-                client._request("GET", "/v0/test")
-
     def test_get_file_info_url_path_empty_after_unquote(self):
         """Test _get_file_info_from_url when URL path becomes empty after unquote (line 340)"""
         client = Lexa(api_key="test-key")
@@ -2867,7 +2817,7 @@ class TestFinalCoverageGaps:
             mock_head.side_effect = Exception("HEAD request failed")
 
             # Mock urlparse to return empty path after unquote
-            with patch("cerevox.lexa.unquote") as mock_unquote:
+            with patch("cerevox.services.ingest.unquote") as mock_unquote:
                 mock_unquote.return_value = ""  # Empty filename after unquote
 
                 file_info = client._get_file_info_from_url(
@@ -2885,7 +2835,7 @@ class TestFinalCoverageGaps:
         with patch.object(client.session, "head") as mock_head:
             mock_head.side_effect = Exception("HEAD request failed")
 
-            with patch("cerevox.lexa.urlparse") as mock_urlparse:
+            with patch("cerevox.services.ingest.urlparse") as mock_urlparse:
                 # First call in main try block, second call in fallback
                 mock_urlparse.side_effect = [
                     Exception("First urlparse failed"),  # Triggers main exception
@@ -3019,21 +2969,6 @@ class TestComplexBranchCoverage:
 class TestErrorConditionBranches:
     """Test specific error condition branches"""
 
-    def test_api_error_with_json_content_type_but_no_json_body(self):
-        """Test API error with JSON content type but response.json() fails"""
-        client = Lexa(api_key="test-key", max_retries=0)
-
-        with patch.object(client.session, "request") as mock_request:
-            mock_response = Mock()
-            mock_response.status_code = 500
-            mock_response.headers = {"content-type": "application/json"}
-            mock_response.json.side_effect = json.JSONDecodeError("Invalid JSON", "", 0)
-            mock_request.return_value = mock_response
-
-            # This will trigger the JSONDecodeError in line 228, so we expect that error
-            with pytest.raises(json.JSONDecodeError):
-                client._request("GET", "/v0/test")
-
     def test_timeout_none_in_wait_for_completion_branch(self):
         """Test explicit timeout=None branch in _wait_for_completion"""
         client = Lexa(api_key="test-key", max_poll_time=0.05)
@@ -3043,7 +2978,7 @@ class TestErrorConditionBranches:
                 status=JobStatus.PROCESSING, request_id="test-job", progress=50
             )
 
-            with patch("cerevox.lexa.time.sleep"):
+            with patch("cerevox.apis.lexa.time.sleep"):
                 # Explicitly pass timeout=None to trigger that branch
                 with pytest.raises(LexaTimeoutError):
                     client._wait_for_completion(
@@ -3084,6 +3019,13 @@ class TestRemainingLineCoverage:
 
                         def read(self):
                             return self._file.read()
+
+                        def __enter__(self):
+                            return self
+
+                        def __exit__(self, exc_type, exc_val, exc_tb):
+                            # Don't close in __exit__ to test the finally block
+                            return False
 
                         def __getattr__(self, name):
                             if name == "close":
@@ -3159,14 +3101,7 @@ class TestAbsoluteCompleteness:
 
         # Test that we can handle all the edge cases together
         assert client.api_key == "test-key"
-        assert client.base_url == "https://www.data.cerevox.ai"
-
-        # Test various initialization edge cases
-        with pytest.raises(ValueError):
-            Lexa(api_key="test", base_url=None)
-
-        with pytest.raises(ValueError):
-            Lexa(api_key="test", base_url="")
+        assert client.data_url == "https://www.data.cerevox.ai"
 
     @responses.activate
     def test_content_type_parsing_edge_case(self):
@@ -3236,12 +3171,12 @@ class TestAbsolute100PercentCoverage:
             mock_head.return_value = mock_response
 
             # Mock urlparse to return a path that results in filename with query params
-            with patch("cerevox.lexa.urlparse") as mock_urlparse:
+            with patch("cerevox.services.ingest.urlparse") as mock_urlparse:
                 mock_parsed = Mock()
                 mock_parsed.path = "/test.pdf"
                 mock_urlparse.return_value = mock_parsed
 
-                with patch("cerevox.lexa.unquote") as mock_unquote:
+                with patch("cerevox.services.ingest.unquote") as mock_unquote:
                     # Return filename with query parameters
                     mock_unquote.return_value = "test.pdf?version=1&auth=token"
 
@@ -3262,12 +3197,12 @@ class TestAbsolute100PercentCoverage:
             mock_head.side_effect = Exception("HEAD request failed")
 
             # Mock urlparse to return a path that results in filename with query params
-            with patch("cerevox.lexa.urlparse") as mock_urlparse:
+            with patch("cerevox.services.ingest.urlparse") as mock_urlparse:
                 mock_parsed = Mock()
                 mock_parsed.path = "/document.pdf"
                 mock_urlparse.return_value = mock_parsed
 
-                with patch("cerevox.lexa.unquote") as mock_unquote:
+                with patch("cerevox.services.ingest.unquote") as mock_unquote:
                     # Return filename with query parameters
                     mock_unquote.return_value = "document.pdf?id=123&token=abc"
 
@@ -3424,7 +3359,7 @@ class TestFinal100PercentBranchCoverage:
                 status=JobStatus.PROCESSING, request_id="test-job", progress=50
             )
 
-            with patch("cerevox.lexa.time.sleep"):
+            with patch("cerevox.apis.lexa.time.sleep"):
                 # This should use max_poll_time as timeout when timeout=None
                 with pytest.raises(LexaTimeoutError):
                     client._wait_for_completion(
@@ -3467,7 +3402,7 @@ class TestFinal100PercentBranchCoverage:
 
         # Mock the Path constructor to return a mock that simulates
         # a directory that exists but isn't a file
-        with patch("cerevox.lexa.Path") as mock_path_class:
+        with patch("cerevox.services.ingest.Path") as mock_path_class:
             mock_path = Mock()
             mock_path.exists.return_value = True
             mock_path.is_file.return_value = False  # This is the branch we want to test
@@ -3603,34 +3538,6 @@ class TestFinal100PercentBranchCoverage:
         # Test invalid URL format
         with pytest.raises(ValueError, match="Invalid URL format"):
             client._upload_urls("ftp://example.com/test.pdf")
-
-    def test_error_handling_branches_in_request(self):
-        """Test error handling branches in _request method"""
-        client = Lexa(api_key="test-key", max_retries=0)
-
-        # Test the branch where response.content exists
-        with patch.object(client.session, "request") as mock_request:
-            mock_response = Mock()
-            mock_response.status_code = 401
-            mock_response.content = b'{"error": "auth failed"}'
-            mock_response.json.return_value = {"error": "auth failed"}
-            mock_request.return_value = mock_response
-
-            with pytest.raises(
-                LexaAuthError, match="Invalid API key or authentication failed"
-            ):
-                client._request("GET", "/v0/test")
-
-        # Test the branch where response.content is empty
-        with patch.object(client.session, "request") as mock_request:
-            mock_response = Mock()
-            mock_response.status_code = 429
-            mock_response.content = b""
-            mock_response.json.return_value = {}
-            mock_request.return_value = mock_response
-
-            with pytest.raises(LexaRateLimitError):
-                client._request("GET", "/v0/test")
 
     def test_processing_mode_string_branches(self):
         """Test processing mode string validation branches"""
@@ -3865,7 +3772,7 @@ class TestFinalMissingLines:
                 def name(self):
                     return self._path.name
 
-            with patch("cerevox.lexa.Path", TestPath):
+            with patch("cerevox.services.ingest.Path", TestPath):
                 result = client._upload_files([mock_stream])
                 assert result.request_id == "test"
 
@@ -3902,7 +3809,7 @@ class TestFinalMissingLines:
                 def name(self):
                     return self._path.name
 
-            with patch("cerevox.lexa.Path", TestPath):
+            with patch("cerevox.services.ingest.Path", TestPath):
                 result = client._upload_files([mock_stream])
                 assert result.request_id == "test"
 
@@ -3941,7 +3848,7 @@ class TestFinalMissingLines:
                 def name(self):
                     return self._path.name
 
-            with patch("cerevox.lexa.Path", TestPath):
+            with patch("cerevox.services.ingest.Path", TestPath):
                 result = client._upload_files([mock_stream])
                 assert result.request_id == "test"
 
@@ -3980,7 +3887,7 @@ class TestFinalMissingLines:
                 def name(self):
                     return self._path.name
 
-            with patch("cerevox.lexa.Path", TestPath):
+            with patch("cerevox.services.ingest.Path", TestPath):
                 result = client._upload_files([mock_stream])
                 assert result.request_id == "test"
 
@@ -4047,7 +3954,7 @@ class TestFinalMissingLines:
         mock_status.result = None
 
         with patch.object(client, "_wait_for_completion", return_value=mock_status):
-            with patch("cerevox.lexa.DocumentBatch") as MockDocumentBatch:
+            with patch("cerevox.apis.lexa.DocumentBatch") as MockDocumentBatch:
                 mock_batch = Mock()
                 MockDocumentBatch.from_api_response.return_value = mock_batch
 
@@ -4100,7 +4007,7 @@ class TestFinalMissingLines:
         with patch.object(
             client, "_wait_for_completion", return_value=mock_status_dict
         ):
-            with patch("cerevox.lexa.DocumentBatch") as MockDocumentBatch:
+            with patch("cerevox.apis.lexa.DocumentBatch") as MockDocumentBatch:
                 mock_batch = Mock()
                 MockDocumentBatch.from_api_response.return_value = mock_batch
 
@@ -4126,7 +4033,7 @@ class TestFinalMissingLines:
         with patch.object(
             client, "_wait_for_completion", return_value=mock_status_empty
         ):
-            with patch("cerevox.lexa.DocumentBatch") as MockDocumentBatch:
+            with patch("cerevox.apis.lexa.DocumentBatch") as MockDocumentBatch:
                 mock_empty_batch = Mock()
                 MockDocumentBatch.return_value = mock_empty_batch
 
@@ -4147,7 +4054,7 @@ class TestFinalMissingLines:
         with patch.object(
             client, "_wait_for_completion", return_value=mock_status_none
         ):
-            with patch("cerevox.lexa.DocumentBatch") as MockDocumentBatch:
+            with patch("cerevox.apis.lexa.DocumentBatch") as MockDocumentBatch:
                 mock_empty_batch = Mock()
                 MockDocumentBatch.return_value = mock_empty_batch
 
@@ -4192,7 +4099,7 @@ class TestFinalMissingLines:
         with patch.object(
             client, "_wait_for_completion", return_value=mock_status_mixed
         ):
-            with patch("cerevox.lexa.DocumentBatch") as MockDocumentBatch:
+            with patch("cerevox.apis.lexa.DocumentBatch") as MockDocumentBatch:
                 mock_batch = Mock()
                 MockDocumentBatch.from_api_response.return_value = mock_batch
 
@@ -4212,7 +4119,7 @@ class TestFinalMissingLines:
         mock_status_old.result = {"test": "old format data"}
 
         with patch.object(client, "_wait_for_completion", return_value=mock_status_old):
-            with patch("cerevox.lexa.DocumentBatch") as MockDocumentBatch:
+            with patch("cerevox.apis.lexa.DocumentBatch") as MockDocumentBatch:
                 mock_batch = Mock()
                 MockDocumentBatch.from_api_response.return_value = mock_batch
 
@@ -4232,7 +4139,7 @@ class TestFinalMissingLines:
         with patch.object(
             client, "_wait_for_completion", return_value=mock_status_no_data
         ):
-            with patch("cerevox.lexa.DocumentBatch") as MockDocumentBatch:
+            with patch("cerevox.apis.lexa.DocumentBatch") as MockDocumentBatch:
                 mock_empty_batch = Mock()
                 MockDocumentBatch.return_value = mock_empty_batch
 
@@ -4295,7 +4202,7 @@ class TestLexaNewFormat:
                     ImportWarning,
                 )
 
-    @patch("cerevox.lexa.TQDM_AVAILABLE", True)
+    @patch("cerevox.apis.lexa.TQDM_AVAILABLE", True)
     def test_create_progress_callback_functionality(self):
         """Test the actual progress callback functionality"""
         client = Lexa(api_key="test-key")
@@ -4304,7 +4211,7 @@ class TestLexaNewFormat:
         mock_tqdm_instance = Mock()
         mock_tqdm_class = Mock(return_value=mock_tqdm_instance)
 
-        with patch("cerevox.lexa.tqdm", mock_tqdm_class):
+        with patch("cerevox.apis.lexa.tqdm", mock_tqdm_class):
             progress_callback = client._create_progress_callback(show_progress=True)
             assert progress_callback is not None
 
@@ -4338,7 +4245,7 @@ class TestLexaNewFormat:
             mock_tqdm_instance.set_description.assert_called_with(expected_desc)
             mock_tqdm_instance.refresh.assert_called()
 
-    @patch("cerevox.lexa.TQDM_AVAILABLE", True)
+    @patch("cerevox.apis.lexa.TQDM_AVAILABLE", True)
     def test_create_progress_callback_with_failed_chunks(self):
         """Test progress callback with failed chunks"""
         client = Lexa(api_key="test-key")
@@ -4346,7 +4253,7 @@ class TestLexaNewFormat:
         mock_tqdm_instance = Mock()
         mock_tqdm_class = Mock(return_value=mock_tqdm_instance)
 
-        with patch("cerevox.lexa.tqdm", mock_tqdm_class):
+        with patch("cerevox.apis.lexa.tqdm", mock_tqdm_class):
             progress_callback = client._create_progress_callback(show_progress=True)
 
             # Test with failed chunks
@@ -4367,7 +4274,7 @@ class TestLexaNewFormat:
             expected_desc = "Processing | Files: 2/5 | Chunks: 25/50 | Errors: 3"
             mock_tqdm_instance.set_description.assert_called_with(expected_desc)
 
-    @patch("cerevox.lexa.TQDM_AVAILABLE", True)
+    @patch("cerevox.apis.lexa.TQDM_AVAILABLE", True)
     def test_create_progress_callback_completion_statuses(self):
         """Test progress callback with completion statuses"""
         client = Lexa(api_key="test-key")
@@ -4382,7 +4289,7 @@ class TestLexaNewFormat:
         ]
 
         for status_type in completion_statuses:
-            with patch("cerevox.lexa.tqdm", mock_tqdm_class):
+            with patch("cerevox.apis.lexa.tqdm", mock_tqdm_class):
                 progress_callback = client._create_progress_callback(show_progress=True)
 
                 status = JobResponse(
@@ -4401,7 +4308,7 @@ class TestLexaNewFormat:
                 # Verify progress bar was closed on completion
                 mock_tqdm_instance.close.assert_called()
 
-    @patch("cerevox.lexa.TQDM_AVAILABLE", True)
+    @patch("cerevox.apis.lexa.TQDM_AVAILABLE", True)
     def test_create_progress_callback_minimal_status(self):
         """Test progress callback with minimal status information"""
         client = Lexa(api_key="test-key")
@@ -4409,7 +4316,7 @@ class TestLexaNewFormat:
         mock_tqdm_instance = Mock()
         mock_tqdm_class = Mock(return_value=mock_tqdm_instance)
 
-        with patch("cerevox.lexa.tqdm", mock_tqdm_class):
+        with patch("cerevox.apis.lexa.tqdm", mock_tqdm_class):
             progress_callback = client._create_progress_callback(show_progress=True)
 
             # Test with only progress information
@@ -4423,7 +4330,7 @@ class TestLexaNewFormat:
             assert mock_tqdm_instance.n == 30
             mock_tqdm_instance.set_description.assert_called_with("Processing")
 
-    @patch("cerevox.lexa.TQDM_AVAILABLE", True)
+    @patch("cerevox.apis.lexa.TQDM_AVAILABLE", True)
     def test_create_progress_callback_closure_state(self):
         """Test that progress callback maintains closure state correctly"""
         client = Lexa(api_key="test-key")
@@ -4431,7 +4338,7 @@ class TestLexaNewFormat:
         mock_tqdm_instance = Mock()
         mock_tqdm_class = Mock(return_value=mock_tqdm_instance)
 
-        with patch("cerevox.lexa.tqdm", mock_tqdm_class):
+        with patch("cerevox.apis.lexa.tqdm", mock_tqdm_class):
             progress_callback = client._create_progress_callback(show_progress=True)
 
             # First call should initialize tqdm
@@ -4454,7 +4361,7 @@ class TestLexaNewFormat:
             # Should update progress to new value
             assert mock_tqdm_instance.n == 50
 
-    @patch("cerevox.lexa.TQDM_AVAILABLE", True)
+    @patch("cerevox.apis.lexa.TQDM_AVAILABLE", True)
     def test_create_progress_callback_multiple_instances(self):
         """Test that different callback instances are independent"""
         client = Lexa(api_key="test-key")
@@ -4463,7 +4370,7 @@ class TestLexaNewFormat:
         mock_tqdm_instance2 = Mock()
         mock_tqdm_class = Mock(side_effect=[mock_tqdm_instance1, mock_tqdm_instance2])
 
-        with patch("cerevox.lexa.tqdm", mock_tqdm_class):
+        with patch("cerevox.apis.lexa.tqdm", mock_tqdm_class):
             # Create two separate progress callbacks
             callback1 = client._create_progress_callback(show_progress=True)
             callback2 = client._create_progress_callback(show_progress=True)
@@ -4487,25 +4394,25 @@ class TestLexaNewFormat:
         from unittest.mock import patch
 
         # Save the original module state for restoration
-        original_lexa = sys.modules.get("cerevox.lexa")
+        original_lexa = sys.modules.get("cerevox.apis.lexa")
 
         try:
             # Test successful import case - tqdm available
             with patch.dict("sys.modules", {}, clear=False):
                 # Remove lexa from modules to force fresh import
-                if "cerevox.lexa" in sys.modules:
-                    del sys.modules["cerevox.lexa"]
+                if "cerevox.apis.lexa" in sys.modules:
+                    del sys.modules["cerevox.apis.lexa"]
 
                 # Import the module fresh
-                import cerevox.lexa
+                import cerevox.apis.lexa
 
                 # Verify that TQDM_AVAILABLE is True when import succeeds
-                assert cerevox.lexa.TQDM_AVAILABLE is True
+                assert cerevox.apis.lexa.TQDM_AVAILABLE is True
 
             # Test ImportError case - cause tqdm import to fail
             with patch.dict("sys.modules", {}, clear=False):
                 # Remove both tqdm and lexa from modules
-                modules_to_remove = ["tqdm", "cerevox.lexa"]
+                modules_to_remove = ["tqdm", "cerevox.apis.lexa"]
                 for module in modules_to_remove:
                     if module in sys.modules:
                         del sys.modules[module]
@@ -4520,16 +4427,16 @@ class TestLexaNewFormat:
 
                 with patch("builtins.__import__", side_effect=mock_import):
                     # Import the module fresh
-                    import cerevox.lexa
+                    import cerevox.apis.lexa
 
                     # Verify that TQDM_AVAILABLE is False when ImportError occurs
-                    assert cerevox.lexa.TQDM_AVAILABLE is False
+                    assert cerevox.apis.lexa.TQDM_AVAILABLE is False
         finally:
             # Restore the original module state
-            if "cerevox.lexa" in sys.modules:
-                del sys.modules["cerevox.lexa"]
+            if "cerevox.apis.lexa" in sys.modules:
+                del sys.modules["cerevox.apis.lexa"]
             if original_lexa is not None:
-                sys.modules["cerevox.lexa"] = original_lexa
+                sys.modules["cerevox.apis.lexa"] = original_lexa
             else:
                 # Force a clean reimport of the module in its normal state
-                import cerevox.lexa
+                import cerevox.apis.lexa

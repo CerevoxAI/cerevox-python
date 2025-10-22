@@ -1,17 +1,21 @@
-# API Reference
+# Document API Reference
+
+> **📌 Note:** This reference currently covers the Lexa document processing API. For the new Hippo (RAG) and Account management APIs introduced in v0.2.0, please refer to:
+> - **Hippo RAG API**: See [`examples/account_hippo_usage.py`](../examples/account_hippo_usage.py) and inline docstrings in `cerevox.apis.Hippo` / `cerevox.apis.AsyncHippo`
+> - **Account API**: See [`examples/account_hippo_usage.py`](../examples/account_hippo_usage.py) and inline docstrings in `cerevox.apis.Account` / `cerevox.apis.AsyncAccount`
+> - Comprehensive API reference for these new APIs will be added in a future update
+
+## Overview
+
+**Flagship Results @ Mini Cost** - Cerevox delivers 99.5% accuracy at 80% lower cost with precision retrieval that provides 70% smaller, more relevant context.
+
+Cerevox provides three powerful APIs:
+- **Lexa** - Document parsing with SOTA accuracy (documented below)
+- **Hippo** - RAG operations with precision retrieval, semantic search and Q&A (see examples and docstrings)
+- **Account** - Enterprise user management and authentication (see examples and docstrings)
 
 ## Table of Contents
 
-- [AsyncLexa](#asynclexa)
-  - [Constructor](#constructor)
-  - [Methods](#methods)
-    - [parse(files, **options)](#parsefiles-options)
-    - [parse_urls(urls, **options)](#parse_urlsurls-options)
-- [Lexa](#lexa)
-  - [Constructor](#constructor-1)
-  - [Methods](#methods-1)
-    - [parse(files, **options)](#parsefiles-options-1)
-    - [parse_urls(urls, **options)](#parse_urlsurls-options-1)
 - [DocumentBatch](#documentbatch)
   - [Properties](#properties)
   - [Accessing Documents](#accessing-documents)
@@ -39,113 +43,6 @@
 - [Standalone Functions](#standalone-functions)
   - [chunk_text(text, target_size, tolerance)](#chunk_texttext-target_size-tolerance)
   - [chunk_markdown(markdown, target_size, tolerance, preserve_tables)](#chunk_markdownmarkdown-target_size-tolerance-preserve_tables)
-- [Error Handling](#error-handling)
-  - [Exception Classes](#exception-classes)
-  - [Error Handling Example](#error-handling-example)
-
----
-
-## AsyncLexa
-
-The main async client for document processing with enterprise-grade reliability.
-
-### Constructor
-
-```python
-AsyncLexa(api_key: str, **options)
-```
-
-**Parameters:**
-
-| Parameter | Type | Required | Default | Description |
-|-----------|------|----------|---------|-------------|
-| `api_key` | str | Yes | - | Your Cerevox API key from [cerevox.ai/lexa](https://cerevox.ai/lexa) |
-| `max_concurrent` | int | No | 10 | Maximum number of concurrent processing jobs |
-| `timeout` | float | No | 60.0 | Request timeout in seconds |
-| `max_retries` | int | No | 3 | Maximum retry attempts for failed requests |
-
-### Methods
-
-#### parse(files, **options)
-
-Parse documents from local files or file paths.
-
-```python
-documents = await client.parse(
-    files=["path/to/file.pdf", "document.docx"],
-    progress_callback=callback_fn,
-    mode="STANDARD"
-)
-```
-
-**Parameters:**
-
-| Parameter | Type | Required | Default | Description |
-|-----------|------|----------|---------|-------------|
-| `files` | List[str] | Yes | - | List of file paths to parse |
-| `progress_callback` | Callable | No | None | Function to track parsing progress |
-| `mode` | str | No | "STANDARD" | Processing mode: "STANDARD" or "ADVANCED" |
-
-**Returns:** `DocumentBatch` - Collection of parsed documents
-
-#### parse_urls(urls, **options)
-
-Parse documents from URLs.
-
-```python
-documents = await client.parse_urls(
-    urls=["https://example.com/doc.pdf"],
-    progress_callback=callback_fn
-)
-```
-
-**Parameters:**
-
-| Parameter | Type | Required | Default | Description |
-|-----------|------|----------|---------|-------------|
-| `urls` | List[str] | Yes | - | List of URLs pointing to documents |
-| `progress_callback` | Callable | No | None | Function to track parsing progress |
-
-**Returns:** `DocumentBatch` - Collection of parsed documents
-
----
-
-## Lexa
-
-Synchronous client for document processing (legacy/compatibility).
-
-### Constructor
-
-```python
-Lexa(api_key: str, **options)
-```
-
-**Parameters:**
-
-| Parameter | Type | Required | Default | Description |
-|-----------|------|----------|---------|-------------|
-| `api_key` | str | Yes | - | Your Cerevox API key from [cerevox.ai/lexa](https://cerevox.ai/lexa) |
-| `max_concurrent` | int | No | 10 | Maximum number of concurrent processing jobs |
-| `timeout` | float | No | 60.0 | Request timeout in seconds |
-| `max_retries` | int | No | 3 | Maximum retry attempts for failed requests |
-
-### Methods
-
-#### parse(files, **options)
-
-Parse documents from local files or file paths (synchronous).
-
-**Parameters:** Same as AsyncLexa.parse()
-
-**Returns:** `DocumentBatch` - Collection of parsed documents
-
-#### parse_urls(urls, **options)
-
-Parse documents from URLs (synchronous).
-
-**Parameters:** Same as AsyncLexa.parse_urls()
-
-**Returns:** `DocumentBatch` - Collection of parsed documents
 
 ---
 
@@ -423,40 +320,3 @@ chunks = chunk_markdown(
 | `preserve_tables` | bool | No | True | Keep table structures intact |
 
 **Returns:** `List[dict]` - Markdown chunks with preserved structure
-
----
-
-## Error Handling
-
-### Exception Classes
-
-```python
-from cerevox import (
-    LexaError,
-    LexaAuthError,
-    LexaJobFailedError,
-    LexaTimeoutError
-)
-```
-
-| Exception | Description |
-|-----------|-------------|
-| `LexaError` | Base exception for all Cerevox errors |
-| `LexaAuthError` | Authentication-related errors |
-| `LexaJobFailedError` | Document processing job failures |
-| `LexaTimeoutError` | Request timeout errors |
-
-### Error Handling Example
-
-```python
-try:
-    documents = await client.parse(files)
-except LexaAuthError as e:
-    print(f"Authentication failed: {e.message}")
-except LexaJobFailedError as e:
-    print(f"Job failed: {e.message}")
-except LexaTimeoutError as e:
-    print(f"Timeout: {e.message} (status: {e.status_code})")
-except LexaError as e:
-    print(f"General error: {e.message}")
-``` 

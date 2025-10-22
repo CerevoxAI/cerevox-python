@@ -3,6 +3,7 @@ Document parsing utilities for the Cerevox SDK
 """
 
 import importlib
+import json
 import re
 import uuid
 import warnings
@@ -221,7 +222,7 @@ def is_document_instance(obj: Any) -> bool:
     return (
         hasattr(obj, "__class__")
         and obj.__class__.__name__ == "Document"
-        and obj.__class__.__module__ == "cerevox.document_loader"
+        and obj.__class__.__module__ == "cerevox.utils.document_loader"
     )
 
 
@@ -1420,9 +1421,6 @@ class Document:
                 "character_distribution": {},
             }
 
-        # Simple character-based language detection
-        import string
-
         text = self.content.lower()
         char_counts: Dict[str, int] = {}
         total_chars = 0
@@ -1798,7 +1796,6 @@ th { background-color: #f2f2f2; }
 
     def save_to_json(self, filepath: Union[str, Path], indent: int = 2) -> None:
         """Save batch to JSON file with pretty formatting"""
-        import json
 
         with open(filepath, "w", encoding="utf-8") as f:
             json.dump(self.to_dict(), f, indent=indent, ensure_ascii=False)
@@ -2188,7 +2185,6 @@ th { background-color: #f2f2f2; }
     @classmethod
     def load_from_json(cls, filepath: Union[str, Path]) -> "DocumentBatch":
         """Load DocumentBatch from JSON file"""
-        import json
 
         with open(filepath, "r", encoding="utf-8") as f:
             data = json.load(f)

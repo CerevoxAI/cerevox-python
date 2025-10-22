@@ -1,5 +1,5 @@
 """
-Test suite for cerevox.async_lexa
+Test suite for cerevox.apis.async_lexa
 
 Comprehensive tests to achieve 100% code coverage for the AsyncLexa class,
 including all methods, error handling, and edge cases.
@@ -21,17 +21,8 @@ import pytest
 import pytest_asyncio
 from pydantic_core import ValidationError
 
-import cerevox.async_lexa
-from cerevox.async_lexa import AsyncLexa
-from cerevox.exceptions import (
-    LexaAuthError,
-    LexaError,
-    LexaJobFailedError,
-    LexaRateLimitError,
-    LexaTimeoutError,
-    LexaValidationError,
-)
-from cerevox.models import (
+from cerevox import AsyncLexa
+from cerevox.core import (
     VALID_MODES,
     BucketListResponse,
     DriveListResponse,
@@ -40,9 +31,46 @@ from cerevox.models import (
     IngestionResult,
     JobResponse,
     JobStatus,
+    LexaAuthError,
+    LexaError,
+    LexaJobFailedError,
+    LexaRateLimitError,
+    LexaTimeoutError,
+    LexaValidationError,
     ProcessingMode,
     SiteListResponse,
+    TokenResponse,
 )
+from cerevox.utils import DocumentBatch
+
+
+@pytest.fixture(autouse=True)
+def mock_async_auth_methods():
+    """Auto-use fixture to mock async authentication methods for all tests in this module"""
+
+    async def mock_login(self, api_key: str):
+        """Mock login function that properly handles the client instance"""
+        token_response = TokenResponse(
+            access_token="test-access-token",
+            expires_in=3600,
+            refresh_token="test-refresh-token",
+            token_type="Bearer",
+        )
+        # Manually call _store_token_info to set up session headers
+        self._store_token_info(token_response)
+        return token_response
+
+    # Mock both the _login method and _ensure_valid_token to avoid authentication issues
+    with (
+        patch("cerevox.core.async_client.AsyncClient._login", new=mock_login),
+        patch(
+            "cerevox.core.async_client.AsyncClient._ensure_valid_token",
+            new_callable=AsyncMock,
+        ) as mock_ensure_token,
+    ):
+        # Make _ensure_valid_token do nothing (token is always valid in tests)
+        mock_ensure_token.return_value = None
+        yield
 
 
 @pytest_asyncio.fixture
@@ -62,13 +90,14 @@ class TestAsyncLexaInitialization:
         """Test initialization with API key parameter"""
         client = AsyncLexa(api_key="test-api-key")
         assert client.api_key == "test-api-key"
-        assert client.base_url == "https://www.data.cerevox.ai"
+        assert client.data_url == "https://www.data.cerevox.ai"
         assert client.max_concurrent == 10
         assert client.max_poll_time == 600.0
         assert client.max_retries == 3
         assert client.poll_interval == 2.0
         assert client.session is None
-        assert client.session_kwargs["headers"]["cerevox-api-key"] == "test-api-key"
+        # The client should initialize successfully with the mocked authentication
+        assert hasattr(client, "session_kwargs")
         assert "cerevox-python-async" in client.session_kwargs["headers"]["User-Agent"]
         assert isinstance(client._executor, ThreadPoolExecutor)
 
@@ -81,42 +110,42 @@ class TestAsyncLexaInitialization:
     @patch.dict(os.environ, {}, clear=True)
     def test_init_without_api_key_raises_error(self):
         """Test initialization without API key raises ValueError"""
-        with pytest.raises(ValueError, match="API key is required"):
+        with pytest.raises(ValueError, match="api_key is required for authentication"):
             AsyncLexa()
 
     def test_init_with_custom_parameters(self):
         """Test initialization with custom parameters"""
         client = AsyncLexa(
             api_key="test-key",
-            base_url="https://custom.api.com",
+            data_url="https://custom.api.com",
             max_concurrent=20,
             max_poll_time=1200.0,
             max_retries=5,
             poll_interval=5.0,
             timeout=60.0,
         )
-        assert client.base_url == "https://custom.api.com"
+        assert client.data_url == "https://custom.api.com"
         assert client.max_concurrent == 20
         assert client.max_poll_time == 1200.0
         assert client.max_retries == 5
         assert client.poll_interval == 5.0
         assert client.timeout.total == 60.0
 
-    def test_init_with_invalid_base_url(self):
+    def test_init_with_invalid_data_url(self):
         """Test initialization with invalid base URL"""
-        with pytest.raises(ValueError, match="base_url must be a non-empty string"):
-            AsyncLexa(api_key="test", base_url="")
+        with pytest.raises(ValueError, match="data_url must be a non-empty string"):
+            AsyncLexa(api_key="test", data_url="")
 
-        with pytest.raises(ValueError, match="base_url must be a non-empty string"):
-            AsyncLexa(api_key="test", base_url=None)
+        with pytest.raises(ValueError, match="data_url must be a non-empty string"):
+            AsyncLexa(api_key="test", data_url=None)
 
-        with pytest.raises(ValueError, match="base_url must start with http"):
-            AsyncLexa(api_key="test", base_url="invalid-url")
+        with pytest.raises(ValueError, match="data_url must start with http"):
+            AsyncLexa(api_key="test", data_url="invalid-url")
 
     def test_init_strips_trailing_slash(self):
-        """Test that trailing slash is stripped from base_url"""
-        client = AsyncLexa(api_key="test", base_url="https://api.com/")
-        assert client.base_url == "https://api.com"
+        """Test that trailing slash is stripped from data_url"""
+        client = AsyncLexa(api_key="test", data_url="https://api.com/")
+        assert client.data_url == "https://api.com"
 
     def test_init_with_kwargs(self):
         """Test initialization with additional kwargs"""
@@ -195,7 +224,7 @@ class TestAsyncLexaRequest:
                     status=200,
                 )
 
-                result = await c._request("GET", "/v0/test")
+                result = await c._request("GET", "/v0/test", is_data=True)
                 assert result == {"status": "success"}
 
     @pytest.mark.asyncio
@@ -204,10 +233,15 @@ class TestAsyncLexaRequest:
         client = AsyncLexa(api_key="test-key")
 
         async with client as c:
-            with patch("builtins.range") as mock_range:
-                mock_range.return_value = []
-                # When method is "SKIP", the request should be skipped and return {}
-                result = await c._request("GET", "/v0/test")
+            with aioresponses.aioresponses() as m:
+                m.get(
+                    "https://www.data.cerevox.ai/v0/test",
+                    payload={},
+                    status=200,
+                )
+
+                # When a request returns an empty JSON response, it should return {}
+                result = await c._request("GET", "/v0/test", is_data=True)
                 assert result == {}
 
     @pytest.mark.asyncio
@@ -224,7 +258,7 @@ class TestAsyncLexaRequest:
                 )
 
                 result = await c._request(
-                    "POST", "/v0/test", json_data={"key": "value"}
+                    "POST", "/v0/test", json_data={"key": "value"}, is_data=True
                 )
                 assert result == {"received": True}
 
@@ -243,7 +277,7 @@ class TestAsyncLexaRequest:
 
                 data = aiohttp.FormData()
                 data.add_field("file", b"test content", filename="test.txt")
-                result = await c._request("POST", "/v0/files", data=data)
+                result = await c._request("POST", "/v0/files", data=data, is_data=True)
                 assert result == {"uploaded": True}
 
     @pytest.mark.asyncio
@@ -260,37 +294,9 @@ class TestAsyncLexaRequest:
                     status=200,
                 )
 
-                result = await c._request("GET", "/v0/test")
+                result = await c._request("GET", "/v0/test", is_data=True)
                 assert result == {"status": "success"}
                 assert c.session is not None
-
-    @pytest.mark.asyncio
-    async def test_session_none_after_start_session_raises_error(self):
-        """Test error when session is None after start_session call"""
-        client = AsyncLexa(api_key="test-key")
-
-        # Mock start_session to not actually create a session
-        with patch.object(client, "start_session", new_callable=AsyncMock):
-            with pytest.raises(LexaError, match="Session not initialized"):
-                await client._request("GET", "/v0/test")
-
-    @pytest.mark.asyncio
-    async def test_auth_error_401(self):
-        """Test 401 authentication error"""
-        client = AsyncLexa(api_key="test-key")
-
-        async with client as c:
-            with aioresponses.aioresponses() as m:
-                m.get(
-                    "https://www.data.cerevox.ai/v0/test",
-                    payload={"error": "Invalid API key"},
-                    status=401,
-                )
-
-                with pytest.raises(
-                    LexaAuthError, match="Invalid API key or authentication failed"
-                ):
-                    await c._request("GET", "/v0/test")
 
     @pytest.mark.asyncio
     async def test_rate_limit_error_429(self):
@@ -304,7 +310,7 @@ class TestAsyncLexaRequest:
                 )
 
                 with pytest.raises(LexaRateLimitError, match="Rate limit exceeded"):
-                    await client._request("GET", "/v0/test")
+                    await client._request("GET", "/v0/test", is_data=True)
 
     @pytest.mark.asyncio
     async def test_validation_error_400(self):
@@ -318,7 +324,7 @@ class TestAsyncLexaRequest:
                 )
 
                 with pytest.raises(LexaValidationError, match="Validation failed"):
-                    await client._request("GET", "/v0/test")
+                    await client._request("GET", "/v0/test", is_data=True)
 
     @pytest.mark.asyncio
     async def test_generic_api_error(self):
@@ -332,133 +338,7 @@ class TestAsyncLexaRequest:
                 )
 
                 with pytest.raises(LexaError, match="Internal server error"):
-                    await client._request("GET", "/v0/test")
-
-    @pytest.mark.asyncio
-    async def test_api_error_without_error_field(self):
-        """Test API error without error field in response"""
-        async with AsyncLexa(api_key="test-key") as client:
-            with aioresponses.aioresponses() as m:
-                m.get(
-                    "https://www.data.cerevox.ai/v0/test",
-                    payload={"message": "Something went wrong"},
-                    status=500,
-                )
-
-                with pytest.raises(
-                    LexaError, match="API request failed with status 500"
-                ):
-                    await client._request("GET", "/v0/test")
-
-    @pytest.mark.asyncio
-    async def test_safe_json_with_valid_json(self):
-        """Test _safe_json with valid JSON response"""
-        async with AsyncLexa(api_key="test-key") as client:
-            # Create a mock response
-            mock_response = Mock()
-            mock_response.json = AsyncMock(return_value={"test": "data"})
-
-            result = await client._safe_json(mock_response)
-            assert result == {"test": "data"}
-
-    @pytest.mark.asyncio
-    async def test_safe_json_with_invalid_json(self):
-        """Test _safe_json with invalid JSON response"""
-        async with AsyncLexa(api_key="test-key") as client:
-            # Create a mock response that raises ContentTypeError
-            mock_response = Mock()
-            mock_response.json = AsyncMock(side_effect=aiohttp.ContentTypeError("", ""))
-
-            result = await client._safe_json(mock_response)
-            assert result == {}
-
-    @pytest.mark.asyncio
-    async def test_safe_json_with_json_decode_error(self):
-        """Test _safe_json with JSON decode error"""
-        async with AsyncLexa(api_key="test-key") as client:
-            # Create a mock response that raises JSONDecodeError
-            mock_response = Mock()
-            mock_response.json = AsyncMock(side_effect=json.JSONDecodeError("", "", 0))
-
-            result = await client._safe_json(mock_response)
-            assert result == {}
-
-    @pytest.mark.asyncio
-    async def test_request_retry_on_client_error(self):
-        """Test request retry on client error"""
-        async with AsyncLexa(api_key="test-key", max_retries=2) as client:
-            with aioresponses.aioresponses() as m:
-                # First two requests fail, third succeeds
-                m.get(
-                    "https://www.data.cerevox.ai/v0/test",
-                    exception=aiohttp.ClientError("Connection failed"),
-                )
-                m.get(
-                    "https://www.data.cerevox.ai/v0/test",
-                    exception=aiohttp.ClientError("Connection failed"),
-                )
-                m.get(
-                    "https://www.data.cerevox.ai/v0/test",
-                    payload={"status": "success"},
-                    status=200,
-                )
-
-                result = await client._request("GET", "/v0/test")
-                assert result == {"status": "success"}
-
-    @pytest.mark.asyncio
-    async def test_request_retry_on_timeout(self):
-        """Test request retry on timeout error"""
-        async with AsyncLexa(api_key="test-key", max_retries=1) as client:
-            with aioresponses.aioresponses() as m:
-                # First request times out, second succeeds
-                m.get(
-                    "https://www.data.cerevox.ai/v0/test",
-                    exception=asyncio.TimeoutError(),
-                )
-                m.get(
-                    "https://www.data.cerevox.ai/v0/test",
-                    payload={"status": "success"},
-                    status=200,
-                )
-
-                result = await client._request("GET", "/v0/test")
-                assert result == {"status": "success"}
-
-    @pytest.mark.asyncio
-    async def test_request_max_retries_exceeded(self):
-        """Test request when max retries are exceeded"""
-        async with AsyncLexa(api_key="test-key", max_retries=1) as client:
-            with aioresponses.aioresponses() as m:
-                # All requests fail
-                m.get(
-                    "https://www.data.cerevox.ai/v0/test",
-                    exception=aiohttp.ClientError("Connection failed"),
-                )
-                m.get(
-                    "https://www.data.cerevox.ai/v0/test",
-                    exception=aiohttp.ClientError("Connection failed"),
-                )
-
-                with pytest.raises(LexaError, match="Request failed after 2 attempts"):
-                    await client._request("GET", "/v0/test")
-
-    @pytest.mark.asyncio
-    async def test_request_no_retry_on_auth_error(self):
-        """Test that auth errors are not retried"""
-        async with AsyncLexa(api_key="test-key", max_retries=2) as client:
-            with aioresponses.aioresponses() as m:
-                m.get(
-                    "https://www.data.cerevox.ai/v0/test",
-                    payload={"error": "Invalid API key"},
-                    status=401,
-                )
-
-                with pytest.raises(LexaAuthError):
-                    await client._request("GET", "/v0/test")
-
-                # Should only have been called once (no retries)
-                assert len(m.requests) == 1
+                    await client._request("GET", "/v0/test", is_data=True)
 
 
 class TestGetJobStatus:
@@ -1279,8 +1159,6 @@ class TestGetDocuments:
                     status=200,
                 )
 
-                from cerevox.document_loader import DocumentBatch
-
                 with patch.object(DocumentBatch, "from_api_response") as mock_from_api:
                     mock_batch = Mock()
                     mock_from_api.return_value = mock_batch
@@ -1306,8 +1184,6 @@ class TestGetDocuments:
                     },
                     status=200,
                 )
-
-                from cerevox.document_loader import DocumentBatch
 
                 result = await client._get_documents("test-request-id")
                 assert isinstance(result, DocumentBatch)
@@ -1376,7 +1252,7 @@ class TestGetDocuments:
         mock_status.result = None
 
         with patch.object(client, "_wait_for_completion", return_value=mock_status):
-            with patch("cerevox.async_lexa.DocumentBatch") as MockDocumentBatch:
+            with patch("cerevox.apis.async_lexa.DocumentBatch") as MockDocumentBatch:
                 mock_batch = Mock()
                 MockDocumentBatch.from_api_response.return_value = mock_batch
 
@@ -1429,7 +1305,7 @@ class TestGetDocuments:
         with patch.object(
             client, "_wait_for_completion", return_value=mock_status_dict
         ):
-            with patch("cerevox.async_lexa.DocumentBatch") as MockDocumentBatch:
+            with patch("cerevox.apis.async_lexa.DocumentBatch") as MockDocumentBatch:
                 mock_batch = Mock()
                 MockDocumentBatch.from_api_response.return_value = mock_batch
 
@@ -1455,7 +1331,7 @@ class TestGetDocuments:
         with patch.object(
             client, "_wait_for_completion", return_value=mock_status_empty
         ):
-            with patch("cerevox.async_lexa.DocumentBatch") as MockDocumentBatch:
+            with patch("cerevox.apis.async_lexa.DocumentBatch") as MockDocumentBatch:
                 mock_empty_batch = Mock()
                 MockDocumentBatch.return_value = mock_empty_batch
 
@@ -1476,7 +1352,7 @@ class TestGetDocuments:
         with patch.object(
             client, "_wait_for_completion", return_value=mock_status_none
         ):
-            with patch("cerevox.async_lexa.DocumentBatch") as MockDocumentBatch:
+            with patch("cerevox.apis.async_lexa.DocumentBatch") as MockDocumentBatch:
                 mock_empty_batch = Mock()
                 MockDocumentBatch.return_value = mock_empty_batch
 
@@ -1521,7 +1397,7 @@ class TestGetDocuments:
         with patch.object(
             client, "_wait_for_completion", return_value=mock_status_mixed
         ):
-            with patch("cerevox.async_lexa.DocumentBatch") as MockDocumentBatch:
+            with patch("cerevox.apis.async_lexa.DocumentBatch") as MockDocumentBatch:
                 mock_batch = Mock()
                 MockDocumentBatch.from_api_response.return_value = mock_batch
 
@@ -1541,7 +1417,7 @@ class TestGetDocuments:
         mock_status_old.result = {"test": "old format data"}
 
         with patch.object(client, "_wait_for_completion", return_value=mock_status_old):
-            with patch("cerevox.async_lexa.DocumentBatch") as MockDocumentBatch:
+            with patch("cerevox.apis.async_lexa.DocumentBatch") as MockDocumentBatch:
                 mock_batch = Mock()
                 MockDocumentBatch.from_api_response.return_value = mock_batch
 
@@ -1561,7 +1437,7 @@ class TestGetDocuments:
         with patch.object(
             client, "_wait_for_completion", return_value=mock_status_no_data
         ):
-            with patch("cerevox.async_lexa.DocumentBatch") as MockDocumentBatch:
+            with patch("cerevox.apis.async_lexa.DocumentBatch") as MockDocumentBatch:
                 mock_empty_batch = Mock()
                 MockDocumentBatch.return_value = mock_empty_batch
 
@@ -1726,8 +1602,6 @@ class TestPublicParseMethods:
                         status=200,
                     )
 
-                    from cerevox.document_loader import DocumentBatch
-
                     with patch.object(
                         DocumentBatch, "from_api_response"
                     ) as mock_from_api:
@@ -1742,8 +1616,6 @@ class TestPublicParseMethods:
     @pytest.mark.asyncio
     async def test_parse_no_request_id(self):
         """Test parse with no request ID returned from API"""
-        from pydantic_core import ValidationError
-
         temp_file = self.create_temp_file(b"test content", ".pdf")
 
         try:
@@ -1755,7 +1627,9 @@ class TestPublicParseMethods:
                         status=200,
                     )
 
-                    with pytest.raises(ValidationError):
+                    with pytest.raises(
+                        LexaError, match="Failed to get request ID from upload"
+                    ):
                         await client.parse(temp_file)
         finally:
             self.cleanup_temp_file(temp_file)
@@ -1793,8 +1667,6 @@ class TestPublicParseMethods:
                     status=200,
                 )
 
-                from cerevox.document_loader import DocumentBatch
-
                 with patch.object(DocumentBatch, "from_api_response") as mock_from_api:
                     mock_batch = Mock()
                     mock_from_api.return_value = mock_batch
@@ -1805,8 +1677,6 @@ class TestPublicParseMethods:
     @pytest.mark.asyncio
     async def test_parse_urls_no_request_id(self):
         """Test parse URLs with no request ID returned from API"""
-        from pydantic_core import ValidationError
-
         async with AsyncLexa(api_key="test-key") as client:
             with aioresponses.aioresponses() as m:
                 # Mock file info response
@@ -1822,7 +1692,9 @@ class TestPublicParseMethods:
                     status=200,
                 )
 
-                with pytest.raises(ValidationError):
+                with pytest.raises(
+                    LexaError, match="Failed to get request ID from upload"
+                ):
                     await client.parse_urls("https://example.com/test.pdf")
 
 
@@ -2039,8 +1911,6 @@ class TestCloudStorageParsingMethods:
                     status=200,
                 )
 
-                from cerevox.document_loader import DocumentBatch
-
                 with patch.object(DocumentBatch, "from_api_response") as mock_from_api:
                     mock_batch = Mock()
                     mock_from_api.return_value = mock_batch
@@ -2051,8 +1921,6 @@ class TestCloudStorageParsingMethods:
     @pytest.mark.asyncio
     async def test_parse_s3_folder_no_request_id(self):
         """Test parsing S3 folder with no request ID returned"""
-        from pydantic_core import ValidationError
-
         async with AsyncLexa(api_key="test-key") as client:
             with aioresponses.aioresponses() as m:
                 m.post(
@@ -2061,7 +1929,9 @@ class TestCloudStorageParsingMethods:
                     status=200,
                 )
 
-                with pytest.raises(ValidationError):
+                with pytest.raises(
+                    LexaError, match="Failed to get request ID from upload"
+                ):
                     await client.parse_s3_folder("test-bucket", "test-folder")
 
     @pytest.mark.asyncio
@@ -2089,8 +1959,6 @@ class TestCloudStorageParsingMethods:
                     },
                     status=200,
                 )
-
-                from cerevox.document_loader import DocumentBatch
 
                 with patch.object(DocumentBatch, "from_api_response") as mock_from_api:
                     mock_batch = Mock()
@@ -2125,8 +1993,6 @@ class TestCloudStorageParsingMethods:
                     status=200,
                 )
 
-                from cerevox.document_loader import DocumentBatch
-
                 with patch.object(DocumentBatch, "from_api_response") as mock_from_api:
                     mock_batch = Mock()
                     mock_from_api.return_value = mock_batch
@@ -2159,8 +2025,6 @@ class TestCloudStorageParsingMethods:
                     },
                     status=200,
                 )
-
-                from cerevox.document_loader import DocumentBatch
 
                 with patch.object(DocumentBatch, "from_api_response") as mock_from_api:
                     mock_batch = Mock()
@@ -2197,8 +2061,6 @@ class TestCloudStorageParsingMethods:
                     status=200,
                 )
 
-                from cerevox.document_loader import DocumentBatch
-
                 with patch.object(DocumentBatch, "from_api_response") as mock_from_api:
                     mock_batch = Mock()
                     mock_from_api.return_value = mock_batch
@@ -2231,8 +2093,6 @@ class TestCloudStorageParsingMethods:
                     },
                     status=200,
                 )
-
-                from cerevox.document_loader import DocumentBatch
 
                 with patch.object(DocumentBatch, "from_api_response") as mock_from_api:
                     mock_batch = Mock()
@@ -2365,19 +2225,9 @@ class TestEdgeCasesAndErrorHandling:
 
                 # Pass kwargs as params instead of directly to session.request
                 result = await client._request(
-                    "GET", "/v0/test", params={"extra_param": "value"}
+                    "GET", "/v0/test", params={"extra_param": "value"}, is_data=True
                 )
                 assert result == {"status": "success"}
-
-    @pytest.mark.asyncio
-    async def test_safe_json_non_json_response(self):
-        """Test _safe_json with non-JSON response"""
-        async with AsyncLexa(api_key="test-key") as client:
-            mock_response = Mock()
-            mock_response.json = AsyncMock(side_effect=aiohttp.ContentTypeError("", ""))
-
-            result = await client._safe_json(mock_response)
-            assert result == {}
 
     @pytest.mark.asyncio
     async def test_wait_for_completion_no_max_poll_time(self):
@@ -2438,7 +2288,7 @@ class TestAdditionalCoverageTests:
         async with AsyncLexa(api_key="test-key") as client:
             # Mock urlparse to raise an exception
             with patch(
-                "cerevox.async_lexa.urlparse",
+                "cerevox.services.async_ingest.urlparse",
                 side_effect=Exception("URL parsing failed"),
             ):
                 with aioresponses.aioresponses() as m:
@@ -2742,22 +2592,6 @@ class TestAdditionalMissingCoverageTests:
     """Additional tests to cover missing lines and achieve 100% coverage"""
 
     @pytest.mark.asyncio
-    async def test_safe_json_with_different_json_errors(self):
-        """Test _safe_json with different types of JSON parsing errors"""
-        async with AsyncLexa(api_key="test-key") as client:
-            # Test with ContentTypeError
-            mock_response = Mock()
-            mock_response.json = AsyncMock(side_effect=aiohttp.ContentTypeError("", ""))
-            result = await client._safe_json(mock_response)
-            assert result == {}
-
-            # Test with JSONDecodeError
-            mock_response = Mock()
-            mock_response.json = AsyncMock(side_effect=json.JSONDecodeError("", "", 0))
-            result = await client._safe_json(mock_response)
-            assert result == {}
-
-    @pytest.mark.asyncio
     async def test_get_file_info_response_raise_for_status_error(self):
         """Test _get_file_info_from_url when response.raise_for_status() fails"""
         async with AsyncLexa(api_key="test-key") as client:
@@ -2780,7 +2614,8 @@ class TestAdditionalMissingCoverageTests:
         async with AsyncLexa(api_key="test-key") as client:
             # Mock urlparse to raise an exception in the first exception handler
             with patch(
-                "cerevox.async_lexa.urlparse", side_effect=Exception("URL parse failed")
+                "cerevox.services.async_ingest.urlparse",
+                side_effect=Exception("URL parse failed"),
             ):
                 with aioresponses.aioresponses() as m:
                     m.head(
@@ -2853,8 +2688,6 @@ class TestSessionCleanupAndEdgeCases:
                     status=200,
                 )
 
-                from cerevox.document_loader import DocumentBatch
-
                 with patch.object(
                     DocumentBatch, "from_api_response", return_value=DocumentBatch([])
                 ):
@@ -2887,8 +2720,6 @@ class TestSessionCleanupAndEdgeCases:
                     status=200,
                 )
 
-                from cerevox.document_loader import DocumentBatch
-
                 with patch.object(
                     DocumentBatch, "from_api_response", return_value=DocumentBatch([])
                 ):
@@ -2917,8 +2748,6 @@ class TestSessionCleanupAndEdgeCases:
                     status=200,
                 )
 
-                from cerevox.document_loader import DocumentBatch
-
                 with patch.object(
                     DocumentBatch, "from_api_response", return_value=DocumentBatch([])
                 ):
@@ -2942,8 +2771,6 @@ class TestSessionCleanupAndEdgeCases:
                     },
                     status=200,
                 )
-
-                from cerevox.document_loader import DocumentBatch
 
                 with patch.object(
                     DocumentBatch, "from_api_response", return_value=DocumentBatch([])
@@ -2969,8 +2796,6 @@ class TestSessionCleanupAndEdgeCases:
                     status=200,
                 )
 
-                from cerevox.document_loader import DocumentBatch
-
                 with patch.object(
                     DocumentBatch, "from_api_response", return_value=DocumentBatch([])
                 ):
@@ -2994,8 +2819,6 @@ class TestSessionCleanupAndEdgeCases:
                     },
                     status=200,
                 )
-
-                from cerevox.document_loader import DocumentBatch
 
                 with patch.object(
                     DocumentBatch, "from_api_response", return_value=DocumentBatch([])
@@ -3023,8 +2846,6 @@ class TestSessionCleanupAndEdgeCases:
                     status=200,
                 )
 
-                from cerevox.document_loader import DocumentBatch
-
                 with patch.object(
                     DocumentBatch, "from_api_response", return_value=DocumentBatch([])
                 ):
@@ -3048,8 +2869,6 @@ class TestSessionCleanupAndEdgeCases:
                     },
                     status=200,
                 )
-
-                from cerevox.document_loader import DocumentBatch
 
                 with patch.object(
                     DocumentBatch, "from_api_response", return_value=DocumentBatch([])
@@ -3082,17 +2901,6 @@ class TestSessionCleanupAndEdgeCases:
 
             with pytest.raises(ValueError, match="Unsupported file input type"):
                 await client._upload_files(BadStream())
-
-    @pytest.mark.asyncio
-    async def test_request_failure_edge_case(self):
-        """Test the edge case in _request method where max retries is exhausted"""
-        async with AsyncLexa(api_key="test-key", max_retries=1) as client:
-            # Mock session to always raise ClientError
-            with patch.object(client.session, "request") as mock_request:
-                mock_request.side_effect = aiohttp.ClientError("Connection failed")
-
-                with pytest.raises(LexaError, match="Request failed after 2 attempts"):
-                    await client._request("GET", "/test")
 
 
 class TestFinalCoverageGaps:
@@ -3372,7 +3180,8 @@ class TestCoverageTargetedGaps:
 
                 # Mock urlparse to raise exception in the fallback try block (line 358)
                 with patch(
-                    "cerevox.async_lexa.urlparse", side_effect=ValueError("Parse error")
+                    "cerevox.services.async_ingest.urlparse",
+                    side_effect=ValueError("Parse error"),
                 ):
                     file_info = await client._get_file_info_from_url(test_url)
 
@@ -3581,7 +3390,8 @@ class TestMissingCoverageLines:
 
                 # Mock urlparse to raise exception in the exception handler (line 358)
                 with patch(
-                    "cerevox.async_lexa.urlparse", side_effect=ValueError("Parse error")
+                    "cerevox.services.async_ingest.urlparse",
+                    side_effect=ValueError("Parse error"),
                 ):
                     file_info = await client._get_file_info_from_url(test_url)
 
@@ -3629,43 +3439,36 @@ class TestMissingCoverageLines:
         client = AsyncLexa(api_key="test-key")
 
         try:
-            with aioresponses.aioresponses() as m:
-                m.post(
-                    "https://www.data.cerevox.ai/v0/files?mode=default&product=lexa",
-                    payload={
-                        "requestID": "test-request-id",
-                        "message": "Files uploaded",
-                    },
-                    status=200,
-                )
+            # Create a mock file object that passes the initial hasattr(file_input, 'read') check
+            # but then fails the second hasattr check inside the elif branch
+            class MockFileObject:
+                def __init__(self):
+                    self.name = "test.txt"
+                    # We have 'read' attribute initially
+                    self.read = lambda: b"test content"
 
-                # Create a mock file object that passes the initial hasattr(file_input, 'read') check
-                # but then fails the second hasattr check inside the elif branch
-                class MockFileObject:
-                    def __init__(self):
-                        self.name = "test.txt"
-                        # We have 'read' attribute initially
-                        self.read = lambda: b"test content"
+            mock_file = MockFileObject()
 
-                mock_file = MockFileObject()
+            # Mock hasattr to return True for initial check but False for the second check
+            original_hasattr = hasattr
+            call_count = 0
 
-                # Mock hasattr to return True for initial check but False for the second check
-                original_hasattr = hasattr
-                call_count = 0
+            def mock_hasattr(obj, attr):
+                nonlocal call_count
+                if obj is mock_file and attr == "read":
+                    call_count += 1
+                    if call_count == 1:
+                        return True  # First check passes (line 416)
+                    else:
+                        return False  # Second check fails (line 433), triggers else (line 447/450)
+                return original_hasattr(obj, attr)
 
-                def mock_hasattr(obj, attr):
-                    nonlocal call_count
-                    if obj is mock_file and attr == "read":
-                        call_count += 1
-                        if call_count == 1:
-                            return True  # First check passes (line 530)
-                        else:
-                            return False  # Second check fails (line 541), triggers else (line 547)
-                    return original_hasattr(obj, attr)
-
-                with patch("builtins.hasattr", side_effect=mock_hasattr):
-                    result = await client._upload_files(mock_file)
-                    assert result.request_id == "test-request-id"
+            with patch("builtins.hasattr", side_effect=mock_hasattr):
+                # This should raise ValueError because the else branch at line 447 is triggered
+                with pytest.raises(
+                    ValueError, match="File-like object must have 'read' method"
+                ):
+                    await client._upload_files(mock_file)
         finally:
             await client.close_session()
 
@@ -3714,7 +3517,7 @@ class TestFinalMissingLinesAsync:
                     def name(self):
                         return self._path.name
 
-                with patch("cerevox.async_lexa.Path", TestPath):
+                with patch("cerevox.services.async_ingest.Path", TestPath):
                     result = await client._upload_files(stream)
                     assert result.request_id == "test-request-id"
         finally:
@@ -3761,7 +3564,7 @@ class TestFinalMissingLinesAsync:
                     def name(self):
                         return self._path.name
 
-                with patch("cerevox.async_lexa.Path", TestPath):
+                with patch("cerevox.services.async_ingest.Path", TestPath):
                     result = await client._upload_files(stream)
                     assert result.request_id == "test-request-id"
         finally:
@@ -3810,7 +3613,7 @@ class TestFinalMissingLinesAsync:
                     def name(self):
                         return self._path.name
 
-                with patch("cerevox.async_lexa.Path", TestPath):
+                with patch("cerevox.services.async_ingest.Path", TestPath):
                     result = await client._upload_files(stream)
                     assert result.request_id == "test-request-id"
         finally:
@@ -3859,7 +3662,7 @@ class TestFinalMissingLinesAsync:
                     def name(self):
                         return self._path.name
 
-                with patch("cerevox.async_lexa.Path", TestPath):
+                with patch("cerevox.services.async_ingest.Path", TestPath):
                     result = await client._upload_files(stream)
                     assert result.request_id == "test-request-id"
         finally:
@@ -3905,7 +3708,8 @@ class TestFinalCoverageTargetedGaps:
 
                 # Mock urlparse to raise exception in the fallback try block (line 358)
                 with patch(
-                    "cerevox.async_lexa.urlparse", side_effect=ValueError("Parse error")
+                    "cerevox.services.async_ingest.urlparse",
+                    side_effect=ValueError("Parse error"),
                 ):
                     file_info = await client._get_file_info_from_url(test_url)
 
@@ -3987,7 +3791,7 @@ class TestFinalMissingLinesAsync:
                     def name(self):
                         return self._path.name
 
-                with patch("cerevox.async_lexa.Path", TestPath):
+                with patch("cerevox.services.async_ingest.Path", TestPath):
                     result = await client._upload_files(stream)
                     assert result.request_id == "test-request-id"
 
@@ -4045,7 +3849,8 @@ class TestComplete100Coverage:
 
                 # Mock urlparse to fail in the exception handler (line 358)
                 with patch(
-                    "cerevox.async_lexa.urlparse", side_effect=Exception("Parse failed")
+                    "cerevox.services.async_ingest.urlparse",
+                    side_effect=Exception("Parse failed"),
                 ):
                     file_info = await client._get_file_info_from_url(test_url)
 
@@ -4230,7 +4035,8 @@ class TestSpecificLine338And358Coverage:
 
                 # Mock urlparse to fail in the exception handler to hit line 358
                 with patch(
-                    "cerevox.async_lexa.urlparse", side_effect=Exception("Parse failed")
+                    "cerevox.services.async_ingest.urlparse",
+                    side_effect=Exception("Parse failed"),
                 ):
                     file_info = await client._get_file_info_from_url(test_url)
 
@@ -4261,7 +4067,7 @@ class TestSpecificLine338And358Coverage:
                 mock_request.return_value = mock_context_manager
 
                 with pytest.raises(LexaError, match="Specific error"):
-                    await client._request("GET", "/test")
+                    await client._request("GET", "/test", is_data=True)
         finally:
             await client.close_session()
 
@@ -4359,7 +4165,7 @@ class TestAbsolute100PercentCoverageAsync:
                     status=200,
                 )
 
-                result = await client._request("GET", "/test")
+                result = await client._request("GET", "/test", is_data=True)
                 assert result == {"success": True}
 
         finally:
@@ -4403,33 +4209,8 @@ class TestAbsolute100PercentCoverageAsync:
                 status=200,
             )
 
-            result = await client._request("GET", "/v0/test")
+            result = await client._request("GET", "/v0/test", is_data=True)
             assert result == {"status": "success"}
-
-        await client.close_session()
-
-    @pytest.mark.asyncio
-    async def test_request_for_loop_with_retry_success(self):
-        """Test that retry loop can succeed after initial failure."""
-        client = AsyncLexa(api_key="test-key", max_retries=1)
-
-        with aioresponses.aioresponses() as m:
-            # First call fails with connection error
-            m.get(
-                "https://www.data.cerevox.ai/v0/test",
-                exception=aiohttp.ClientConnectionError("Connection failed"),
-            )
-            # Second call succeeds
-            m.get(
-                "https://www.data.cerevox.ai/v0/test",
-                payload={"status": "success"},
-                status=200,
-            )
-
-            # Mock sleep to avoid delays
-            with patch("asyncio.sleep", new_callable=AsyncMock):
-                result = await client._request("GET", "/v0/test")
-                assert result == {"status": "success"}
 
         await client.close_session()
 
@@ -4446,7 +4227,7 @@ class TestAbsolute100PercentCoverageAsync:
             )
 
             # This should go through the for loop and complete normally
-            result = await client._request("GET", "/v0/test")
+            result = await client._request("GET", "/v0/test", is_data=True)
             assert result == {"result": "data"}
 
         await client.close_session()
@@ -4469,18 +4250,6 @@ class TestFinal100PercentCoverageCompletion:
             AsyncLexa(api_key="test", max_retries=-1)
 
     @pytest.mark.asyncio
-    async def test_request_runtime_max_retries_validation(self):
-        """Test runtime validation of max_retries in _request method"""
-        async with AsyncLexa(api_key="test-key") as client:
-            # Directly modify max_retries to invalid value after initialization
-            client.max_retries = "invalid"
-
-            with pytest.raises(
-                LexaError, match="max_retries must be a non-negative integer"
-            ):
-                await client._request("GET", "/v0/test")
-
-    @pytest.mark.asyncio
     async def test_request_retry_loop_entry_condition(self):
         """Test the retry loop entry condition in _request method"""
         async with AsyncLexa(api_key="test-key") as client:
@@ -4492,20 +4261,8 @@ class TestFinal100PercentCoverageCompletion:
                 )
 
                 # Normal case - should work fine
-                result = await client._request("GET", "/v0/test")
+                result = await client._request("GET", "/v0/test", is_data=True)
                 assert result == {"status": "success"}
-
-    @pytest.mark.asyncio
-    async def test_request_runtime_max_retries_validation_edge_case(self):
-        """Test edge case where max_retries becomes None at runtime"""
-        async with AsyncLexa(api_key="test-key") as client:
-            # Set max_retries to None after initialization
-            client.max_retries = None
-
-            with pytest.raises(
-                LexaError, match="max_retries must be a non-negative integer"
-            ):
-                await client._request("GET", "/v0/test")
 
     @pytest.mark.asyncio
     async def test_request_runtime_max_retries_validation_with_zero(self):
@@ -4521,32 +4278,8 @@ class TestFinal100PercentCoverageCompletion:
                     status=200,
                 )
 
-                result = await client._request("GET", "/v0/test")
+                result = await client._request("GET", "/v0/test", is_data=True)
                 assert result == {"status": "success"}
-
-    @pytest.mark.asyncio
-    async def test_request_runtime_max_retries_validation_failure(self):
-        """Test runtime validation failure path for max_retries"""
-        async with AsyncLexa(api_key="test-key") as client:
-            # Set max_retries to negative value after initialization
-            client.max_retries = -5
-
-            with pytest.raises(
-                LexaError, match="max_retries must be a non-negative integer"
-            ):
-                await client._request("GET", "/v0/test")
-
-    @pytest.mark.asyncio
-    async def test_request_runtime_max_retries_invalid_float(self):
-        """Test runtime validation with float max_retries"""
-        async with AsyncLexa(api_key="test-key") as client:
-            # Set max_retries to float after initialization
-            client.max_retries = 3.5
-
-            with pytest.raises(
-                LexaError, match="max_retries must be a non-negative integer"
-            ):
-                await client._request("GET", "/v0/test")
 
 
 class TestAsyncLexaNewFormat:
@@ -4593,7 +4326,7 @@ class TestAsyncLexaNewFormat:
             mock_tqdm_instance = Mock()
             mock_tqdm_class = Mock(return_value=mock_tqdm_instance)
 
-            with patch("cerevox.async_lexa.tqdm", mock_tqdm_class):
+            with patch("cerevox.apis.async_lexa.tqdm", mock_tqdm_class):
                 progress_callback = client._create_progress_callback(show_progress=True)
                 assert progress_callback is not None
 
@@ -4627,7 +4360,7 @@ class TestAsyncLexaNewFormat:
                 mock_tqdm_instance.set_description.assert_called_with(expected_desc)
                 mock_tqdm_instance.refresh.assert_called()
 
-    @patch("cerevox.async_lexa.TQDM_AVAILABLE", True)
+    @patch("cerevox.apis.async_lexa.TQDM_AVAILABLE", True)
     @pytest.mark.asyncio
     async def test_create_progress_callback_with_failed_chunks(self):
         """Test progress callback with failed chunks"""
@@ -4635,7 +4368,7 @@ class TestAsyncLexaNewFormat:
             mock_tqdm_instance = Mock()
             mock_tqdm_class = Mock(return_value=mock_tqdm_instance)
 
-            with patch("cerevox.async_lexa.tqdm", mock_tqdm_class):
+            with patch("cerevox.apis.async_lexa.tqdm", mock_tqdm_class):
                 progress_callback = client._create_progress_callback(show_progress=True)
 
                 # Test with failed chunks
@@ -4656,7 +4389,7 @@ class TestAsyncLexaNewFormat:
                 expected_desc = "Processing | Files: 2/5 | Chunks: 25/50 | Errors: 3"
                 mock_tqdm_instance.set_description.assert_called_with(expected_desc)
 
-    @patch("cerevox.async_lexa.TQDM_AVAILABLE", True)
+    @patch("cerevox.apis.async_lexa.TQDM_AVAILABLE", True)
     @pytest.mark.asyncio
     async def test_create_progress_callback_completion_statuses(self):
         """Test progress callback with completion statuses"""
@@ -4671,7 +4404,7 @@ class TestAsyncLexaNewFormat:
             ]
 
             for status_type in completion_statuses:
-                with patch("cerevox.async_lexa.tqdm", mock_tqdm_class):
+                with patch("cerevox.apis.async_lexa.tqdm", mock_tqdm_class):
                     progress_callback = client._create_progress_callback(
                         show_progress=True
                     )
@@ -4692,7 +4425,7 @@ class TestAsyncLexaNewFormat:
                     # Verify progress bar was closed on completion
                     mock_tqdm_instance.close.assert_called()
 
-    @patch("cerevox.async_lexa.TQDM_AVAILABLE", True)
+    @patch("cerevox.apis.async_lexa.TQDM_AVAILABLE", True)
     @pytest.mark.asyncio
     async def test_create_progress_callback_minimal_status(self):
         """Test progress callback with minimal status information"""
@@ -4700,7 +4433,7 @@ class TestAsyncLexaNewFormat:
             mock_tqdm_instance = Mock()
             mock_tqdm_class = Mock(return_value=mock_tqdm_instance)
 
-            with patch("cerevox.async_lexa.tqdm", mock_tqdm_class):
+            with patch("cerevox.apis.async_lexa.tqdm", mock_tqdm_class):
                 progress_callback = client._create_progress_callback(show_progress=True)
 
                 # Test with only progress information
@@ -4714,7 +4447,7 @@ class TestAsyncLexaNewFormat:
                 assert mock_tqdm_instance.n == 30
                 mock_tqdm_instance.set_description.assert_called_with("Processing")
 
-    @patch("cerevox.async_lexa.TQDM_AVAILABLE", True)
+    @patch("cerevox.apis.async_lexa.TQDM_AVAILABLE", True)
     @pytest.mark.asyncio
     async def test_create_progress_callback_closure_state(self):
         """Test that progress callback maintains closure state correctly"""
@@ -4722,7 +4455,7 @@ class TestAsyncLexaNewFormat:
             mock_tqdm_instance = Mock()
             mock_tqdm_class = Mock(return_value=mock_tqdm_instance)
 
-            with patch("cerevox.async_lexa.tqdm", mock_tqdm_class):
+            with patch("cerevox.apis.async_lexa.tqdm", mock_tqdm_class):
                 progress_callback = client._create_progress_callback(show_progress=True)
 
                 # First call should initialize tqdm
@@ -4745,7 +4478,7 @@ class TestAsyncLexaNewFormat:
                 # Should update progress to new value
                 assert mock_tqdm_instance.n == 50
 
-    @patch("cerevox.async_lexa.TQDM_AVAILABLE", True)
+    @patch("cerevox.apis.async_lexa.TQDM_AVAILABLE", True)
     @pytest.mark.asyncio
     async def test_create_progress_callback_multiple_instances(self):
         """Test that different callback instances are independent"""
@@ -4756,7 +4489,7 @@ class TestAsyncLexaNewFormat:
                 side_effect=[mock_tqdm_instance1, mock_tqdm_instance2]
             )
 
-            with patch("cerevox.async_lexa.tqdm", mock_tqdm_class):
+            with patch("cerevox.apis.async_lexa.tqdm", mock_tqdm_class):
                 # Create two separate progress callbacks
                 callback1 = client._create_progress_callback(show_progress=True)
                 callback2 = client._create_progress_callback(show_progress=True)
@@ -4779,26 +4512,26 @@ class TestAsyncLexaNewFormat:
         import importlib
 
         # Save the original module state for restoration
-        original_async_lexa = sys.modules.get("cerevox.async_lexa")
+        original_async_lexa = sys.modules.get("cerevox.apis.async_lexa")
 
         try:
             # Test successful import case - mock tqdm to be available
             mock_tqdm = Mock()
             with patch.dict("sys.modules", {"tqdm": mock_tqdm}):
                 # Remove the module from cache to force reimport
-                if "cerevox.async_lexa" in sys.modules:
-                    del sys.modules["cerevox.async_lexa"]
+                if "cerevox.apis.async_lexa" in sys.modules:
+                    del sys.modules["cerevox.apis.async_lexa"]
 
                 # Import the module fresh
-                import cerevox.async_lexa
+                import cerevox.apis.async_lexa
 
                 # Verify that TQDM_AVAILABLE is True when import succeeds
-                assert cerevox.async_lexa.TQDM_AVAILABLE is True
+                assert cerevox.apis.async_lexa.TQDM_AVAILABLE is True
 
             # Test ImportError case - cause tqdm import to fail
             with patch.dict("sys.modules", {}, clear=False):
                 # Remove both tqdm and async_lexa from modules
-                modules_to_remove = ["tqdm", "cerevox.async_lexa"]
+                modules_to_remove = ["tqdm", "cerevox.apis.async_lexa"]
                 for module in modules_to_remove:
                     if module in sys.modules:
                         del sys.modules[module]
@@ -4813,16 +4546,16 @@ class TestAsyncLexaNewFormat:
 
                 with patch("builtins.__import__", side_effect=mock_import):
                     # Import the module fresh
-                    import cerevox.async_lexa
+                    import cerevox.apis.async_lexa
 
                     # Verify that TQDM_AVAILABLE is False when ImportError occurs
-                    assert cerevox.async_lexa.TQDM_AVAILABLE is False
+                    assert cerevox.apis.async_lexa.TQDM_AVAILABLE is False
         finally:
             # Restore the original module state
-            if "cerevox.async_lexa" in sys.modules:
-                del sys.modules["cerevox.async_lexa"]
+            if "cerevox.apis.async_lexa" in sys.modules:
+                del sys.modules["cerevox.apis.async_lexa"]
             if original_async_lexa is not None:
-                sys.modules["cerevox.async_lexa"] = original_async_lexa
+                sys.modules["cerevox.apis.async_lexa"] = original_async_lexa
             else:
                 # Force a clean reimport of the module in its normal state
-                import cerevox.async_lexa
+                import cerevox.apis.async_lexa

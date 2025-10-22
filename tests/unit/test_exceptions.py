@@ -1,15 +1,11 @@
 """
-Test suite for cerevox.exceptions
+Test suite for cerevox.core.exceptions
 
 Comprehensive tests to achieve 100% code coverage for all exception classes,
 their methods, properties, and utility functions.
 """
 
-from typing import Any, Dict
-
-import pytest
-
-from cerevox.exceptions import (
+from cerevox.core import (
     LexaAuthError,
     LexaError,
     LexaJobFailedError,

@@ -19,7 +19,7 @@ class TestPackageInitialization:
         import cerevox
 
         assert hasattr(cerevox, "__version__")
-        assert cerevox.__version__ == "0.1.0"
+        assert cerevox.__version__ == "0.2.0"
         assert isinstance(cerevox.__version__, str)
 
     def test_package_metadata(self):
@@ -36,7 +36,7 @@ class TestPackageInitialization:
         assert cerevox.__title__ == "cerevox"
         assert (
             cerevox.__description__
-            == "Cerevox - The Data Layer, Lexa - parse documents with enterprise-grade reliability"
+            == "Cerevox - The Data Layer for AI Agents: data parsing (Lexa) and data search (Hippo)"
         )
         assert cerevox.__author__ == "Cerevox Team"
         assert cerevox.__license__ == "MIT"
@@ -62,6 +62,30 @@ class TestCoreImports:
         from cerevox import AsyncLexa
 
         assert AsyncLexa is not None
+
+    def test_account_import(self):
+        """Test that Account client can be imported."""
+        from cerevox import Account
+
+        assert Account is not None
+
+    def test_async_account_import(self):
+        """Test that AsyncAccount client can be imported."""
+        from cerevox import AsyncAccount
+
+        assert AsyncAccount is not None
+
+    def test_hippo_import(self):
+        """Test that Hippo client can be imported."""
+        from cerevox import Hippo
+
+        assert Hippo is not None
+
+    def test_async_hippo_import(self):
+        """Test that AsyncHippo client can be imported."""
+        from cerevox import AsyncHippo
+
+        assert AsyncHippo is not None
 
 
 class TestDocumentProcessingImports:
@@ -181,6 +205,12 @@ class TestAllExports:
             # Core clients
             "Lexa",
             "AsyncLexa",
+            # Account management clients
+            "Account",
+            "AsyncAccount",
+            # RAG clients
+            "Hippo",
+            "AsyncHippo",
             # Document processing
             "Document",
             "DocumentBatch",
@@ -188,6 +218,11 @@ class TestAllExports:
             "DocumentTable",
             "DocumentImage",
             "DocumentElement",
+            "ElementContent",
+            "ElementStats",
+            "FileInfo",
+            "PageInfo",
+            "SourceInfo",
             "chunk_markdown",
             "chunk_text",
             # Models and types
@@ -195,9 +230,20 @@ class TestAllExports:
             "JobResponse",
             "IngestionResult",
             "ProcessingMode",
-            "FileInfo",
             "BucketListResponse",
             "FolderListResponse",
+            # Account models
+            "AccountInfo",
+            "AccountPlan",
+            "CreatedResponse",
+            "DeletedResponse",
+            "MessageResponse",
+            "TokenResponse",
+            "UpdatedResponse",
+            "User",
+            "UserCreate",
+            "UserUpdate",
+            "UsageMetrics",
             # Exceptions
             "LexaError",
             "LexaAuthError",
@@ -231,7 +277,7 @@ class TestAllExports:
         import cerevox
 
         # Count expected items based on the actual __all__ list in __init__.py
-        expected_count = 27  # Based on the actual __all__ list in the file
+        expected_count = 46  # Based on the actual __all__ list in the file (added all models and exceptions)
         actual_count = len(cerevox.__all__)
 
         assert actual_count == expected_count, (
@@ -357,7 +403,7 @@ class TestImportResilience:
 
         assert first_version == third_version
 
-    @patch("cerevox.lexa")
+    @patch("cerevox.apis.lexa")
     def test_import_with_missing_submodule(self, mock_lexa):
         """Test behavior when a submodule import fails."""
         # This test ensures that if a submodule has issues, we handle it gracefully
@@ -494,6 +540,12 @@ class TestCompleteImportCoverage:
             # Core clients
             "Lexa",
             "AsyncLexa",
+            # Account management clients
+            "Account",
+            "AsyncAccount",
+            # RAG clients
+            "Hippo",
+            "AsyncHippo",
             # Document processing
             "Document",
             "DocumentBatch",
@@ -501,6 +553,11 @@ class TestCompleteImportCoverage:
             "DocumentTable",
             "DocumentImage",
             "DocumentElement",
+            "ElementContent",
+            "ElementStats",
+            "FileInfo",
+            "PageInfo",
+            "SourceInfo",
             "chunk_markdown",
             "chunk_text",
             # Models and types
@@ -508,16 +565,27 @@ class TestCompleteImportCoverage:
             "JobResponse",
             "IngestionResult",
             "ProcessingMode",
-            "FileInfo",
             "BucketListResponse",
             "FolderListResponse",
+            # Account models
+            "AccountInfo",
+            "AccountPlan",
+            "CreatedResponse",
+            "DeletedResponse",
+            "MessageResponse",
+            "TokenResponse",
+            "UpdatedResponse",
+            "User",
+            "UserCreate",
+            "UserUpdate",
+            "UsageMetrics",
             # Exceptions
             "LexaError",
             "LexaAuthError",
             "LexaRateLimitError",
             "LexaTimeoutError",
             "LexaJobFailedError",
-            # Version and info
+            # Version info
             "__version__",
             "__title__",
             "__description__",
